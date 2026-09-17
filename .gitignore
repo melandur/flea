@@ -24,3 +24,5 @@ docs/pending/
 # makepkg build output: $pkgdir and the $srcdir target the PKGBUILD points cargo at.
 /pkg/
 /src/target/
+*.pkg.tar.zst
+*.pkg.tar.zst.sig
