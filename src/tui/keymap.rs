@@ -242,11 +242,38 @@ mod tests {
     #[test]
     fn compiled_source_drives_text_and_native_ctrl() {
         let map = Map::load();
+        // The shared [[text]] row, reached by every preset that does not suppress it.
         assert_eq!(
             map.action(
                 &Key {
                     name: "J".into(),
                     text: "j".into(),
+                    mods: "".into(),
+                    pointer: None,
+                },
+                "vim"
+            ),
+            "cursorDown"
+        );
+        // Default's own empty-action row, checked first, which is why it navigates on the arrows
+        // alone; Down below is what carries the same action there.
+        assert_eq!(
+            map.action(
+                &Key {
+                    name: "J".into(),
+                    text: "j".into(),
+                    mods: "".into(),
+                    pointer: None,
+                },
+                "default"
+            ),
+            ""
+        );
+        assert_eq!(
+            map.action(
+                &Key {
+                    name: "Down".into(),
+                    text: "".into(),
                     mods: "".into(),
                     pointer: None,
                 },

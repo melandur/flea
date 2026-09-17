@@ -769,7 +769,7 @@ class Native:
     def controls(self):
         for label, args, expected in [
             ("home", ("-k", "Home"), "amber"), ("down", ("-k", "Down"), "bronze"),
-            ("j", ("j",), "charlie.txt"), ("k", ("k",), "bronze"),
+            ("down-again", ("-k", "Down"), "charlie.txt"), ("up-again", ("-k", "Up"), "bronze"),
             ("up", ("-k", "Up"), "amber"), ("end", ("-k", "End"), "echo.txt"),
             ("home-again", ("-k", "Home"), "amber"), ("G", ("G",), "echo.txt"),
             ("page-up", ("-k", "Page_Up"), "amber"), ("page-down", ("-k", "Page_Down"), "echo.txt"),
@@ -906,7 +906,8 @@ class Native:
         self.snapshot("keymap-panel", lambda text: "\u2500 keys " in text and "open" in text)
         self.key("r")
         self.snapshot("keymap-panel-contained", lambda text: "\u2500 keys " in text and "Enter saves" not in text)
-        for label, args in [("down", ("-k", "Down")), ("j", ("j",)), ("up", ("-k", "Up")), ("k", ("k",))]:
+        for label, args in [("down", ("-k", "Down")), ("down-again", ("-k", "Down")),
+                            ("up", ("-k", "Up")), ("up-again", ("-k", "Up"))]:
             before = self.raw
             self.key(*args)
             self.snapshot("keymap-scroll-" + label, lambda text: "\u2500 keys " in text and self.raw != before)
@@ -1264,10 +1265,10 @@ class Native:
         self.snapshot("pdf-last-page-boundary", lambda text: "Page 2 / 2" in text)
         self.key("-k", "Left")
         self.snapshot("pdf-previous-arrow", lambda text: "Page 1 / 2" in text)
-        self.key("l")
-        self.snapshot("pdf-next-l", lambda text: "Page 2 / 2" in text)
-        self.key("h")
-        self.snapshot("pdf-previous-h", lambda text: "Page 1 / 2" in text)
+        self.key("-k", "Right")
+        self.snapshot("pdf-next-arrow", lambda text: "Page 2 / 2" in text)
+        self.key("-k", "Left")
+        self.snapshot("pdf-previous-arrow-again", lambda text: "Page 1 / 2" in text)
         self.key("-k", "Tab")
         self.key("-k", "space")
         self.snapshot("pdf-zoom-out-space", lambda text: "75%" in text)
@@ -1461,7 +1462,7 @@ class Native:
         self.snapshot(label + "-seek-focused", lambda text: "\u25c6" in text)
         self.key("-k", "Right")
         self.snapshot(label + "-seek-forward", lambda text: re.search(r"0:0[5-9] / 0:12", text))
-        self.key("h")
+        self.key("-k", "Left")
         self.snapshot(label + "-seek-back", lambda text: re.search(r"0:0[0-4] / 0:12", text))
         self.chord("Tab", "shift")
         self.key("-k", "Return")

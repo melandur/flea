@@ -9,8 +9,19 @@ function run(check) {
     }
     for (var i = 0; i < Keymap.PRESETS.length; i++) {
         var preset = Keymap.PRESETS[i]
+        // The four arrows are the navigation every preset has, and the Default preset's only one:
+        // the letters stay in the shared tables and Default's own rows suppress them there.
+        var letters = preset !== "default"
         key(preset, "Down", "", none, "cursorDown")
         key(preset, "Up", "", none, "cursorUp")
+        key(preset, "Left", "", none, "parent")
+        key(preset, "Right", "", none, preset === "mac" ? "open" : "pageForward")
+        key(preset, "H", "h", none, letters ? "parent" : "")
+        key(preset, "J", "j", none, letters ? "cursorDown" : "")
+        key(preset, "K", "k", none, letters ? "cursorUp" : "")
+        key(preset, "L", "l", none, preset === "vim" ? "open" : letters ? "pageForward" : "")
+        key(preset, "H", "h", none, letters ? "seekBack" : "", "pdf")
+        key(preset, "L", "l", none, letters ? "pageForward" : "", "pdf")
         key(preset, "Space", " ", none, "preview")
         key(preset, "P", "p", alt, "togglePreview")
         key(preset, "Space", " ", ctrl, "loadPreview")
@@ -60,8 +71,12 @@ function run(check) {
         }
         key(preset, "Right", "", none, "menuRight", "menu")
         key(preset, "Left", "", none, "parent", "menu")
-        key(preset, "J", "j", none, "cursorDown", "menu")
-        key(preset, "K", "k", none, "cursorUp", "menu")
+        key(preset, "Down", "", none, "cursorDown", "menu")
+        key(preset, "Up", "", none, "cursorUp", "menu")
+        key(preset, "J", "j", none, letters ? "cursorDown" : "", "menu")
+        key(preset, "K", "k", none, letters ? "cursorUp" : "", "menu")
+        key(preset, "H", "h", none, letters ? "parent" : "", "menu")
+        key(preset, "L", "l", none, letters ? "menuRight" : "", "menu")
         key(preset, "Minus", "-", none, "zoomOut", "pdf")
         key(preset, "Plus", "+", shift, "zoomIn", "pdf")
         key(preset, "E", "e", none, "expand", "pdf")
@@ -88,6 +103,10 @@ function run(check) {
     key("default", "Delete", "", shift, "")
     key("vim", "L", "l", none, "open")
     key("vim", "H", "h", none, "parent")
+    key("vim", "J", "j", none, "cursorDown")
+    key("vim", "K", "k", none, "cursorUp")
+    key("mac", "L", "l", none, "pageForward")
+    key("windows", "L", "l", none, "pageForward")
     key("vim", "Y", "y", none, "copyArm")
     key("vim", "D", "d", none, "cutArm")
     key("vim", "P", "p", none, "pasteArm")
@@ -173,6 +192,20 @@ function run(check) {
     check("no cap in any preset outgrows its half of the card", widestCap <= 18, true)
     check("no row prints an action id where its wording belongs", identifierLabel, "")
     check("pointer contract remains populated", Keymap.POINTER.length > 10, true)
+    // The sheet advertises what a preset actually binds, so the arrows are what Default draws now.
+    function capFor(preset, action) {
+        var sheet = Keymap.sheetFor(preset, "gui")
+        for (var s = 0; s < sheet.length; s++)
+            if (sheet[s].action === action) return sheet[s].keys
+        return ""
+    }
+    check("the default sheet spells move with the arrow", capFor("default", "cursorDown"), "down")
+    check("the default sheet reaches for the arrow before the longer cap",
+          capFor("default", "parent").split(" / ")[0], "left")
+    check("the default sheet spells browse in with the arrow", capFor("default", "pageForward"), "right")
+    check("the vim sheet still leads with the letter", capFor("vim", "cursorDown"), "j / down")
+    check("and vim still climbs with h", capFor("vim", "parent").split(" / ")[0], "h")
+
     var effective = Keymap.bindingRows("mac", "gui")
     check("suppressed Mac Ctrl+X never appears in sheet", effective.some(function (r) { return r.mods === "ctrl" && r.key === "X" }), false)
     check("every effective Mac binding resolves to advertised action", effective.every(function (r) {

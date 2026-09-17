@@ -277,7 +277,9 @@ action = "extendDown"
 key = "Up"
 action = "extendUp"
 
-# Bindings on the key code, for the keys that carry no printable character.
+# Bindings on the key code, for the keys that carry no printable character. The four arrows lead the
+# table: they are the navigation the Default preset has and the only navigation it has, so they are
+# the spelling the keymap sheet should reach for first.
 [[code]]
 key = "Down"
 action = "cursorDown"
@@ -285,6 +287,18 @@ action = "cursorDown"
 [[code]]
 key = "Up"
 action = "cursorUp"
+
+# The horizontal pair, in the list, the columns and both dual panes: Left goes up a level and Right
+# browses in. A preview takes them back through the preview-context rows at the end of this file,
+# where they seek in media and turn the page in a PDF, and the grid claims them as its own sideways
+# move in ui/js/Focus.js before the map is consulted at all.
+[[code]]
+key = "Left"
+action = "parent"
+
+[[code]]
+key = "Right"
+action = "pageForward"
 
 # Issue 28: the full-size keyboard's own four. Every one names an action the vim keys already carry,
 # so ui/js/Focus.js takes them for free and tools/flea-acceptance derives each as its own driven
@@ -343,20 +357,6 @@ action = "preview"
 [[code]]
 key = "F2"
 action = "rename"
-
-# GM's fix, 2026-09-13: the arrows are the letter pair's own spelling, so Left is h's parent and
-# Right is l's browse-in, in the list, the columns and both dual panes. A preview takes them back
-# through the preview-context rows at the end of this file, where they seek in media and turn the
-# page in a PDF, and the grid claims them as its own sideways move in ui/js/Focus.js before the map
-# is consulted at all. They were seekBack and seekForward here, which ui/js/Focus.js then discarded
-# everywhere but the grid, so the two arrows did nothing at all while browsing.
-[[code]]
-key = "Left"
-action = "parent"
-
-[[code]]
-key = "Right"
-action = "pageForward"
 
 # The character is authoritative for letters, so shift-g is distinguishable from g.
 [[text]]
@@ -554,7 +554,7 @@ prefix = "tab"
 # advertise a key that is not bound. Each block writes keys, then action, then label, in that order.
 
 [[sheet]]
-keys = "j k"
+keys = "down up"
 action = "cursorDown"
 label = "move"
 
@@ -564,12 +564,12 @@ action = "open"
 label = "open"
 
 [[sheet]]
-keys = "h"
+keys = "left"
 action = "parent"
 label = "parent"
 
 [[sheet]]
-keys = "l"
+keys = "right"
 action = "pageForward"
 label = "browse in"
 
@@ -1179,6 +1179,111 @@ action = "open"
 label = "open"
 frontend = "all"
 context = "listing"
+
+# The Default preset navigates on the four arrow keys and on nothing else. h, j, k and l are still
+# in the shared tables above, so Vim, Mac and Windows all go on reading them; these ten rows are
+# checked first and their empty action suppresses that fallback here, exactly as Mac's inert Ctrl+X
+# below does. Nothing moved out of reach: Left, Down, Up and Right name the same four actions in
+# the shared [[code]] table, in the listing and in every context the letters reach.
+[[preset]]
+name = "default"
+mods = "text"
+key = "h"
+keys = "h"
+action = ""
+label = "the arrows are the navigation"
+frontend = "all"
+context = "listing"
+
+[[preset]]
+name = "default"
+mods = "text"
+key = "h"
+keys = "h"
+action = ""
+label = "the arrows are the navigation"
+frontend = "all"
+context = "menu"
+
+[[preset]]
+name = "default"
+mods = "text"
+key = "h"
+keys = "h"
+action = ""
+label = "the arrows are the navigation"
+frontend = "all"
+context = "preview,pdf,media"
+
+[[preset]]
+name = "default"
+mods = "text"
+key = "j"
+keys = "j"
+action = ""
+label = "the arrows are the navigation"
+frontend = "all"
+context = "listing"
+
+[[preset]]
+name = "default"
+mods = "text"
+key = "j"
+keys = "j"
+action = ""
+label = "the arrows are the navigation"
+frontend = "all"
+context = "rail,menu,panel,preview,media"
+
+[[preset]]
+name = "default"
+mods = "text"
+key = "k"
+keys = "k"
+action = ""
+label = "the arrows are the navigation"
+frontend = "all"
+context = "listing"
+
+[[preset]]
+name = "default"
+mods = "text"
+key = "k"
+keys = "k"
+action = ""
+label = "the arrows are the navigation"
+frontend = "all"
+context = "rail,menu,panel,preview,media"
+
+[[preset]]
+name = "default"
+mods = "text"
+key = "l"
+keys = "l"
+action = ""
+label = "the arrows are the navigation"
+frontend = "all"
+context = "listing"
+
+[[preset]]
+name = "default"
+mods = "text"
+key = "l"
+keys = "l"
+action = ""
+label = "the arrows are the navigation"
+frontend = "all"
+context = "menu"
+
+[[preset]]
+name = "default"
+mods = "text"
+key = "l"
+keys = "l"
+action = ""
+label = "the arrows are the navigation"
+frontend = "all"
+context = "preview,pdf,media"
 
 [[preset]]
 name = "mac"

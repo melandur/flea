@@ -1535,6 +1535,24 @@ can mean cut while ctrl-d pages, and the character is authoritative for letters,
 is distinguishable from `g`. The generated file carries only the header saying where it came
 from.
 
+The Default preset navigates on the four arrow keys and on nothing else. `h`, `j`, `k` and `l`
+were shared rows, which every preset reads, so Default answered to the letter pair as well; the
+shared rows stay exactly where they were, because Vim, Mac and Windows all go on reading them, and
+ten `name = "default"` rows with an empty action suppress the fallback for this one preset, in the
+listing and in each of the menu, rail, panel and preview contexts the letters reach. That is the
+device Mac's inert `Ctrl+X` already used, and it is why the change adds ten rows rather than
+duplicating twenty into three presets. Nothing moved out of reach: `Left`, `Down`, `Up` and `Right`
+name the same four actions in the shared `[[code]]` table, which now lists them first so the keymap
+sheet spells `parent` "left" before it reaches "backspace".
+
+Four places decide a key outside the table and each now asks whether the preset spells the arrows
+as letters at all. `ui/js/Grid.js` `spelled` is that one question — `Keymap.lookup(0, "h", 0,
+"listing") !== ""`, asked of the map rather than named preset by preset, so a preset that gives `h`
+back gets the grid back with it. `sideways` reads it before `Keymap.lookup` is consulted at all
+(issue 114), and the hardcoded letters in `ui/TrashConfirm.qml`, `ui/OpenWithDialog.qml` and
+`ui/SettingsPanel.qml` call the same function. `ui/ContextMenu.qml` and the three picker files
+needed nothing: they were already reading the table.
+
 A `[[shift]]` table joined this for Task 9's shift+arrow selection extend. Unlike `[[ctrl]]`,
 whose block returns `""` on no match so an unbound ctrl-combo never falls through to a plain
 binding, the generated `[[shift]]` block has no such return: a shift-modified letter is

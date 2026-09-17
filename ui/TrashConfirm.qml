@@ -2,6 +2,7 @@ import QtQuick
 import qs.Commons
 import "." as Flea
 import "js/Format.js" as Format
+import "js/Grid.js" as Grid
 import "js/Keymap.js" as Keymap
 
 // The destructive choice must be reached deliberately; a reflexive Enter activates Cancel.
@@ -35,8 +36,8 @@ FocusScope {
         if (event.key === Qt.Key_Escape) root.cancel()
         else if (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) { event.accepted = true; return }
         else if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) root.destructiveFocus = !root.destructiveFocus
-        else if (event.key === Qt.Key_L || event.key === Qt.Key_Right) root.destructiveFocus = true
-        else if (event.key === Qt.Key_H || event.key === Qt.Key_Left) root.destructiveFocus = false
+        else if (event.key === Qt.Key_Right || (Grid.spelled() && event.key === Qt.Key_L)) root.destructiveFocus = true
+        else if (event.key === Qt.Key_Left || (Grid.spelled() && event.key === Qt.Key_H)) root.destructiveFocus = false
         else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) root.activate()
         if (root.opened) body.reveal(root.destructiveFocus ? dangerButton : cancelButton)
         event.accepted = true

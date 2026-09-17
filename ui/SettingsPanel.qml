@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import qs.Commons
 import "." as Flea
+import "js/Grid.js" as Grid
 import "js/Keymap.js" as Keymap
 import "js/Settings.js" as Settings
 
@@ -497,9 +498,13 @@ Item {
                 return
             }
             var row = root.rows[root.cursor]
+            // Shift and the arrow carry the row; a preset that spells the arrows as letters keeps
+            // shift-j and shift-k beside them.
+            var carryDown = event.key === Qt.Key_Down || (Grid.spelled() && event.key === Qt.Key_J)
+            var carryUp = event.key === Qt.Key_Up || (Grid.spelled() && event.key === Qt.Key_K)
             if (root.side === "pane" && row && row.kind === "favourite" && (event.modifiers & Qt.ShiftModifier)
-                    && (event.key === Qt.Key_J || event.key === Qt.Key_K)) {
-                root.stepFavourite(root.cursor, event.key === Qt.Key_J ? 1 : -1)
+                    && (carryDown || carryUp)) {
+                root.stepFavourite(root.cursor, carryDown ? 1 : -1)
                 return
             }
             // SettingsRest rule 4: the row's own mark is x, so x on the cursor row is the same action.

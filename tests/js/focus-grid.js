@@ -1,5 +1,6 @@
 .import "../../ui/js/Grid.js" as Grid
 .import "../../ui/js/Focus.js" as Focus
+.import "../../ui/js/Keymap.js" as Keymap
 .import "filterfixture.js" as Fixture
 
 // The grid's own geometry: which cell a key means when the rows are tiles. Split out of
@@ -20,6 +21,11 @@ function run(check) {
     Focus.act("cursorUp", gridPane)
     check("grid k follows the previous item", gridPane.cursorIndex, 2)
     check("grid j is not a physical arrow", Grid.arrow(key(Qt.Key_J, "j", none), "cursorDown", gridPane), false)
+    // The letters are a preset's spelling of the arrows, and Default, which suppresses them, does
+    // not reach the cells below; the presets that keep them do.
+    check("the grid refuses h on the default preset",
+          Grid.arrow(key(Qt.Key_H, "h", none), "cursorLeft", gridPane), false)
+    Keymap.setPreset("vim")
     for (var move of [
         [Qt.Key_Right, "cursorRight", 2, 2], [Qt.Key_Left, "cursorLeft", 3, 3],
         [Qt.Key_Down, "cursorDown", 2, 5], [Qt.Key_Down, "cursorDown", 5, 5],
@@ -44,6 +50,8 @@ function run(check) {
         check("and " + walk[0].text + " from " + walk[2] + " leaves the cursor on " + walk[3],
               gridPane.cursorIndex, walk[3])
     }
+
+    Keymap.setPreset("default")
 
     gridPane.cursorStride = 2
     gridPane.cursorIndex = 3

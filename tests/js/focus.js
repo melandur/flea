@@ -124,20 +124,27 @@ function run(check) {
     check("e is discarded over a media preview", Focus.lookup(e, pane(mediaOpen())), "")
     check("minus is discarded over a media preview", Focus.lookup(minus, pane(mediaOpen())), "")
 
-    // Left and Right serve two previews, the grid's own sideways step, and GM's fix: while browsing they are the letter pair's spelling, so they go up a level and into the row under the cursor.
+    // Left and Right serve two previews and the grid's own sideways step, and while browsing they are the navigation itself: up a level, and into the row under the cursor.
     check("left turns a PDF page", Focus.lookup(left, pane(pdfOpen())), "seekBack")
     check("right turns a PDF page", Focus.lookup(right, pane(pdfOpen())), "seekForward")
     check("left still seeks media", Focus.lookup(left, pane(mediaOpen())), "seekBack")
     check("left goes up a level in the list", Focus.lookup(left, pane(closed())), "parent")
     check("left still steps a grid tile", Focus.lookup(left, pane(closed(), "grid")), "cursorLeft")
     check("right still steps a grid tile", Focus.lookup(right, pane(closed(), "grid")), "cursorRight")
-    // Issue 114, muellan: the letters the presets spell the arrows with mean the arrows in the grid.
+    // The Default preset suppresses the letter pair, so it reaches neither the grid's sideways
+    // step nor the tree, and the arrows above are the whole of its navigation.
     var hKey = key(Qt.Key_H, "h", none)
     var lKey = key(Qt.Key_L, "l", none)
-    check("h steps a grid tile rather than climbing", Focus.lookup(hKey, pane(closed(), "grid")), "cursorLeft")
-    check("l steps a grid tile rather than browsing in", Focus.lookup(lKey, pane(closed(), "grid")), "cursorRight")
+    check("h does not step a grid tile on the default preset", Focus.lookup(hKey, pane(closed(), "grid")), "")
+    check("l does not step a grid tile on the default preset", Focus.lookup(lKey, pane(closed(), "grid")), "")
+    check("and h does not climb the tree on the default preset", Focus.lookup(hKey, pane(closed())), "")
+    // Issue 114, muellan: where the letters are bound they still mean the arrows in the grid.
+    Keymap.setPreset("vim")
+    check("vim h steps a grid tile rather than climbing", Focus.lookup(hKey, pane(closed(), "grid")), "cursorLeft")
+    check("vim l steps a grid tile rather than browsing in", Focus.lookup(lKey, pane(closed(), "grid")), "cursorRight")
     // Only h is read back in the list: l's answer there depends on the row under the cursor.
-    check("and in the list h is still the tree's own", Focus.lookup(hKey, pane(closed())), "parent")
+    check("and in the list vim h is still the tree's own", Focus.lookup(hKey, pane(closed())), "parent")
+    Keymap.setPreset("default")
 
     // Nothing in keys.toml is bound ahead of its feature now: lookup hands both actions through
     // and handleKey routes each above the views, so neither answers with a sentence any more.

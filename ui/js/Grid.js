@@ -1,14 +1,24 @@
 .pragma library
 
 .import "Filter.js" as Filter
+.import "Keymap.js" as Keymap
 
 // The grid's own geometry: which cell a key means when the rows are tiles rather than lines. Split
 // out of ui/js/Focus.js, which holds the key map and the actions every view shares.
 
-// Which way a key steps across a row of tiles, the arrow and the letter the presets spell it with.
+// Whether the preset in force spells the arrows as letters at all. Asked of the map rather than
+// named preset by preset, so a preset that gives h back gets the grid back with it; Default's own
+// suppressing rows answer "" here, and the four hardcoded letters below read the same test.
+function spelled() {
+    return Keymap.lookup(0, "h", 0, "listing") !== ""
+}
+
+// Which way a key steps across a row of tiles: the arrow always, and the letter wherever it means
+// anything, so issue 114 goes on holding and the grid stops answering where nothing else does.
 function sideways(event) {
-    return event.key === Qt.Key_Left || event.text === "h" ? -1
-         : event.key === Qt.Key_Right || event.text === "l" ? 1 : 0
+    var letters = spelled()
+    return event.key === Qt.Key_Left || (letters && event.text === "h") ? -1
+         : event.key === Qt.Key_Right || (letters && event.text === "l") ? 1 : 0
 }
 
 // An arrow requires an existing visual cell, even when item-order navigation wraps at the ends.

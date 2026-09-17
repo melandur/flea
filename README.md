@@ -161,7 +161,7 @@ Press **?** for the full keymap, or **,** to change settings.
 
 | Action | Keys |
 |---|---|
-| Move / parent / enter | `j` `k` / `h` / `l` |
+| Move / parent / enter | `↓` `↑` / `←` / `→` |
 | Open with the default app | `Enter` |
 | Quick Look | `Space` |
 | Select / extend selection | `v` / `Shift` + arrows |
@@ -175,6 +175,8 @@ Press **?** for the full keymap, or **,** to change settings.
 | Open terminal / context menu | `Ctrl+T` / `m` |
 | Show hidden files | `.` |
 
+The Default preset navigates on the four arrow keys and on nothing else. Vim, Mac and Windows keep
+`h` `j` `k` `l` beside them, in the list, the grid, the rail, the menus and a preview.
 The Windows preset uses `Ctrl+Shift+1/2/3` for views. Menu visibility does not disable shortcuts.
 See [the full key table](keys.toml) for preset bindings and pointer actions.
 

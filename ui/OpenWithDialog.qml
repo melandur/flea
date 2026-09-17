@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import "." as Flea
+import "js/Grid.js" as Grid
 import "js/OpenWith.js" as OpenWith
 
 // OpenWith.html rule 4: the Convert popup family, and the one place a default handler is written.
@@ -549,9 +550,10 @@ Item {
                 return
             }
             if (root.busy) return
-            // j and k move only while the search line is both empty and unfocused: from the field
-            // they are the first letters of kate, krita and joplin, and stealing them lost the query.
-            var quiet = field.text.length === 0 && root.focusPart !== 0
+            // j and k are a preset's spelling of the arrows and move only while the search line is
+            // both empty and unfocused: from the field they are the first letters of kate, krita
+            // and joplin, and stealing them lost the query. Default has the arrows alone.
+            var quiet = Grid.spelled() && field.text.length === 0 && root.focusPart !== 0
             if (event.key === Qt.Key_Down || (quiet && event.key === Qt.Key_J)) { root.moveCursor(1); return }
             if (event.key === Qt.Key_Up || (quiet && event.key === Qt.Key_K)) { root.moveCursor(-1); return }
             if (event.key === Qt.Key_PageDown) { root.moveCursor(root.viewportRows); return }

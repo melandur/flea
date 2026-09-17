@@ -74,7 +74,7 @@ seek_row() {
   press g
   for i in $(seq 1 30); do
     case "$(q rowAt "$(q cursor)")" in "$want|"*) return 0 ;; esac
-    press j
+    press Down
   done
   echo "  could not reach row: $want"
   return 1
