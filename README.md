@@ -163,9 +163,11 @@ Press **?** for the full keymap, or **,** to change settings.
 |---|---|
 | Move / parent / enter | `↓` `↑` / `←` / `→` |
 | Open with the default app | `Enter` |
-| Quick Look | `Space` |
+| Quick Look / leave it | `Space` / `Esc`, `←` or `Space` |
 | Select / extend selection | `v` / `Shift` + arrows |
 | Copy / cut / paste | `y` `x` `p`, or `Ctrl+C` `Ctrl+X` `Ctrl+V` |
+| Copy the file's path / the folder's | `Ctrl+B` / `Y` |
+| Show or hide the sidebar | `Ctrl+G` |
 | Rename / trash / undo | `r` or `F2` / `dd` or `Delete` / `z` |
 | New folder | `Ctrl+Shift+N` |
 | Search / filter the list | `f` / `/` |

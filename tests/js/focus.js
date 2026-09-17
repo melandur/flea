@@ -85,6 +85,11 @@ function mediaOpen() {
     return { active: true, isMedia: true, isPdf: false }
 }
 
+// An image, a text file or an archive listing: open, and neither of the two kinds that seek.
+function plainOpen() {
+    return { active: true, isMedia: false, isPdf: false }
+}
+
 function key(code, text, modifiers) {
     return { key: code, text: text, modifiers: modifiers }
 }
@@ -125,6 +130,11 @@ function run(check) {
     check("minus is discarded over a media preview", Focus.lookup(minus, pane(mediaOpen())), "")
 
     // Left and Right serve two previews and the grid's own sideways step, and while browsing they are the navigation itself: up a level, and into the row under the cursor.
+    // Left leaves a plain preview, where it used to be discarded for naming an action only the two
+    // seeking kinds answer; Escape has always closed and goes on closing beside it.
+    check("left closes a plain preview", Focus.lookup(left, pane(plainOpen())), "escape")
+    check("escape closes a plain preview too", Focus.lookup(key(Qt.Key_Escape, "", none), pane(plainOpen())), "escape")
+    check("right is still silent on a plain preview", Focus.lookup(right, pane(plainOpen())), "")
     check("left turns a PDF page", Focus.lookup(left, pane(pdfOpen())), "seekBack")
     check("right turns a PDF page", Focus.lookup(right, pane(pdfOpen())), "seekForward")
     check("left still seeks media", Focus.lookup(left, pane(mediaOpen())), "seekBack")

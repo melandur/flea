@@ -217,7 +217,7 @@ sidebar_wait() {
     fail "sidebar: the rail never read hidden=$want, its state is $(ipc railState)"
 }
 
-# RailAdditions rule 4 (issue 112, muellan): ctrl-b hides the rail and brings it back, the choice
+# RailAdditions rule 4 (issue 112, muellan): ctrl-g hides the rail and brings it back, the choice
 # outlives the window, and a window narrower than Theme.space(640) hides it on its own without
 # touching what was remembered.
 case_sidebar() (
@@ -238,8 +238,8 @@ case_sidebar() (
     (( width > 0 )) || fail "sidebar: the rail is shown and has no width, $(ipc railState)"
     printf 'SIDEBAR shown=%s\n' "$(ipc railState)"
 
-    echo "-- ctrl-b hides it, and the pane takes its width --"
-    key -M ctrl -k b -m ctrl >/dev/null
+    echo "-- ctrl-g hides it, and the pane takes its width --"
+    key -M ctrl -k g -m ctrl >/dev/null
     sidebar_wait true
     [[ "$(sidebar_state .width)" == "0" ]] || fail "sidebar: the hidden rail still takes $(sidebar_state .width) px"
     [[ "$(ipc railCount)" == "0" ]] || fail "sidebar: the hidden rail still has rows"
@@ -251,7 +251,7 @@ case_sidebar() (
     launch "$dir"
     wait_listing 2
     sidebar_wait true
-    key -M ctrl -k b -m ctrl >/dev/null
+    key -M ctrl -k g -m ctrl >/dev/null
     sidebar_wait false
     sidebar_stored shown "$stored"
 
@@ -319,12 +319,12 @@ case_sidebar() (
     settings_wait_value '.places.autoHide == false'
     key -k Escape >/dev/null; settle
 
-    echo "-- switched off, Show sidebar and ctrl-b govern again --"
+    echo "-- switched off, Show sidebar and ctrl-g govern again --"
     sidebar_wait false
     [[ "$(sidebar_state '.inset > 0')" == "true" ]] || fail "sidebar: the rail came back as an overlay, $(ipc railState)"
-    key -M ctrl -k b -m ctrl >/dev/null
+    key -M ctrl -k g -m ctrl >/dev/null
     sidebar_wait true
-    key -M ctrl -k b -m ctrl >/dev/null
+    key -M ctrl -k g -m ctrl >/dev/null
     sidebar_wait false
     printf 'SIDEBAR autohide=ok remembered=%s\n' "$(jq -r '.places.rail' "$stored")"
     kill_flea

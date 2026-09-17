@@ -43,10 +43,19 @@ action = "search"
 key = "E"
 action = "eject"
 
-# RailAdditions rule 4 (issue 112, muellan): the rail hides and comes back on the chord every editor
-# binds for its own sidebar, and the choice is remembered in ui.json the way the view is.
+# The listing menu's Copy path row, on a key: the full path of the row under the cursor. Ctrl+B is
+# the editor chord for a sidebar, which is what this key was, and the rail moved to Ctrl+G below to
+# free it. Y beside it copies the directory the listing is showing, which is a different string and
+# stays its own action.
 [[ctrl]]
 key = "B"
+action = "copypath"
+
+# RailAdditions rule 4 (issue 112, muellan): the rail hides and comes back on a chord, and the
+# choice is remembered in ui.json the way the view is. Ctrl+G, because Ctrl+B above now carries the
+# path and nothing else on this box claims G at all.
+[[ctrl]]
+key = "G"
 action = "sidebar"
 
 # Not a Finder chord: Cmd+Shift+G is Go to Folder there, and Ctrl+Shift+G is nothing on this box.
@@ -534,7 +543,7 @@ look = ["viewList", "viewColumns", "viewGrid", "togglePreview", "loadPreview", "
         "textSizeReset", "keymapSheet"]
 find = ["filter", "search", "reveal", "sortNext", "sortReverse", "pathBar"]
 change = ["copy", "cut", "paste", "movePaste", "duplicate", "rename", "trash",
-          "deletePermanently", "undo", "redo", "newFolder", "copydirpath", "toggleSelect",
+          "deletePermanently", "undo", "redo", "newFolder", "copypath", "copydirpath", "toggleSelect",
           "selectAll", "extendDown", "extendUp", "menu", "properties", "addNetwork", "eject",
           "openTerminal", "settings"]
 
@@ -610,6 +619,11 @@ label = "path"
 keys = "y ^c"
 action = "copy"
 label = "copy"
+
+[[sheet]]
+keys = "^b"
+action = "copypath"
+label = "file path"
 
 [[sheet]]
 keys = "Y"
@@ -1739,6 +1753,21 @@ label = "focus listing"
 frontend = "all"
 context = "preview,pdf,media"
 
+# Left leaves the preview the way Escape does, in the plain kinds only. ui/js/Focus.js discarded
+# seekBack on every kind but media and a PDF, so on an image, a text file or an archive listing the
+# key did nothing whatever; it closes there now. A media preview and a PDF keep it, because Left is
+# the only key either has left for seeking back and turning a page back once h belongs to the
+# presets that spell the arrows as letters.
+[[preset]]
+name = "all"
+mods = "none"
+key = "Left"
+keys = "left"
+action = "escape"
+label = "close"
+frontend = "all"
+context = "preview"
+
 [[preset]]
 name = "all"
 mods = "none"
@@ -1747,7 +1776,7 @@ keys = "left"
 action = "seekBack"
 label = "seekBack"
 frontend = "all"
-context = "preview,pdf,media"
+context = "pdf,media"
 
 [[preset]]
 name = "all"
@@ -1764,10 +1793,20 @@ name = "all"
 mods = "text"
 key = "h"
 keys = "h"
+action = "escape"
+label = "close"
+frontend = "all"
+context = "preview"
+
+[[preset]]
+name = "all"
+mods = "text"
+key = "h"
+keys = "h"
 action = "seekBack"
 label = "seekBack"
 frontend = "all"
-context = "preview,pdf,media"
+context = "pdf,media"
 
 [[preset]]
 name = "all"

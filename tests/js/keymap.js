@@ -20,6 +20,12 @@ function run(check) {
         key(preset, "J", "j", none, letters ? "cursorDown" : "")
         key(preset, "K", "k", none, letters ? "cursorUp" : "")
         key(preset, "L", "l", none, preset === "vim" ? "open" : letters ? "pageForward" : "")
+        // Left leaves the plain kinds and goes on seeking in the two that seek; h follows it.
+        key(preset, "Left", "", none, "escape", "preview")
+        key(preset, "Left", "", none, "seekBack", "pdf")
+        key(preset, "Left", "", none, "seekBack", "media")
+        key(preset, "Escape", "", none, "escape", "preview")
+        key(preset, "H", "h", none, letters ? "escape" : "", "preview")
         key(preset, "H", "h", none, letters ? "seekBack" : "", "pdf")
         key(preset, "L", "l", none, letters ? "pageForward" : "", "pdf")
         key(preset, "Space", " ", none, "preview")
@@ -46,6 +52,9 @@ function run(check) {
         key(preset, "2", "", preset === "windows" ? ctrl | shift : ctrl, "viewColumns")
         key(preset, "3", "", preset === "windows" ? ctrl | shift : ctrl, "viewGrid")
         key(preset, "Comma", "", ctrl, "settings")
+        // Ctrl+B carries the cursor row's full path; the rail's own chord moved to Ctrl+G for it.
+        key(preset, "B", "", ctrl, "copypath")
+        key(preset, "G", "", ctrl, "sidebar")
         for (var f = 0; f < 2; f++) {
             var frontend = ["gui", "tui"][f]
             var menuContexts = ["listing", "rail", "menu", "panel", "preview", "pdf", "media", "editor"]

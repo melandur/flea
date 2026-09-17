@@ -120,7 +120,7 @@ QtObject {
         root.save()
     }
 
-    // RailAdditions rule 4: ctrl-b remembers the rail the way the view is remembered, so this is a
+    // RailAdditions rule 4: ctrl-g remembers the rail the way the view is remembered, so this is a
     // state and not a setting; the width rule in ui/Pane.qml hides it without writing anything.
     readonly property bool railHidden: (root.state.places || ({})).rail === "hidden"
     // Directive 74: hiding on a narrow window is its own switch and it ships off, so the rail stays

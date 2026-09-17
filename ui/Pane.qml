@@ -392,6 +392,15 @@ FocusScope {
     // Quoted when it holds whitespace, because this one is pasted into a shell: see ui/js/Format.js.
     function copyDirPath() { wire.opener.copyText(Format.shellQuoted(root.path)) }
 
+    // The listing menu's Copy path row on a key, taking the path exactly as that row takes it, so
+    // the two surfaces cannot disagree about what Copy path means; ui/PaneMenuActions.qml is the
+    // row. Unquoted where copyDirPath quotes, because that one names a directory to cd into and
+    // this one names a file. An empty listing has no row to name, and copies nothing.
+    function copyPath() {
+        if (!root.cursorRow) return
+        wire.opener.copyText(root.join(root.path, root.cursorRow.n))
+    }
+
     function openParent() { if (trashHost.opened) trashHost.close(); else Nav.parent(root) }
 
     function join(base, name) {

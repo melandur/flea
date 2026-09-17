@@ -6,9 +6,9 @@ xdata = pkgtype=pkg
 pkgver = 0.3.0-1
 pkgdesc = Fast, keyboard-first file manager for Omarchy
 url = 
-builddate = 1789649846
+builddate = 1789651582
 packager = Unknown Packager
-size = 4026332
+size = 4026764
 arch = x86_64
 license = MIT
 conflict = flea-git

@@ -200,7 +200,7 @@ function runCompletionRows(check) {
           places.filter(function (row) { return row.kind === "favouriteActions" }).length, 0)
     check("optional rail details default off", [find(places, "places.driveSize").on, find(places, "places.trashCount").on, find(places, "places.showUnmounted").on].join(","), "false,false,false")
     check("the Rail controls follow the ruled order", places.slice(-7, -2).map(function (row) { return row.label }).join("|"), "Show Trash count|Show unmounted drives|Auto-hide sidebar|Show sidebar|Sidebar width")
-    // Directive 74: two handles on one remembered state, so the row reads the word ctrl-b writes.
+    // Directive 74: two handles on one remembered state, so the row reads the word ctrl-g writes.
     check("Show sidebar is checked while the rail is shown", find(places, "places.rail").on, true)
     check("and auto-hide ships off, so nothing hides itself", find(places, "places.autoHide").on, false)
     // Directive 77: with auto-hide on the pointer governs the rail, so the remembered choice is
