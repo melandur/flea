@@ -482,19 +482,19 @@ def test_failure():
 
 
 def test_keys():
-    for preset in ["default", "vim", "mac", "windows"]:
+    # Default is the one preset, and an unrecognised stored name resolves to it rather than failing.
+    for preset in ["default", "windows"]:
         write(state_file, json.dumps({"keys": preset}))
         keys = Request(f"SP10-{preset}").opened()
-        keys.until("preset loaded", lambda state: state["preset"] == preset)
+        keys.until("preset loaded", lambda state: state["preset"] == "default")
         keys.key("-k", "Tab")
         keys.until("Tab enters chrome", lambda state: any(control["focused"] for control in state["controls"]))
         keys.key("-M", "shift", "-k", "Tab", "-m", "shift")
         keys.until("Shift Tab restores list", lambda state: state["listFocus"])
-        if preset == "vim":
-            keys.key("j")
-            keys.until("vim j moves cursor", lambda state: state["cursor"] == 1)
-            keys.key("k")
-            keys.until("vim k moves cursor", lambda state: state["cursor"] == 0)
+        keys.key("-k", "Down")
+        keys.until("the down arrow moves the cursor", lambda state: state["cursor"] == 1)
+        keys.key("-k", "Up")
+        keys.until("the up arrow moves it back", lambda state: state["cursor"] == 0)
         keys.capture("focus")
         keys.cancel()
 

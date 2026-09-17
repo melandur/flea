@@ -234,13 +234,8 @@ impl Model {
             menu_directory: false,
             menu_count: 0,
             editor: None,
-            preset: match text(settings, "keys") {
-                "vim" => "vim",
-                "mac" => "mac",
-                "windows" => "windows",
-                _ => "default",
-            }
-            .into(),
+            // Default is the only preset, so every stored name resolves to it.
+            preset: "default".into(),
             player: None,
             pdf: None,
             preview_scroll: 0,

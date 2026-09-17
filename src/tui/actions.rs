@@ -258,12 +258,6 @@ pub fn key(model: &mut Model, key: &Key, map: &Map, wire: &mut Wire) -> io::Resu
         }
         match key.text.as_str() {
             "q" => model.quit = true,
-            "H" if matches!(model.preset.as_str(), "default" | "vim") => {
-                history(model, false, wire)?
-            }
-            "L" if matches!(model.preset.as_str(), "default" | "vim") => {
-                history(model, true, wire)?
-            }
             _ => {}
         }
         return Ok(());

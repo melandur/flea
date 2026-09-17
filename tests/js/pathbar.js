@@ -178,13 +178,18 @@ function run(check) {
     check("a line already at the common prefix says how many share it",
           PathBar.completionMessage("/home/gm/D", many, HOME), "4 names share that prefix.")
 
-    // The key half. The bar is drawn in the chrome above both views, so it is global the way the
-    // keymap sheet is: the rail has to reach it rather than dropping the key on the floor.
+    // The key half. Colon and Ctrl+L both left when the table was cut back to the arrows and the
+    // Ctrl chords, so the crumb bar in the chrome is what opens it; the route the keys used is kept
+    // and still global, drawn above both views the way the keymap sheet is, so the rail reaches it.
     var colon = key(Qt.Key_Colon, ":", Qt.ShiftModifier)
     var fromList = barPane("list")
-    check("colon is consumed in the list", Focus.handleKey(colon, fromList, fromList.sidebar), true)
-    check("and asks the shell to open the bar", fromList.asked, 1)
+    check("colon no longer opens the bar", Focus.handleKey(colon, fromList, fromList.sidebar), false)
+    check("and nothing was asked of the shell", fromList.asked, 0)
+    var ctrlL = key(Qt.Key_L, "l", Qt.ControlModifier)
+    var listAgain = barPane("list")
+    check("ctrl-l no longer opens it either", Focus.handleKey(ctrlL, listAgain, listAgain.sidebar), false)
+    // The rail consumes every key it is handed, so only the count says the bar stayed shut there.
     var fromRail = barPane("rail")
-    Focus.handleKey(key(Qt.Key_L, "l", Qt.ControlModifier), fromRail, fromRail.sidebar)
-    check("ctrl-l opens it from the rail as well", fromRail.asked, 1)
+    Focus.handleKey(ctrlL, fromRail, fromRail.sidebar)
+    check("and nothing was asked of the shell from the rail", fromRail.asked, 0)
 }

@@ -118,11 +118,13 @@ function run(check) {
     var left = key(Qt.Key_Left, "", none)
     var right = key(Qt.Key_Right, "", none)
 
-    check("e expands an open PDF", Focus.lookup(e, pane(pdfOpen())), "expand")
-    check("minus zooms an open PDF", Focus.lookup(minus, pane(pdfOpen())), "zoomOut")
-    check("plus zooms an open PDF", Focus.lookup(plus, pane(pdfOpen())), "zoomIn")
+    // The three left the table with every other bare letter, so the PDF's zoom and expand are the
+    // strip's own controls now. Focus.lookup keeps its gate, which is what would scope them again.
+    check("e no longer expands an open PDF", Focus.lookup(e, pane(pdfOpen())), "")
+    check("minus no longer zooms an open PDF", Focus.lookup(minus, pane(pdfOpen())), "")
+    check("plus no longer zooms an open PDF", Focus.lookup(plus, pane(pdfOpen())), "")
 
-    // The three are silent everywhere else, so none of them acts while the list has the keys.
+    // The three are silent everywhere else too, as they always were.
     check("e is discarded while browsing", Focus.lookup(e, pane(closed())), "")
     check("minus is discarded while browsing", Focus.lookup(minus, pane(closed())), "")
     check("plus is discarded while browsing", Focus.lookup(plus, pane(closed())), "")
@@ -148,25 +150,18 @@ function run(check) {
     check("h does not step a grid tile on the default preset", Focus.lookup(hKey, pane(closed(), "grid")), "")
     check("l does not step a grid tile on the default preset", Focus.lookup(lKey, pane(closed(), "grid")), "")
     check("and h does not climb the tree on the default preset", Focus.lookup(hKey, pane(closed())), "")
-    // Issue 114, muellan: where the letters are bound they still mean the arrows in the grid.
-    Keymap.setPreset("vim")
-    check("vim h steps a grid tile rather than climbing", Focus.lookup(hKey, pane(closed(), "grid")), "cursorLeft")
-    check("vim l steps a grid tile rather than browsing in", Focus.lookup(lKey, pane(closed(), "grid")), "cursorRight")
-    // Only h is read back in the list: l's answer there depends on the row under the cursor.
-    check("and in the list vim h is still the tree's own", Focus.lookup(hKey, pane(closed())), "parent")
-    Keymap.setPreset("default")
 
-    // Nothing in keys.toml is bound ahead of its feature now: lookup hands both actions through
-    // and handleKey routes each above the views, so neither answers with a sentence any more.
+
+    // The path bar, the tab keys and the filter went with the bare letters and punctuation; the
+    // chrome and the menus still reach all three, and Focus.lookup keeps the gates that scoped them.
     var colon = key(Qt.Key_Colon, ":", shift)
-    check("colon resolves to the path bar", Focus.lookup(colon, pane(closed())), "pathBar")
+    check("colon no longer reaches the path bar", Focus.lookup(colon, pane(closed())), "")
     var newTab = key(Qt.Key_T, "t", none)
-    check("t resolves to a new tab", Focus.lookup(newTab, pane(closed())), "tabNew")
+    check("t no longer opens a tab", Focus.lookup(newTab, pane(closed())), "")
 
-    // GridView includes Filter in its chrome; both supported views narrow their held rows.
     var slash = key(Qt.Key_Slash, "/", none)
-    check("slash opens the filter in the list view", Focus.lookup(slash, pane(closed())), "filter")
-    check("slash opens the filter in the grid view", Focus.lookup(slash, pane(closed(), "grid")), "filter")
+    check("slash no longer opens the filter in the list view", Focus.lookup(slash, pane(closed())), "")
+    check("slash no longer opens the filter in the grid view", Focus.lookup(slash, pane(closed(), "grid")), "")
     check("slash is discarded in the columns view", Focus.lookup(slash, pane(closed(), "columns")), "")
     // A walk replaces the listing a filter would be narrowing, and its strip covers the header, so
     // / goes quiet there exactly as s and S do.
@@ -221,8 +216,8 @@ function run(check) {
     // from a key the sheet never advertised there.
     var sortNext = key(Qt.Key_S, "s", none)
     var sortReverse = key(Qt.Key_S, "S", shift)
-    check("s sorts while browsing", Focus.lookup(sortNext, pane(closed())), "sortNext")
-    check("S reverses while browsing", Focus.lookup(sortReverse, pane(closed())), "sortReverse")
+    check("s no longer sorts while browsing", Focus.lookup(sortNext, pane(closed())), "")
+    check("S no longer reverses while browsing", Focus.lookup(sortReverse, pane(closed())), "")
     check("s is discarded over a search result", Focus.lookup(sortNext, searching(closed())), "")
     check("S is discarded over a search result", Focus.lookup(sortReverse, searching(closed())), "")
 
@@ -233,14 +228,12 @@ function run(check) {
     check("m raises the menu while the rail has focus", Focus.lookup(m, railPane()), "menu")
     check("m raises the menu in the list too, so the row menu has a key", Focus.lookup(m, pane(closed())), "menu")
 
-    // Ctrl+K opens the dialog from either view, and so does the bare a: keys.toml promised "either the
-    // list or the rail" from the first commit while Focus.js made it rail-only (GM, 2026-09-11).
-    // Ctrl+K is the Mac preset's chord, so the preset is named rather than assumed.
+    // The network dialog kept no key of its own when the table was cut back to the arrows and the
+    // Ctrl chords, so the rail's "+" mark and the menu are what reach it; act still routes it from
+    // either view, which is what keys.toml promised from the first commit while Focus.js made it
+    // rail-only (GM, 2026-09-11).
     var ctrl = Qt.ControlModifier
-    Keymap.setPreset("mac")
-    check("ctrl k connects to a server from the list", Focus.lookup(key(Qt.Key_K, "\u000b", ctrl), pane(closed())), "addNetwork")
-    check("Mac List Right still opens the cursor", Focus.lookup(right, pane(closed())), "open")
-    check("Mac List Left still opens the parent", Focus.lookup(left, pane(closed())), "parent")
+    check("the network dialog has no key left", Focus.lookup(key(Qt.Key_A, "a", none), pane(closed())), "")
     for (var preset of Keymap.PRESETS) {
         Keymap.setPreset(preset)
         check(preset + " Grid Left moves between tiles", Focus.lookup(left, pane(closed(), "grid")), "cursorLeft")
@@ -248,7 +241,6 @@ function run(check) {
         check(preset + " Grid PDF Right keeps page navigation", Focus.lookup(right, pane(pdfOpen(), "grid")), "seekForward")
     }
     Keymap.setPreset("default")
-    check("bare a adds a network place from the list too", Focus.lookup(key(Qt.Key_A, "a", none), pane(closed())), "addNetwork")
     var dialled = listPane(true)
     dialled.sidebar = { asked: 0, addRequested: function () { this.asked += 1 } }
     Focus.act("addNetwork", dialled)
@@ -302,12 +294,7 @@ function run(check) {
     // PR 34's chord. The context-menu row and Ctrl+T raise the same terminal, and the rail owns its
     // own keys, so the one route both views share is the interception in handleKey above the views.
     var terminalKey = key(Qt.Key_T, "\u0014", ctrl)
-    var fromList = chromePane("list")
-    check("ctrl t is consumed in the list", Focus.handleKey(terminalKey, fromList, fromList.sidebar), true)
-    check("and opens a terminal there", fromList.asked, 1)
-    var fromRail = chromePane("rail")
-    Focus.handleKey(terminalKey, fromRail, fromRail.sidebar)
-    check("ctrl t opens one from the rail as well", fromRail.asked, 1)
+    check("ctrl t no longer carries the terminal", Focus.lookup(terminalKey, pane(closed())), "")
     // The menu row's own route: ui/ContextMenu.qml fires the action into ui/Pane.qml's act(), which
     // never sees handleKey's interception, and this is the dispatch that was missing when it did not.
     var fromMenu = chromePane("list")
@@ -345,12 +332,14 @@ function run(check) {
     // Y copies root.path, the same thing Ctrl+T opens a terminal on, so it answers from the rail
     // too; without the interception RailKeys.act ate it and the key did nothing and said nothing.
     var copyKey = key(Qt.Key_Y, "Y", shift)
+    check("Y no longer carries the folder path", Focus.lookup(copyKey, pane(closed())), "")
+    // The interception itself is unchanged and is what the menu row still reaches, from either view.
     var copyList = chromePane("list")
-    check("Y is consumed in the list", Focus.handleKey(copyKey, copyList, copyList.sidebar), true)
-    check("and copies the folder path there", copyList.copied, 1)
+    Focus.act("copydirpath", copyList)
+    check("the menu row still copies the folder path through act", copyList.copied, 1)
     var copyRail = chromePane("rail")
-    Focus.handleKey(copyKey, copyRail, copyRail.sidebar)
-    check("Y copies the folder path from the rail as well", copyRail.copied, 1)
+    Focus.act("copydirpath", copyRail)
+    check("and does so with the rail focused as well", copyRail.copied, 1)
 
     var shareOwner = chromePane("list")
     var otherPane = chromePane("list")

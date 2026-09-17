@@ -759,7 +759,7 @@ class Native:
         for source, destination, label in [(original, renamed, "search-rename"), (renamed, original, "search-restore")]:
             guard(self.case, source)
             guard(self.case, destination)
-            self.key("r")
+            self.key("-k", "F2")
             self.snapshot(label + "-editor", lambda text: "Enter saves" in text)
             self.key(destination.stem)
             self.key("-k", "Return")
@@ -867,7 +867,7 @@ class Native:
         self.key("-k", "Down")
         self.key("-k", "Down")
         self.snapshot("rename-identity-selected", lambda text: self.cursor_is(original.name))
-        self.key("r")
+        self.key("-k", "F2")
         self.snapshot("rename-identity-editor", lambda text: "Enter saves" in text)
         original.rename(held)
         original.write_text("external replacement fixture\n")
@@ -893,7 +893,7 @@ class Native:
             hidden_label = "hide hidden" if label == "shift-f10" else "show hidden"
             activate()
             self.snapshot("menu-" + label, lambda text: hidden_label in text and "taildrop" in text)
-            self.key("r")
+            self.key("-k", "F2")
             self.snapshot("menu-" + label + "-contained", lambda text: hidden_label in text and "Enter saves" not in text)
             self.key("-k", "Tab")
             self.key("-k", "Return")
@@ -904,7 +904,7 @@ class Native:
         self.tiny_menu()
         self.key("?")
         self.snapshot("keymap-panel", lambda text: "\u2500 keys " in text and "open" in text)
-        self.key("r")
+        self.key("-k", "F2")
         self.snapshot("keymap-panel-contained", lambda text: "\u2500 keys " in text and "Enter saves" not in text)
         for label, args in [("down", ("-k", "Down")), ("down-again", ("-k", "Down")),
                             ("up", ("-k", "Up")), ("up-again", ("-k", "Up"))]:
@@ -1161,7 +1161,7 @@ class Native:
         self.chord("space", "ctrl")
         self.snapshot("preview-manual-loaded", lambda text: "TEXT-PROOF-000" in text and "Ctrl+Space to load preview" not in text)
         self.chord("Tab", "ctrl")
-        self.key("r")
+        self.key("-k", "F2")
         self.key("t")
         self.key("v")
         self.snapshot("preview-context-contained", lambda text: self.cursor_is("01-text.txt") and "Enter saves" not in text and " V " not in text and "2 media" not in text)
@@ -1279,7 +1279,7 @@ class Native:
         self.snapshot("pdf-zoom-out-minus", lambda text: "75%" in text)
         self.key("+")
         self.snapshot("pdf-zoom-in-plus", lambda text: "100%" in text)
-        self.key("r")
+        self.key("-k", "F2")
         self.key("v")
         self.snapshot("pdf-listing-keys-contained", lambda text: "Page 1 / 2" in text and "Enter saves" not in text and " V " not in text)
         self.key("-k", "Escape")

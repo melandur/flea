@@ -46,9 +46,6 @@ impl Map {
         if context == "listing" && key.name == "Insert" && key.mods == "shift" {
             return "paste".into();
         }
-        if preset == "mac" && key.mods == "ctrl" && key.name == "X" {
-            return String::new();
-        }
         for name in [preset, "all"] {
             for (kind, block) in &self.blocks {
                 let here = get(block, "context");
@@ -242,21 +239,20 @@ mod tests {
     #[test]
     fn compiled_source_drives_text_and_native_ctrl() {
         let map = Map::load();
-        // The shared [[text]] row, reached by every preset that does not suppress it.
+        // The shared [[text]] table, which m is the one letter left in.
         assert_eq!(
             map.action(
                 &Key {
-                    name: "J".into(),
-                    text: "j".into(),
+                    name: "M".into(),
+                    text: "m".into(),
                     mods: "".into(),
                     pointer: None,
                 },
-                "vim"
+                "default"
             ),
-            "cursorDown"
+            "menu"
         );
-        // Default's own empty-action row, checked first, which is why it navigates on the arrows
-        // alone; Down below is what carries the same action there.
+        // A letter the table no longer carries at all: navigation is the four arrows.
         assert_eq!(
             map.action(
                 &Key {
@@ -284,24 +280,12 @@ mod tests {
         assert_eq!(
             map.action(
                 &Key {
-                    name: "X".into(),
-                    text: "X".into(),
-                    mods: "ctrl".into(),
-                    pointer: None,
-                },
-                "mac"
-            ),
-            ""
-        );
-        assert_eq!(
-            map.action(
-                &Key {
                     name: "Insert".into(),
                     text: "".into(),
                     mods: "shift".into(),
                     pointer: None,
                 },
-                "vim"
+                "default"
             ),
             "paste"
         );
@@ -309,33 +293,27 @@ mod tests {
     #[test]
     fn contexts_share_only_declared_actions_and_sheet_matches_preset() {
         let map = Map::load();
-        assert_eq!(map.in_context(&Key::character('d', ""), "vim", "pdf"), "");
+        assert_eq!(map.in_context(&Key::character('d', ""), "default", "pdf"), "");
         assert_eq!(
-            map.in_context(&Key::named("Space", ""), "mac", "pdf"),
+            map.in_context(&Key::named("Space", ""), "default", "pdf"),
             "preview"
         );
         assert_eq!(
-            map.in_context(&Key::named("Tab", "shift"), "windows", "media"),
+            map.in_context(&Key::named("Tab", "shift"), "default", "media"),
             "focusPrevious"
         );
         assert_eq!(
             map.in_context(&Key::named("Insert", "ctrl"), "default", "editor"),
             ""
         );
-        assert_eq!(map.action(&Key::character('y', ""), "vim"), "copyArm");
-        assert!(map.sheet("vim").iter().any(|line| line.contains("yy")));
+        assert!(map
+            .sheet("default")
+            .iter()
+            .any(|line| line.starts_with("Ctrl+C") && line.ends_with("  copy")));
         assert!(!map
             .sheet("default")
             .iter()
             .any(|line| line.to_lowercase().contains("grid")));
-    }
-    #[test]
-    fn commented_headers_keep_shipped_mac_navigation_aliases_separate() {
-        let map = Map::load();
-        for (key, action) in [("Up", "parent"), ("Down", "open"), ("Delete", "trash")] {
-            assert_eq!(map.action(&Key::named(key, "ctrl"), "mac"), action);
-        }
-        assert_eq!(map.action(&Key::character('3', "ctrl"), "mac"), "viewGrid");
     }
     #[test]
     fn header_comments_do_not_strip_quoted_hashes_or_accept_other_suffixes() {

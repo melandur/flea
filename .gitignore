@@ -20,3 +20,7 @@ docs/pending/
 
 # Session and build-tracking state, never shipped.
 .superpowers/
+
+# makepkg build output: $pkgdir and the $srcdir target the PKGBUILD points cargo at.
+/pkg/
+/src/target/

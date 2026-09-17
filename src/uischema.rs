@@ -149,7 +149,7 @@ pub const SCHEMA: &[(&str, Rule)] = &[
     ("preview", Rule::Group(PREVIEW)),
     // SettingsKeys.html's four-value chooser over ui/js/Keymap.js's shared tables. A stored name
     // this build cannot honour falls back to default, which is also what a fresh ui.json holds.
-    ("keys", Rule::Word(&["default", "vim", "mac", "windows"])),
+    ("keys", Rule::Word(&["default"])),
     ("display", Rule::Group(DISPLAY)),
     ("menu", Rule::Group(MENU)),
 ];
@@ -279,8 +279,7 @@ mod tests {
         let current = crate::uistate::from_file("{}");
         let takes = |patch: &str| crate::uistate::patched(&current, &jsondoc::parse(patch).expect("patch parses"));
         for good in [r#"{"display":{"textSize":{"mode":"system"}}}"#, r#"{"display":{"textSize":{"mode":9}}}"#,
-                     r#"{"keys":"default"}"#, r#"{"keys":"vim"}"#,
-                     r#"{"keys":"mac"}"#, r#"{"keys":"windows"}"#,
+                     r#"{"keys":"default"}"#,
                      r#"{"places":{"favourites":[]}}"#,
                      r#"{"places":{"driveSize":true,"trashCount":true}}"#,
                      r#"{"places":{"driveSize":false,"trashCount":false}}"#,

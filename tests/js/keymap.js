@@ -1,223 +1,172 @@
 .import "../../ui/js/Keymap.js" as Keymap
 
+// Default is the one preset, and its listing table is the arrows, the Ctrl chords and a handful of
+// named keys. Everything this file asserts is either in that set or is asserted to be gone: a key
+// that quietly stops working is the failure mode a keymap has, and nothing else notices it.
 function run(check) {
     var none = Qt.NoModifier, ctrl = Qt.ControlModifier, shift = Qt.ShiftModifier
     var alt = Qt.AltModifier, meta = Qt.MetaModifier
-    function key(preset, name, text, mods, expected, context, frontend) {
-        check(preset + " " + (context || "listing") + " " + (frontend || "gui") + " " + name + " " + text + " " + mods,
-              Keymap.lookupFor(preset, Qt["Key_" + name] || 0, text, mods, context, frontend), expected)
+    function key(name, text, mods, expected, context, frontend) {
+        check("default " + (context || "listing") + " " + (frontend || "gui") + " " + name + " " + text + " " + mods,
+              Keymap.lookupFor("default", Qt["Key_" + name] || 0, text, mods, context, frontend), expected)
     }
-    for (var i = 0; i < Keymap.PRESETS.length; i++) {
-        var preset = Keymap.PRESETS[i]
-        // The four arrows are the navigation every preset has, and the Default preset's only one:
-        // the letters stay in the shared tables and Default's own rows suppress them there.
-        var letters = preset !== "default"
-        key(preset, "Down", "", none, "cursorDown")
-        key(preset, "Up", "", none, "cursorUp")
-        key(preset, "Left", "", none, "parent")
-        key(preset, "Right", "", none, preset === "mac" ? "open" : "pageForward")
-        key(preset, "H", "h", none, letters ? "parent" : "")
-        key(preset, "J", "j", none, letters ? "cursorDown" : "")
-        key(preset, "K", "k", none, letters ? "cursorUp" : "")
-        key(preset, "L", "l", none, preset === "vim" ? "open" : letters ? "pageForward" : "")
-        // Left leaves the plain kinds and goes on seeking in the two that seek; h follows it.
-        key(preset, "Left", "", none, "escape", "preview")
-        key(preset, "Left", "", none, "seekBack", "pdf")
-        key(preset, "Left", "", none, "seekBack", "media")
-        key(preset, "Escape", "", none, "escape", "preview")
-        key(preset, "H", "h", none, letters ? "escape" : "", "preview")
-        key(preset, "H", "h", none, letters ? "seekBack" : "", "pdf")
-        key(preset, "L", "l", none, letters ? "pageForward" : "", "pdf")
-        key(preset, "Space", " ", none, "preview")
-        key(preset, "P", "p", alt, "togglePreview")
-        key(preset, "Space", " ", ctrl, "loadPreview")
-        key(preset, "PageDown", "", ctrl, "tabNext")
-        key(preset, "PageUp", "", ctrl, "tabPrevious")
-        key(preset, "Tab", "", ctrl, "focusPreview")
-        key(preset, "Tab", "", none, "focusNext")
-        key(preset, "W", "", ctrl, "tabClose")
-        key(preset, "S", "s", none, "sortNext")
-        key(preset, "S", "S", shift, "sortReverse")
-        key(preset, "Slash", "/", none, "filter")
-        key(preset, "Question", "?", shift, "keymapSheet")
-        key(preset, "Insert", "", ctrl, "copy", "listing", "tui")
-        key(preset, "Insert", "", shift, "paste", "listing", "tui")
-        key(preset, "Insert", "", ctrl, "", "listing", "gui")
-        key(preset, "1", "1", none, "tab1", "listing", "tui")
-        key(preset, "9", "9", none, "tab9", "listing", "tui")
-        key(preset, "1", "1", none, "", "listing", "gui")
-        key(preset, "N", "", preset === "mac" ? meta : ctrl, "windowNew")
-        key(preset, "N", "", preset === "mac" ? meta : ctrl, "", "listing", "tui")
-        key(preset, "1", "", preset === "windows" ? ctrl | shift : ctrl, "viewList")
-        key(preset, "2", "", preset === "windows" ? ctrl | shift : ctrl, "viewColumns")
-        key(preset, "3", "", preset === "windows" ? ctrl | shift : ctrl, "viewGrid")
-        key(preset, "Comma", "", ctrl, "settings")
-        // Ctrl+B carries the cursor row's full path; the rail's own chord moved to Ctrl+G for it.
-        key(preset, "B", "", ctrl, "copypath")
-        key(preset, "G", "", ctrl, "sidebar")
-        for (var f = 0; f < 2; f++) {
-            var frontend = ["gui", "tui"][f]
-            var menuContexts = ["listing", "rail", "menu", "panel", "preview", "pdf", "media", "editor"]
-            for (var m = 0; m < menuContexts.length; m++) {
-                var menuContext = menuContexts[m], menuAction = m < 2 ? "menu" : ""
-                key(preset, "Menu", "", none, menuAction, menuContext, frontend)
-                key(preset, "F10", "", shift, menuAction, menuContext, frontend)
-            }
-        }
-        key(preset, "N", "", ctrl | shift, "newFolder")
-        key(preset, "Q", "q", alt, "")
-        key(preset, "J", "j", meta, "")
-        key(preset, "D", "D", ctrl | shift, "")
-        for (var c = 0; c < 5; c++) {
-            var context = ["menu", "panel", "preview", "pdf", "media"][c]
-            key(preset, "Return", "", none, "open", context)
-            key(preset, "Enter", "", none, "open", context)
-            key(preset, "Space", " ", none, "preview", context)
-            key(preset, "Escape", "", none, "escape", context)
-            key(preset, "D", "d", none, "", context)
-            key(preset, "X", "", ctrl, "", context)
-            key(preset, "N", "", ctrl, "", context)
-        }
-        key(preset, "Right", "", none, "menuRight", "menu")
-        key(preset, "Left", "", none, "parent", "menu")
-        key(preset, "Down", "", none, "cursorDown", "menu")
-        key(preset, "Up", "", none, "cursorUp", "menu")
-        key(preset, "J", "j", none, letters ? "cursorDown" : "", "menu")
-        key(preset, "K", "k", none, letters ? "cursorUp" : "", "menu")
-        key(preset, "H", "h", none, letters ? "parent" : "", "menu")
-        key(preset, "L", "l", none, letters ? "menuRight" : "", "menu")
-        key(preset, "Minus", "-", none, "zoomOut", "pdf")
-        key(preset, "Plus", "+", shift, "zoomIn", "pdf")
-        key(preset, "E", "e", none, "expand", "pdf")
-        key(preset, "Tab", "", shift, "focusPrevious", "pdf")
-        key(preset, "Tab", "", ctrl, "focusPreview", "preview")
-        key(preset, "J", "j", none, "", "pdf")
-        key(preset, "K", "k", none, "", "pdf")
-        key(preset, "Up", "", none, "cursorUp", "pdf")
-        key(preset, "Down", "", none, "cursorDown", "pdf")
-        key(preset, "Return", "", none, "open", "pdf")
-        key(preset, "Return", "", none, "", "editor")
-    }
-    key("default", "Return", "", none, "open")
-    key("default", "Backspace", "", none, "parent")
-    key("default", "H", "H", shift, "historyBack")
-    key("default", "L", "L", shift, "historyForward")
-    key("default", "Y", "y", none, "copy")
-    key("default", "X", "x", none, "cut")
-    key("default", "P", "p", none, "paste")
-    key("default", "Z", "z", none, "undo")
-    key("default", "D", "d", none, "trashArm")
-    key("default", "D", "", ctrl, "pageDown")
-    key("default", "T", "t", none, "tabNew")
-    key("default", "Delete", "", shift, "")
-    key("vim", "L", "l", none, "open")
-    key("vim", "H", "h", none, "parent")
-    key("vim", "J", "j", none, "cursorDown")
-    key("vim", "K", "k", none, "cursorUp")
-    key("mac", "L", "l", none, "pageForward")
-    key("windows", "L", "l", none, "pageForward")
-    key("vim", "Y", "y", none, "copyArm")
-    key("vim", "D", "d", none, "cutArm")
-    key("vim", "P", "p", none, "pasteArm")
-    key("vim", "G", "g", none, "cursorFirstArm")
-    key("vim", "G", "G", shift, "cursorLast")
-    key("vim", "D", "D", shift, "trash")
-    key("vim", "U", "u", none, "undo")
-    key("mac", "Return", "", none, "rename")
-    key("mac", "Enter", "", none, "rename")
-    key("mac", "Right", "", none, "open")
-    key("mac", "Left", "", none, "parent")
-    key("mac", "C", "", meta, "copy")
-    key("mac", "C", "", ctrl, "copy")
-    key("mac", "V", "", meta, "paste")
-    key("mac", "V", "", ctrl, "paste")
-    key("mac", "V", "", meta | alt, "movePaste")
-    key("mac", "X", "", ctrl, "")
-    key("mac", "D", "", meta, "duplicate")
-    key("mac", "Z", "", meta, "undo")
-    key("mac", "Z", "", meta | shift, "redo")
-    key("mac", "A", "", meta, "selectAll")
-    key("mac", "I", "", meta, "properties")
-    key("mac", "BracketLeft", "", meta, "historyBack")
-    key("mac", "BracketRight", "", meta, "historyForward")
-    key("mac", "Period", ".", meta | shift, "toggleHidden")
-    key("mac", "Delete", "", shift, "deletePermanently")
-    key("mac", "T", "", ctrl, "tabNew")
-    key("windows", "Return", "", none, "open")
-    key("windows", "F2", "", none, "rename")
-    key("windows", "X", "", ctrl, "cut")
-    key("windows", "D", "", ctrl, "trash")
-    key("windows", "Delete", "", shift, "deletePermanently")
-    key("windows", "Y", "", ctrl, "redo")
-    key("windows", "Return", "", alt, "properties")
-    key("windows", "Enter", "", alt, "properties")
-    key("windows", "Left", "", alt, "historyBack")
-    key("windows", "Right", "", alt, "historyForward")
-    key("windows", "Up", "", alt, "parent")
-    key("windows", "H", "", ctrl, "toggleHidden")
-    key("windows", "T", "", ctrl, "tabNew")
-    Keymap.setPreset("mac")
-    check("Mac menu advertises its actual Return action", Keymap.hintFor("rename"), "enter")
-    check("Mac Open hint uses native Right", Keymap.hintFor("open"), "right")
-    Keymap.setPreset("vim")
-    check("Vim Copy hints the key it starts with", Keymap.hintFor("copy"), "y")
-    check("Vim Cut hints the key it starts with", Keymap.hintFor("cut"), "d")
-    Keymap.setPreset("unknown")
-    check("unknown stored preset resolves to Default", Keymap.preset, "default")
-    check("Default Copy hint remains y", Keymap.hintFor("copy"), "y")
-    // Menus.html and the OpenWith overseer board both draw this row with d; the sheet below keeps dd.
-    check("Default Trash hints the key it starts with", Keymap.hintFor("trash"), "d")
-    check("Default sheet never advertises a lone destructive d", Keymap.sheetFor("default", "gui").filter(function (row) {
-        return row.action === "trash"
-    })[0].keys.split(" / ").indexOf("d"), -1)
-    check("menu-only actions invent no shortcut", Keymap.hintFor("emptyTrash"), "")
-    check("sheet is populated from effective current bindings", Keymap.SHEET.length > 30, true)
-    // One cap names one key. Joining every spelling an action answers to produced caps of 40
-    // characters on Default and 78 on Mac, wider than the card, and they drew over the next column.
-    var widestCap = 0, identifierLabel = ""
-    for (var p = 0; p < Keymap.PRESETS.length; p++) {
-        var sheet = Keymap.sheetFor(Keymap.PRESETS[p], "gui")
-        for (var r = 0; r < sheet.length; r++) {
-            if (sheet[r].keys.length > widestCap) widestCap = sheet[r].keys.length
-            if (/[a-z][A-Z]/.test(sheet[r].label)) identifierLabel = sheet[r].label
-            if (sheet[r].keys.split(" / ").length > 2) identifierLabel = "too many spellings: " + sheet[r].keys
-        }
-    }
-    // MediaMute rule 4: the sheet lists the preview's own mute key once per preset, under Look,
-    // while the listing goes on advertising m as its menu key.
-    var muteRows = 0, muteCap = "", menuStillM = true
-    for (var m = 0; m < Keymap.PRESETS.length; m++) {
-        var preset = Keymap.PRESETS[m], listed = Keymap.sheetFor(preset, "gui")
-        for (var q = 0; q < listed.length; q++)
-            if (listed[q].action === "mute") { muteRows++; muteCap = listed[q].keys }
-        if (Keymap.lookupFor(preset, 0, "m", 0, "listing", "gui") !== "menu") menuStillM = false
-        if (Keymap.lookupFor(preset, 0, "m", 0, "media", "gui") !== "mute") menuStillM = false
-    }
-    check("every preset lists mute once", muteRows, Keymap.PRESETS.length)
-    check("and lists it under its own key", muteCap, "m")
-    check("while m still opens the menu in the listing and mutes in a media preview", menuStillM, true)
-    check("the sheet group that claims it is Look", Keymap.SHEET_GROUPS.look.indexOf("mute") >= 0, true)
 
-    check("no cap in any preset outgrows its half of the card", widestCap <= 18, true)
-    check("no row prints an action id where its wording belongs", identifierLabel, "")
-    check("pointer contract remains populated", Keymap.POINTER.length > 10, true)
-    // The sheet advertises what a preset actually binds, so the arrows are what Default draws now.
-    function capFor(preset, action) {
-        var sheet = Keymap.sheetFor(preset, "gui")
-        for (var s = 0; s < sheet.length; s++)
-            if (sheet[s].action === action) return sheet[s].keys
+    check("default is the only preset", Keymap.PRESETS.join(","), "default")
+
+    // The whole listing table, one row per key it binds.
+    key("Down", "", none, "cursorDown")
+    key("Up", "", none, "cursorUp")
+    key("Left", "", none, "parent")
+    key("Right", "", none, "pageForward")
+    key("Return", "", none, "open")
+    key("Enter", "", none, "open")
+    key("Space", " ", none, "preview")
+    key("Tab", "", none, "focusNext")
+    key("Escape", "", none, "escape")
+    key("Delete", "", none, "trash")
+    key("F2", "", none, "rename")
+    key("C", "", ctrl, "copy")
+    key("V", "", ctrl, "paste")
+    key("X", "", ctrl, "cut")
+    key("Z", "", ctrl, "undo")
+    key("F", "", ctrl, "search")
+    key("B", "", ctrl, "copypath")
+    key("G", "", ctrl, "sidebar")
+    key("N", "", ctrl | shift, "newFolder")
+    key("M", "m", none, "menu")
+    key("Menu", "", none, "menu")
+    key("F10", "", shift, "menu")
+    key("Question", "?", shift, "keymapSheet")
+    key("Comma", ",", none, "settings")
+
+    // And the keys that left with the vim spellings, the view chords and the tab chords. A sample
+    // wide enough that a row creeping back in is caught rather than a spot check of three.
+    var goneLetters = [["H", "h"], ["J", "j"], ["K", "k"], ["L", "l"], ["Y", "y"], ["X", "x"],
+                       ["P", "p"], ["R", "r"], ["Z", "z"], ["V", "v"], ["S", "s"], ["F", "f"],
+                       ["O", "o"], ["G", "g"], ["T", "t"], ["W", "w"], ["A", "a"], ["E", "e"],
+                       ["D", "d"], ["Period", "."], ["Slash", "/"], ["Minus", "-"]]
+    for (var g = 0; g < goneLetters.length; g++)
+        key(goneLetters[g][0], goneLetters[g][1], none, "")
+    key("H", "H", shift, "")
+    key("L", "L", shift, "")
+    key("G", "G", shift, "")
+    key("S", "S", shift, "")
+    key("Colon", ":", shift, "")
+    key("Plus", "+", shift, "")
+    var goneChords = [["1", ctrl], ["2", ctrl], ["3", ctrl], ["A", ctrl], ["D", ctrl], ["U", ctrl],
+                      ["E", ctrl], ["L", ctrl], ["T", ctrl], ["N", ctrl], ["W", ctrl],
+                      ["Tab", ctrl], ["Space", ctrl], ["PageUp", ctrl], ["PageDown", ctrl],
+                      ["P", alt], ["Down", shift], ["Up", shift], ["Delete", shift],
+                      ["Backspace", none], ["Home", none], ["End", none],
+                      ["PageUp", none], ["PageDown", none], ["Q", alt], ["J", meta]]
+    for (var c = 0; c < goneChords.length; c++)
+        key(goneChords[c][0], "", goneChords[c][1], "")
+
+    // The TUI keeps Insert for copy and paste, which is the one pair a terminal cannot deliver as
+    // Ctrl+C and Ctrl+V, and the digits that pick a tab. Neither reaches the window.
+    key("Insert", "", ctrl, "copy", "listing", "tui")
+    key("Insert", "", shift, "paste", "listing", "tui")
+    key("Insert", "", ctrl, "", "listing", "gui")
+    key("1", "1", none, "tab1", "listing", "tui")
+    key("9", "9", none, "tab9", "listing", "tui")
+    key("1", "1", none, "", "listing", "gui")
+
+    // The rail, the menus, the panels and the three preview kinds, which the listing table does not
+    // reach at all: a shared row answers only the listing and the rail, so the rest is preset rows.
+    var overlays = ["menu", "panel", "preview", "pdf", "media"]
+    for (var o = 0; o < overlays.length; o++) {
+        var context = overlays[o]
+        key("Down", "", none, "cursorDown", context)
+        key("Up", "", none, "cursorUp", context)
+        key("Return", "", none, "open", context)
+        key("Enter", "", none, "open", context)
+        key("Space", " ", none, "preview", context)
+        key("Escape", "", none, "escape", context)
+        key("Tab", "", shift, "focusPrevious", context)
+        // No letter reaches any of them now, and neither does a chord the listing lost.
+        key("J", "j", none, "", context)
+        key("K", "k", none, "", context)
+        key("D", "d", none, "", context)
+        key("X", "", ctrl, "", context)
+        key("N", "", ctrl, "", context)
+        key("Tab", "", ctrl, "", context)
+    }
+    key("Menu", "", none, "menu", "rail")
+    key("Down", "", none, "cursorDown", "rail")
+    key("Escape", "", none, "escape", "editor")
+    key("Return", "", none, "", "editor")
+
+    // The context menu steps on the arrows, and Right walks into a submenu where Left walks out.
+    key("Right", "", none, "menuRight", "menu")
+    key("Left", "", none, "parent", "menu")
+    // Left leaves a preview of the plain kinds, where it named an action only the seeking kinds
+    // answered and so did nothing at all; the two that seek keep it, having no other key for it.
+    key("Left", "", none, "escape", "preview")
+    key("Left", "", none, "seekBack", "pdf")
+    key("Left", "", none, "seekBack", "media")
+    key("Right", "", none, "seekForward", "preview")
+    key("Right", "", none, "seekForward", "pdf")
+    // MediaMute: m is the menu in the listing and the mute in a media preview, its two meanings.
+    key("M", "m", none, "mute", "media")
+    // The PDF's zoom and expand went with the bare letters; the strip's own controls are the route.
+    key("Minus", "-", none, "", "pdf")
+    key("Plus", "+", shift, "", "pdf")
+    key("E", "e", none, "", "pdf")
+
+    // The sheet advertises what is bound and nothing else, so it is read back off the same table.
+    function capFor(action) {
+        var listed = Keymap.sheetFor("default", "gui")
+        for (var s = 0; s < listed.length; s++)
+            if (listed[s].action === action) return listed[s].keys
         return ""
     }
-    check("the default sheet spells move with the arrow", capFor("default", "cursorDown"), "down")
-    check("the default sheet reaches for the arrow before the longer cap",
-          capFor("default", "parent").split(" / ")[0], "left")
-    check("the default sheet spells browse in with the arrow", capFor("default", "pageForward"), "right")
-    check("the vim sheet still leads with the letter", capFor("vim", "cursorDown"), "j / down")
-    check("and vim still climbs with h", capFor("vim", "parent").split(" / ")[0], "h")
+    check("the sheet spells move with the arrow", capFor("cursorDown"), "down")
+    check("the sheet spells parent with the arrow", capFor("parent"), "left")
+    check("the sheet spells browse in with the arrow", capFor("pageForward"), "right")
+    check("the sheet spells copy with its chord", capFor("copy"), "ctrl-c")
+    check("the sheet spells the file path with its chord", capFor("copypath"), "ctrl-b")
+    check("the sheet spells the sidebar with its chord", capFor("sidebar"), "ctrl-g")
+    check("the sheet spells trash with the bare key", capFor("trash"), "delete")
+    check("the sheet draws no row for a key that left", capFor("filter"), "")
+    check("nor for the tab keys", capFor("tabNew"), "")
 
-    var effective = Keymap.bindingRows("mac", "gui")
-    check("suppressed Mac Ctrl+X never appears in sheet", effective.some(function (r) { return r.mods === "ctrl" && r.key === "X" }), false)
-    check("every effective Mac binding resolves to advertised action", effective.every(function (r) {
-        return Keymap.lookupFor("mac", r.keycode, r.text, r.mask, "listing", "gui") === r.action
+    Keymap.setPreset("unknown")
+    check("an unknown stored preset resolves to Default", Keymap.preset, "default")
+    // A menu row draws the key the operator presses. Every one of these is a chord now, and before
+    // the hint rule took chords they all drew nothing while their rows went on claiming a key.
+    check("Copy hints its chord", Keymap.hintFor("copy"), "ctrl-c")
+    check("Paste hints its chord", Keymap.hintFor("paste"), "ctrl-v")
+    check("Trash hints the bare key it answers to", Keymap.hintFor("trash"), "delete")
+    check("Copy path hints its chord", Keymap.hintFor("copypath"), "ctrl-b")
+    check("Rename hints its own key", Keymap.hintFor("rename"), "f2")
+    check("menu-only actions invent no shortcut", Keymap.hintFor("emptyTrash"), "")
+    check("and neither do the actions that lost their key", Keymap.hintFor("openTerminal"), "")
+
+    check("the sheet is populated from effective current bindings", Keymap.SHEET.length > 15, true)
+    var widestCap = 0, identifierLabel = ""
+    var listed = Keymap.sheetFor("default", "gui")
+    for (var r = 0; r < listed.length; r++) {
+        if (listed[r].keys.length > widestCap) widestCap = listed[r].keys.length
+        if (/[a-z][A-Z]/.test(listed[r].label)) identifierLabel = listed[r].label
+        if (listed[r].keys.split(" / ").length > 2) identifierLabel = "too many spellings: " + listed[r].keys
+    }
+    check("no cap outgrows its half of the card", widestCap <= 18, true)
+    check("no row prints an action id where its wording belongs", identifierLabel, "")
+
+    // MediaMute rule 4: the preview's own mute key is listed once, under Look, while the listing
+    // goes on advertising m as its menu key.
+    var muteRows = 0, muteCap = ""
+    for (var q = 0; q < listed.length; q++)
+        if (listed[q].action === "mute") { muteRows++; muteCap = listed[q].keys }
+    check("the sheet lists mute once", muteRows, 1)
+    check("and lists it under its own key", muteCap, "m")
+    check("while m still opens the menu in the listing", Keymap.lookupFor("default", 0, "m", 0, "listing", "gui"), "menu")
+    check("the sheet group that claims it is Look", Keymap.SHEET_GROUPS.look.indexOf("mute") >= 0, true)
+
+    check("pointer contract remains populated", Keymap.POINTER.length > 10, true)
+    var effective = Keymap.bindingRows("default", "gui")
+    check("every effective binding resolves to the action it advertises", effective.every(function (row) {
+        return Keymap.lookupFor("default", row.keycode, row.text, row.mask, "listing", "gui") === row.action
     }), true)
+    check("and the table is the size the strip left it", effective.length, 23)
 }

@@ -34,7 +34,7 @@ Large directories stay responsive: the window loads rows and requests thumbnails
 - **Network and sharing.** SMB, SFTP, FTPS, WebDAV, NFS, Dropbox and Taildrop.
 - **Devices.** USB drives, phones and cameras over MTP, PTP and AFC, mounted from the rail.
 - **Desktop integration.** Default file manager, “Show in folder” and Open/Save dialogs.
-- **Your settings.** Omarchy text sizes, configurable menus and Default, Vim, Mac or Windows keys.
+- **Your settings.** Omarchy text sizes and configurable menus.
 
 An iPhone lists once it has been unlocked and trusted on this machine: AFC needs the pairing record
 that leaves behind, not an unlocked screen every time. Pairing also puts the phone on its tethering
@@ -161,26 +161,24 @@ Press **?** for the full keymap, or **,** to change settings.
 
 | Action | Keys |
 |---|---|
-| Move / parent / enter | `↓` `↑` / `←` / `→` |
+| Move / parent / browse in | `↓` `↑` / `←` / `→` |
 | Open with the default app | `Enter` |
 | Quick Look / leave it | `Space` / `Esc`, `←` or `Space` |
-| Select / extend selection | `v` / `Shift` + arrows |
-| Copy / cut / paste | `y` `x` `p`, or `Ctrl+C` `Ctrl+X` `Ctrl+V` |
-| Copy the file's path / the folder's | `Ctrl+B` / `Y` |
-| Show or hide the sidebar | `Ctrl+G` |
-| Rename / trash / undo | `r` or `F2` / `dd` or `Delete` / `z` |
+| Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` |
+| Copy the file's path | `Ctrl+B` |
+| Rename / trash / undo | `F2` / `Delete` / `Ctrl+Z` |
 | New folder | `Ctrl+Shift+N` |
-| Search / filter the list | `f` / `/` |
-| Enter a path | `:` or `Ctrl+L` |
-| List / columns / grid | `Ctrl+1` / `Ctrl+2` / `Ctrl+3` |
-| New tab / close tab / switch tab | `t` / `w` / `1`–`9` |
-| Open terminal / context menu | `Ctrl+T` / `m` |
-| Show hidden files | `.` |
+| Search | `Ctrl+F` |
+| Show or hide the sidebar | `Ctrl+G` |
+| Context menu | `m`, `Menu` or `Shift+F10` |
+| Settings / keymap sheet | `,` / `?` |
+| Move focus | `Tab` |
 
-The Default preset navigates on the four arrow keys and on nothing else. Vim, Mac and Windows keep
-`h` `j` `k` `l` beside them, in the list, the grid, the rail, the menus and a preview.
-The Windows preset uses `Ctrl+Shift+1/2/3` for views. Menu visibility does not disable shortcuts.
-See [the full key table](keys.toml) for preset bindings and pointer actions.
+That is the whole keyboard: the four arrows, the Ctrl chords and a handful of named keys. Nothing
+else is bound, and there is one preset rather than four. Everything the old bare letters reached —
+the views, tabs, sort, filter, the path bar, hidden files, the terminal, text size, select all —
+is on the context menu, the chrome and the settings panel instead.
+See [the full key table](keys.toml) for every binding and the pointer actions.
 
 ## Build
 

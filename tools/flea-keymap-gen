@@ -6,7 +6,8 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PRESETS = ('default', 'vim', 'mac', 'windows')
+# Default is the only preset. Vim, Mac and Windows were removed with the keys they spelled.
+PRESETS = ('default',)
 MODS = {'none': (), 'text': (), 'ctrl': ('Control',), 'shift': ('Shift',),
         'ctrlshift': ('Control', 'Shift'), 'alt': ('Alt',), 'super': ('Meta',),
         'supershift': ('Meta', 'Shift'), 'superalt': ('Meta', 'Alt')}
@@ -255,11 +256,13 @@ function setPreset(name) {
     var ranks = {}, rows = bindingRows(preset, "gui")
     for (var i = 0; i < rows.length; i++) {
         var row = rows[i]
-        if (row.mods !== "text" && row.mods !== "none") continue
+        if (row.mods !== "text" && row.mods !== "none" && row.mods !== "ctrl" && row.mods !== "ctrlshift") continue
         var action = actionGroup(row.action), rank = (row.preset === preset ? 0 : 2) + (row.mods === "text" ? 0 : 1)
         if (ranks[action] !== undefined && ranks[action] <= rank) continue
         // A menu hint is the key the operator presses: Menus.html and the OpenWith overseer board
-        // both draw Move to Trash with d. The full dd chord stays on the keymap sheet below.
+        // both draw Move to Trash with its own key. Ctrl chords count, because they are what most
+        // of these actions answer to now that the bare letters have left the table; without them
+        // every menu row but Trash drew no hint at all.
         HINTS[action] = row.mods === "text" ? row.key : row.keys
         ranks[action] = rank
     }

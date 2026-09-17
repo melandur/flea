@@ -1,3 +1,0 @@
-[portal]
-DBusName=org.freedesktop.impl.portal.desktop.flea
-Interfaces=org.freedesktop.impl.portal.FileChooser;

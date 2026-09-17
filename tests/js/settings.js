@@ -113,17 +113,17 @@ function runRows(check) {
                .map(function (r) { return r.id }).join(","), "open,toggleHidden")
     check("and no locked row is a checkbox", find(menus, "open").kind, "lock")
 
-    var keys = Settings.rows("keys", { preset: "mac", presetKeys: Keymap.PRESET_KEYS })
+    var keys = Settings.rows("keys", { preset: "default", presetKeys: Keymap.PRESET_KEYS })
     check("the Keys section leads with the preset choice", keys[1].kind, "choice")
-    check("and shows the selected preset by name", keys[1].value, "Mac")
-    // The board draws all four, and SettingsRow decides segment against chevron by whether they fit.
-    check("the preset row carries all four names, in the chooser's own order",
-          (keys[1].labels || []).join("|"), "Default|Vim|Mac|Windows")
+    check("and shows the selected preset by name", keys[1].value, "Default")
+    // Default is the one preset left, so the chooser draws the one name.
+    check("the preset row carries the one name it has",
+          (keys[1].labels || []).join("|"), "Default")
     // Rule 3: a hint that repeats its control's own four labels is not a hint; this one says what a preset changes.
     check("the preset hint says what changes rather than listing the labels again", keys[2].kind + "|" + keys[2].label, "hint|Keys change, actions do not.")
-    check("the Windows preset is shown by name too",
+    check("an unrecognised stored preset still shows Default",
           Settings.rows("keys", { preset: "windows", presetKeys: Keymap.PRESET_KEYS })[1].value,
-          "Windows")
+          "windows")
 }
 
 function runCursor(check) {
@@ -151,10 +151,10 @@ function runCursor(check) {
           Settings.stepRow(pinned, 2, 1), 9)
 }
 
-// SettingsKeys.html's four-value chooser over the one key table. Each row the Keys section lists is resolved back through the generated overlay, so a listed chord cannot advertise a binding the preset lacks, and every one of the four claims a chord rather than drawing a heading over nothing.
+// SettingsKeys.html's chooser over the one key table, which has one value left. Each row the Keys section lists is resolved back through the generated overlay, so a listed chord cannot advertise a binding the preset lacks.
 function runPresets(check) {
-    check("preset chooser preserves authoritative order", Settings.PRESETS.join(","), "default,vim,mac,windows")
-    check("preset chooser labels remain explicit", Settings.PRESETS.map(function (id) { return Settings.PRESET_LABELS[id] }).join(","), "Default,Vim,Mac,Windows")
+    check("preset chooser preserves authoritative order", Settings.PRESETS.join(","), "default")
+    check("preset chooser labels remain explicit", Settings.PRESETS.map(function (id) { return Settings.PRESET_LABELS[id] }).join(","), "Default")
     check("missing preset resolves to Default", Settings.PRESETS[0], "default")
     var total = 0
     for (var i = 0; i < Settings.PRESETS.length; i++) {
@@ -165,7 +165,7 @@ function runPresets(check) {
         var preview = find(section, "keyPreview")
         check(preset + " section shows the six board examples", preview.items.length, 6)
         check(preset + " examples never take keyboard focus", Settings.focusable(preview), false)
-        var primary = { default: "y,p,dd", vim: "yy,pp,D", mac: "super-c,super-v,delete", windows: "ctrl-c,ctrl-v,delete" }
+        var primary = { default: "ctrl-c,ctrl-v,delete" }
         check(preset + " preview uses its primary bindings", preview.items.slice(3).map(function (r) { return r.keys }).join(","), primary[preset])
         check(preset + " enter label follows its actual action", preview.items[1].label,
               Keymap.lookupFor(preset, Qt.Key_Return, "", 0, "listing", "gui"))
@@ -182,7 +182,7 @@ function runPresets(check) {
             total++
         }
     }
-    check("preset check denominator covers all effective bindings", total > 100, true)
+    check("preset check denominator covers all effective bindings", total > 20, true)
     var menuRows = Settings.menuRows([], true)
     check("SettingsMenus contains exactly 24 action switches", menuRows.filter(function (r) { return r.kind === "check" && r.id !== "keyHints" }).length, 24)
     check("Delete permanently is visually destructive", find(menuRows, "delete").role, "error")

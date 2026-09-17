@@ -50,9 +50,9 @@ var LABELS = {
     sharelink: "Copy Share Link", open: "Open", toggleHidden: "Show hidden files", shelf: "Enable shelf", placeMenu: "Places row menu", runScript: "Run script"
 }
 
-// The four values of the Keys row, in SettingsKeys.html's own chooser order. The first is what a missing or unrecognised stored name resolves to, which that board says is Default.
-var PRESETS = ["default", "vim", "mac", "windows"]
-var PRESET_LABELS = { "default": "Default", vim: "Vim", mac: "Mac", windows: "Windows" }
+// The one value of the Keys row. Vim, Mac and Windows were removed with the keys they spelled, so this is what every stored name, recognised or not, resolves to.
+var PRESETS = ["default"]
+var PRESET_LABELS = { "default": "Default" }
 
 // Every board row carries a left mark, and a switch wears the mark of the row it governs: these are ui/js/Menu.js's own glyphs by action id, which tests/js/settings.js asserts the two agree on.
 var GLYPHS = {
@@ -247,15 +247,16 @@ function keyPreview(preset) {
     var bindings = Keymap.bindingRows(preset, "gui")
     var enter = Keymap.lookupFor(preset, Qt.Key_Return, "", 0, "listing", "gui")
     var items = [
-        { keys: "arrows", label: preset === "mac" ? "move, open, up" : "move cursor", glyph: "" },
+        { keys: "arrows", label: "move cursor", glyph: "" },
         { keys: "enter", label: enter, glyph: "" },
         { keys: "space", label: "quick look", glyph: "" }
     ]
-    var actions = ["copy", "paste", "trash"]
+    // Copy and paste are chords and trash is the bare Delete, which is the whole of the spelling
+    // now that the bare letters are gone; each pair names the mods its own row carries.
+    var actions = [["copy", "ctrl"], ["paste", "ctrl"], ["trash", "none"]]
     for (var i = 0; i < actions.length; i++) {
-        var action = actions[i]
-        var mods = preset === "mac" ? "super" : preset === "windows" ? "ctrl" : "text"
-        if (action === "trash" && (preset === "mac" || preset === "windows")) mods = "none"
+        var action = actions[i][0]
+        var mods = actions[i][1]
         for (var j = 0; j < bindings.length; j++) {
             var binding = bindings[j]
             if (Keymap.actionGroup(binding.action) === action && binding.mods === mods) {

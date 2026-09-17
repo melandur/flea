@@ -21,11 +21,12 @@ function run(check) {
     Focus.act("cursorUp", gridPane)
     check("grid k follows the previous item", gridPane.cursorIndex, 2)
     check("grid j is not a physical arrow", Grid.arrow(key(Qt.Key_J, "j", none), "cursorDown", gridPane), false)
-    // The letters are a preset's spelling of the arrows, and Default, which suppresses them, does
-    // not reach the cells below; the presets that keep them do.
-    check("the grid refuses h on the default preset",
-          Grid.arrow(key(Qt.Key_H, "h", none), "cursorLeft", gridPane), false)
-    Keymap.setPreset("vim")
+    // No preset spells the arrows as letters any more, so Grid.spelled is false and the grid takes
+    // neither letter; the four arrows below are the whole of its geometry. Issue 114 survives as
+    // that one question, which a preset binding h again would answer for itself.
+    check("the grid refuses h", Grid.arrow(key(Qt.Key_H, "h", none), "cursorLeft", gridPane), false)
+    check("the grid refuses l", Grid.arrow(key(Qt.Key_L, "l", none), "cursorRight", gridPane), false)
+    check("and Grid.spelled says why", Grid.spelled(), false)
     for (var move of [
         [Qt.Key_Right, "cursorRight", 2, 2], [Qt.Key_Left, "cursorLeft", 3, 3],
         [Qt.Key_Down, "cursorDown", 2, 5], [Qt.Key_Down, "cursorDown", 5, 5],
@@ -36,22 +37,19 @@ function run(check) {
         Grid.arrow(key(move[0], "", none), move[1], gridPane)
         check("grid visual neighbour from " + move[2] + " with " + move[1], gridPane.cursorIndex, move[3])
     }
-    // The letters clamp at the row's edge exactly as the arrows do, which is the whole of issue 114.
-    // A real press carries the code and the text, and a refusal moves nothing, so both are asserted.
-    var hPress = key(Qt.Key_H, "h", none)
-    var lPress = key(Qt.Key_L, "l", none)
+    // The arrows clamp at the row's edge, which is what issue 114 was about; a refusal moves
+    // nothing, so both the answer and the cursor are asserted.
     for (var walk of [
-        [hPress, "cursorLeft", 3, 3], [hPress, "cursorLeft", 4, 3],
-        [lPress, "cursorRight", 5, 5], [lPress, "cursorRight", 4, 5]
+        [Qt.Key_Left, "cursorLeft", 3, 3], [Qt.Key_Left, "cursorLeft", 4, 3],
+        [Qt.Key_Right, "cursorRight", 5, 5], [Qt.Key_Right, "cursorRight", 4, 5]
     ]) {
         gridPane.cursorIndex = walk[2]
-        check("the grid takes " + walk[0].text + " from " + walk[2],
-              Grid.arrow(walk[0], walk[1], gridPane), true)
-        check("and " + walk[0].text + " from " + walk[2] + " leaves the cursor on " + walk[3],
+        check("the grid takes the arrow for " + walk[1] + " from " + walk[2],
+              Grid.arrow(key(walk[0], "", none), walk[1], gridPane), true)
+        check("and " + walk[1] + " from " + walk[2] + " leaves the cursor on " + walk[3],
               gridPane.cursorIndex, walk[3])
     }
 
-    Keymap.setPreset("default")
 
     gridPane.cursorStride = 2
     gridPane.cursorIndex = 3

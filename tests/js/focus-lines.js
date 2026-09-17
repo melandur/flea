@@ -91,14 +91,13 @@ function run(check) {
     check("and a printable key still extends the query without walking anything",
           stillTyping.searchQuery + "|" + stillTyping.walked.length, "scre|0")
 
-    // Issue 28's four keys leaving the line was claimed in prose and in a comment and driven by
-    // nothing, and the up arrow was untested too. ui/SearchStrip.qml draws the query as a Text with
-    // the caret pinned after it, so Home, End, PageUp and PageDown have no caret to move on the line
-    // and the listing's own meaning is the only one they can carry: ui/js/Focus.js LEAVES_LINE.
-    // "scr" keeps rows 0, 1, 5 and 6, so the cursor starts on the third of the four and every one
-    // of these five has somewhere different to take it: leaving the line is half the behaviour and
-    // the key still reaching the listing is the other half, which nothing here used to assert.
-    var others = [Qt.Key_Up, Qt.Key_Home, Qt.Key_End, Qt.Key_PageUp, Qt.Key_PageDown]
+    // Issue 28's four keys left the table when it was cut back to the arrows and the Ctrl chords,
+    // so the up arrow is the one key here that still carries a listing meaning onto the query line.
+    // ui/SearchStrip.qml draws the query as a Text with the caret pinned after it, so there is no
+    // caret on the line for it to move: ui/js/Focus.js LEAVES_LINE. "scr" keeps rows 0, 1, 5 and 6,
+    // and the cursor starts on the third of the four, so leaving the line is half the behaviour and
+    // the key still reaching the listing is the other half.
+    var others = [Qt.Key_Up]
     var handed = []
     var landed = []
     var committed = []
@@ -117,12 +116,12 @@ function run(check) {
         Focus.handleKey(key(others[i], ""), walks, noRail())
         committed.push(walks.searchMode + ":" + walks.walked.length)
     }
-    check("every other cursor key hands the filter's caret back, with its query left standing",
-          handed.join("|"), "false:scr|false:scr|false:scr|false:scr|false:scr")
-    check("and each one then means what it means in the listing, off the row it started on",
-          landed.join("|"), "1|0|6|0|6")
-    check("and each commits the search's walk exactly once, the way the down arrow does",
-          committed.join("|"), "results:1|results:1|results:1|results:1|results:1")
+    check("the up arrow hands the filter's caret back, with its query left standing",
+          handed.join("|"), "false:scr")
+    check("and then means what it means in the listing, off the row it started on",
+          landed.join("|"), "1")
+    check("and commits the search's walk exactly once, the way the down arrow does",
+          committed.join("|"), "results:1")
 
     // Issue 30's only control is tab on the search's query line, and it was driven straight into
     // Search.typeKey. Nothing said Focus.handleKey routes Qt.Key_Tab there rather than resolving it

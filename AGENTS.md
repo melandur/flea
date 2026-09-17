@@ -1535,23 +1535,35 @@ can mean cut while ctrl-d pages, and the character is authoritative for letters,
 is distinguishable from `g`. The generated file carries only the header saying where it came
 from.
 
-The Default preset navigates on the four arrow keys and on nothing else. `h`, `j`, `k` and `l`
-were shared rows, which every preset reads, so Default answered to the letter pair as well; the
-shared rows stay exactly where they were, because Vim, Mac and Windows all go on reading them, and
-ten `name = "default"` rows with an empty action suppress the fallback for this one preset, in the
-listing and in each of the menu, rail, panel and preview contexts the letters reach. That is the
-device Mac's inert `Ctrl+X` already used, and it is why the change adds ten rows rather than
-duplicating twenty into three presets. Nothing moved out of reach: `Left`, `Down`, `Up` and `Right`
-name the same four actions in the shared `[[code]]` table, which now lists them first so the keymap
-sheet spells `parent` "left" before it reaches "backspace".
+Default is the only preset, and its keyboard is the four arrows, the Ctrl chords and a handful of
+named keys: 23 rows where there were 81. Vim, Mac and Windows were deleted outright, so `PRESETS`
+in `tools/flea-keymap-gen` is a one-tuple, `Settings.PRESETS` is a one-element list, the `keys`
+rule in `src/uischema.rs` takes one word, and `src/tui/model.rs` resolves every stored name to
+`default` rather than matching four. Nothing named `[[preset]] name = "default"` survives either:
+with one preset, `"all"` and `"default"` mean the same thing, so the non-listing rows are all
+`"all"` and the shared tables carry the listing.
 
-Four places decide a key outside the table and each now asks whether the preset spells the arrows
-as letters at all. `ui/js/Grid.js` `spelled` is that one question — `Keymap.lookup(0, "h", 0,
-"listing") !== ""`, asked of the map rather than named preset by preset, so a preset that gives `h`
-back gets the grid back with it. `sideways` reads it before `Keymap.lookup` is consulted at all
-(issue 114), and the hardcoded letters in `ui/TrashConfirm.qml`, `ui/OpenWithDialog.qml` and
-`ui/SettingsPanel.qml` call the same function. `ui/ContextMenu.qml` and the three picker files
-needed nothing: they were already reading the table.
+What went is every bare letter and every chord outside that set: `h j k l`, `y x p r z v s S f o g
+G t w a e . / :`, the view chords, the tab chords, the text size chords, `Ctrl+A`, `Ctrl+D`,
+`Ctrl+U`, `Ctrl+E`, `Ctrl+L`, `Ctrl+T`, `Alt+P`, the shift-arrows and `Home`/`End`/`Page`. The
+actions themselves are untouched and are reached from the context menu, the chrome and the settings
+panel; only their keys are gone. `Ctrl+B` carries the listing menu's Copy path row and the rail
+moved to `Ctrl+G` to free it. The `[[shift]]` table went with the shift-arrows and no longer
+exists, and the `[digits]` table stays because it is the TUI's own tab keys.
+
+Two consequences worth knowing. `Keymap.hintFor` used to take only `text` and `none` bindings, on
+the reasoning that a menu hint is a single key; with the letters gone that left every menu row but
+Trash drawing no hint at all, so it takes `ctrl` and `ctrlshift` too and Copy now hints `ctrl-c`.
+And `ui/js/Grid.js` `spelled` — `Keymap.lookup(0, "h", 0, "listing") !== ""` — is false for every
+preset now, so the grid takes only the arrows; it is asked of the map rather than named preset by
+preset, so a preset that binds `h` again gets the grid back with it (issue 114). `TrashConfirm`,
+`OpenWithDialog` and `SettingsPanel` call the same function for their own hardcoded letters.
+
+The compositor-driven suites still press keys this cut removed: `tests/ui-tui.sh` and the other
+`tests/ui*.sh` files drive `v`, `.`, `t`, `s`, `/`, `+`, `Ctrl+A`, `Ctrl+L`, `Ctrl+T`, `Ctrl+U`,
+`Ctrl+W` and `Alt+P`, none of which is bound. `r` was mechanically replaced with `F2` and the
+sidebar chord with `Ctrl+G`; the rest need rewriting onto the menu and the chrome, which needs a
+running compositor to verify.
 
 A `[[shift]]` table joined this for Task 9's shift+arrow selection extend. Unlike `[[ctrl]]`,
 whose block returns `""` on no match so an unbound ctrl-combo never falls through to a plain

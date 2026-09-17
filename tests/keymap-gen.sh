@@ -15,15 +15,25 @@ trap cleanup EXIT
 
 ./tools/flea-keymap-gen "$tmp" || { echo "FAIL the generator did not run"; exit 1; }
 
-# SettingsKeys.html says conflicts fail the build, and until now they did not: a second mac ctrl-1
+# SettingsKeys.html says conflicts fail the build, and until now they did not: a second ctrl-1
 # claiming viewGrid emitted two overlay rows, exited 0, and let the first silently win. The broken
 # table is a copy inside the probe dir, so the one this repo ships is never edited to prove this.
+# Both rows are appended, because the shipped table binds neither chord: Default is the one preset
+# now and the view keys are not in it.
 conflict=$probe_dir/conflict.toml
 cp keys.toml "$conflict"
 cat >> "$conflict" <<'CONFLICT'
 
 [[preset]]
-name = "mac"
+name = "default"
+mods = "ctrl"
+key = "1"
+keys = "ctrl-1"
+action = "viewList"
+label = "list view"
+
+[[preset]]
+name = "default"
 mods = "ctrl"
 key = "1"
 keys = "ctrl-1"
@@ -34,7 +44,7 @@ if ./tools/flea-keymap-gen "$probe_dir/conflict.js" "$conflict" 2>"$probe_dir/co
   echo "FAIL the generator accepted a preset claiming ctrl-1 twice"
   exit 1
 fi
-if grep -q 'the mac preset claims ctrl-1 twice, for viewList and viewGrid' "$probe_dir/conflict.err"; then
+if grep -q 'the default preset claims ctrl-1 twice, for viewList and viewGrid' "$probe_dir/conflict.err"; then
   echo "ok   a chord claimed twice inside one preset fails the build, naming both actions"
 else
   echo "FAIL the duplicate chord was refused without naming the preset, the chord and both actions:"
