@@ -137,17 +137,25 @@ function refresh(pane, selectPath) {
 // directory change never re-reveals it. The target is a full path, which is what --select carries.
 function applyPendingSelect(pane) {
     if (pane.pendingSelect.length === 0) {
+        pane.pendingSelectCursorOnly = false
         return
     }
     var target = pane.pendingSelect
+    var cursorOnly = pane.pendingSelectCursorOnly === true
     pane.pendingSelect = ""
+    pane.pendingSelectCursorOnly = false
     for (var i = 0; i < pane.rows.length; i++) {
         if (pane.join(pane.path, pane.rows[i].n) === target) {
             var index = pane.held + i
             pane.setCursor(index)
-            pane.selection.only(index)
-            pane.selectionAnchor = index
-            pane.selectionVersion++
+            // A climb only says which row to come back to. Marking it left the directory just left
+            // sitting in the selection, so it stayed filled after the cursor had moved off it and
+            // the next action that reads the selection would have taken it and not the cursor row.
+            if (!cursorOnly) {
+                pane.selection.only(index)
+                pane.selectionAnchor = index
+                pane.selectionVersion++
+            }
             if (pane.pendingMenu) {
                 pane.pendingMenu = false
                 pane.openCursorMenu()
@@ -215,5 +223,6 @@ function parent(pane) {
     var here = pane.path
     var cut = here.lastIndexOf("/")
     pane.pendingSelect = here
+    pane.pendingSelectCursorOnly = true
     pane.open(cut <= 0 ? "/" : here.substring(0, cut))
 }

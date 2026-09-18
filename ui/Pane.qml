@@ -28,6 +28,9 @@ FocusScope {
     property string pendingSelect: ""
     // Set with pendingSelect by a right click on a peeked column row: the menu opens on the row once it is the cursor.
     property bool pendingMenu: false
+    // Set with pendingSelect by a climb, which wants the row revealed under the cursor and nothing
+    // more: marking it would leave the directory just left filled in the selection behind the cursor.
+    property bool pendingSelectCursorOnly: false
     // The directory the listing in flight asked for, which is not pane.path until the reply lands.
     property string listingPath: ""
     property int total: 0
@@ -542,6 +545,8 @@ FocusScope {
     }
     function togglePreviewColumn() { ViewState.changeLeaf("preview", { column: !ViewState.previewColumn }) }
     function chooseView(mode) { ViewState.changeKey("view", mode) }
+    // Ctrl+T: the split is a window shape and not a pane's view, so it toggles rather than chooses.
+    function toggleDual() { ViewState.toggleDual() }
     function focusPreviewColumn() {
         if (!ViewState.previewColumn || root.dualMode) return
         if (root.viewMode === "columns" && columnsLoader.item) columnsLoader.item.focusPreview()

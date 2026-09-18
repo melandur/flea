@@ -323,6 +323,33 @@ mod tests {
         assert!(patched(&current, &Json::Str("nope".to_string())).is_err());
     }
 
+    // Ctrl+T's way back out. The word is one of the three a pane can draw: "dual" itself would be a
+    // split whose exit is another split, and an unknown word would leave the toggle with nowhere to
+    // go, so both are refused rather than stored and read as a fallback later.
+    #[test]
+    fn dual_from_is_one_of_the_three_views_a_pane_can_draw() {
+        let current = from_file("{}");
+        for good in [r#"{"dual":{"from":"list"}}"#, r#"{"dual":{"from":"columns"}}"#,
+                     r#"{"dual":{"from":"grid"}}"#] {
+            let p = jsondoc::parse(good).expect("patch parses");
+            assert!(patched(&current, &p).is_ok(), "{} is a view a pane can be in", good);
+        }
+        for bad in [r#"{"dual":{"from":"dual"}}"#, r#"{"dual":{"from":"miller"}}"#,
+                    r#"{"dual":{"from":""}}"#] {
+            let p = jsondoc::parse(bad).expect("patch parses");
+            let message = patched(&current, &p).expect_err("the patch must be refused");
+            assert!(message.contains("dual.from"), "{} should name dual.from, got {}", bad, message);
+        }
+        // The leaf rides beside the pair rather than replacing it, which is what the toggle writes.
+        let both = jsondoc::parse(r#"{"dual":{"paths":["/tmp/l","/tmp/r"],"focus":1,"from":"grid"}}"#).expect("patch parses");
+        let restored = patched(&current, &both).expect("the pair and the way back travel together");
+        assert_eq!(restored.get("dual").and_then(|d| d.get("from")).and_then(Json::as_str), Some("grid"));
+        // A file carrying a word this build cannot draw costs that key alone, and reads as the list.
+        let read = from_file(r#"{"dual":{"from":"miller","focus":1}}"#);
+        assert_eq!(read.get("dual").and_then(|d| d.get("from")).and_then(Json::as_str), Some("list"));
+        assert_eq!(read.get("dual").and_then(|d| d.get("focus")).and_then(Json::as_f64), Some(1.0));
+    }
+
     // Handoff section 5a: "dual": { "paths": [left, right], "focus": 0 }, and an empty array means
     // no dual-pane locations have been remembered. Three paths is a shape the restore cannot read.
     #[test]

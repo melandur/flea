@@ -37,6 +37,15 @@ action = "copypath"
 key = "G"
 action = "sidebar"
 
+# The split, both ways on the one chord: the fourth chrome mode had no key at all, so the only way
+# into two panes and the only way back out was the pointer. Ctrl+T is the chord every tabbed browser
+# and both of Omarchy's terminals put a second pane or tab on, and this window has no tab of its own
+# for it to collide with. It toggles rather than chooses because the split is a window shape and not
+# a view a pane can be in: dual.from remembers which of the three the window was left in.
+[[ctrl]]
+key = "T"
+action = "toggleDual"
+
 # Checked before the plain ctrl rows and falling through when unmatched, so Ctrl+Shift+D still
 # pages. Ctrl+Shift+N is Nautilus's own New Folder and Finder's with Cmd read as Ctrl, and the
 # window reaches the backend's mkdir through Ops.newFolder. Shift+period is delivered as Greater
@@ -129,7 +138,7 @@ action = "keymapSheet"
 # narrows or orders what is already listed. Change writes something, or opens the surface that does.
 [sheetgroups]
 move = ["cursorDown", "cursorUp", "open", "parent", "pageForward", "focusNext", "escape"]
-look = ["preview", "sidebar", "mute", "keymapSheet"]
+look = ["preview", "sidebar", "toggleDual", "mute", "keymapSheet"]
 find = ["search"]
 change = ["copy", "cut", "paste", "copypath", "rename", "trash", "undo", "newFolder", "menu",
           "settings"]

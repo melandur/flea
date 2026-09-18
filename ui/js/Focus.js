@@ -152,6 +152,7 @@ function act(action, root, menuId, paths) {
     case "viewList": root.chooseView("list"); return
     case "viewColumns": root.chooseView("columns"); return
     case "viewGrid": root.chooseView("grid"); return
+    case "toggleDual": root.toggleDual(); return
     case "newFolder": Ops.newFolder(root); return
     // The directory being shown, not the row: the menu row and the chord both land here.
     case "openTerminal": root.openTerminal(); return

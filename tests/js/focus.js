@@ -294,7 +294,8 @@ function run(check) {
     // PR 34's chord. The context-menu row and Ctrl+T raise the same terminal, and the rail owns its
     // own keys, so the one route both views share is the interception in handleKey above the views.
     var terminalKey = key(Qt.Key_T, "\u0014", ctrl)
-    check("ctrl t no longer carries the terminal", Focus.lookup(terminalKey, pane(closed())), "")
+    check("ctrl t no longer carries the terminal but the split instead",
+          Focus.lookup(terminalKey, pane(closed())), "toggleDual")
     // The menu row's own route: ui/ContextMenu.qml fires the action into ui/Pane.qml's act(), which
     // never sees handleKey's interception, and this is the dispatch that was missing when it did not.
     var fromMenu = chromePane("list")

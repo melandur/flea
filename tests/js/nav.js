@@ -22,6 +22,8 @@ function pane() {
         dirSizeState: "stale",
         cursorIndex: 7,
         pendingSelect: "",
+        // ui/Pane.qml declares it false, so a climb that never happens leaves it that way.
+        pendingSelectCursorOnly: false,
         renamingIndex: 4,
         trashArmedAt: 12345,
         listingState: "ready",
@@ -73,6 +75,26 @@ function entered(row) {
     p.preview = { open: function (path, icon, size) { went[1] = path + " " + icon + " " + size } }
     Nav.openCursor(p, { open: function (path) { went[2] = path } })
     return went.join("|")
+}
+
+// A pane applyPendingSelect can run over: the reveal moves the cursor, and whether it also marked
+// the row is the whole question, so the selection is recorded rather than stubbed away.
+function revealing(target, cursorOnly) {
+    var p = pane()
+    p.path = "/home/gm"
+    p.held = 0
+    p.rows = [{ n: "Elin" }, { n: "Work" }]
+    p.cursorIndex = 0
+    p.pendingSelect = target
+    p.pendingSelectCursorOnly = cursorOnly
+    p.pendingMenu = false
+    p.marked = []
+    p.selectionVersion = 0
+    p.join = function (base, name) { return base + "/" + name }
+    p.setCursor = function (index) { p.cursorIndex = index }
+    p.selection = { only: function (index) { p.marked.push(index) } }
+    Nav.applyPendingSelect(p)
+    return p
 }
 
 function run(check) {
@@ -266,4 +288,31 @@ function run(check) {
     Nav.parent(busyUp)
     check("a refused climb sends nothing", busyUp.opened.length, 0)
     check("and plants no select", busyUp.pendingSelect, "")
+    check("and plants no cursor-only flag either", busyUp.pendingSelectCursorOnly, false)
+
+    // The climb asks for the cursor and nothing else. Marking the row it came back to left the
+    // directory just left filled in the selection, still drawn after the cursor had moved off it.
+    check("a climb asks for the cursor alone", up.pendingSelectCursorOnly, true)
+    check("a climb that did not happen asks for nothing", rootDir.pendingSelectCursorOnly, false)
+
+    var climbed = revealing("/home/gm/Work", true)
+    check("the climb's reveal puts the cursor on the row it left", climbed.cursorIndex, 1)
+    check("and marks nothing, so the row is not left filled", climbed.marked.length, 0)
+    check("and bumps no selection version, so nothing re-reads an unchanged set", climbed.selectionVersion, 0)
+    check("and forgets the flag, so the next reveal marks again", climbed.pendingSelectCursorOnly, false)
+
+    // --select, a search hit and an operation's refresh all still mean "select this", which is what
+    // the action taken straight after the reveal reads.
+    var revealed = revealing("/home/gm/Work", false)
+    check("an ordinary reveal still moves the cursor", revealed.cursorIndex, 1)
+    check("and still marks the row it revealed", revealed.marked.join(","), "1")
+    check("and still bumps the selection version", revealed.selectionVersion, 1)
+
+    var missed = revealing("/home/gm/Gone", true)
+    check("a target outside the listing moves no cursor", missed.cursorIndex, 0)
+    check("and still forgets the flag", missed.pendingSelectCursorOnly, false)
+
+    var nothing = revealing("", true)
+    check("no target forgets the flag rather than carrying it to the next listing",
+          nothing.pendingSelectCursorOnly, false)
 }

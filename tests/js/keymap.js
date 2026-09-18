@@ -38,6 +38,8 @@ function run(check) {
     key("F10", "", shift, "menu")
     key("Question", "?", shift, "keymapSheet")
     key("Comma", ",", none, "settings")
+    // The split, both ways on the one chord; the chrome's fourth mode had no key before it.
+    key("T", "", ctrl, "toggleDual")
 
     // And the keys that left with the vim spellings, the view chords and the tab chords. A sample
     // wide enough that a row creeping back in is caught rather than a spot check of three.
@@ -53,8 +55,9 @@ function run(check) {
     key("S", "S", shift, "")
     key("Colon", ":", shift, "")
     key("Plus", "+", shift, "")
+    // Ctrl+T is not here: it lost the terminal and now carries the split, checked in the table above.
     var goneChords = [["1", ctrl], ["2", ctrl], ["3", ctrl], ["A", ctrl], ["D", ctrl], ["U", ctrl],
-                      ["E", ctrl], ["L", ctrl], ["T", ctrl], ["N", ctrl], ["W", ctrl],
+                      ["E", ctrl], ["L", ctrl], ["N", ctrl], ["W", ctrl],
                       ["Tab", ctrl], ["Space", ctrl], ["PageUp", ctrl], ["PageDown", ctrl],
                       ["P", alt], ["Down", shift], ["Up", shift], ["Delete", shift],
                       ["Backspace", none], ["Home", none], ["End", none],
@@ -162,11 +165,13 @@ function run(check) {
     check("and lists it under its own key", muteCap, "m")
     check("while m still opens the menu in the listing", Keymap.lookupFor("default", 0, "m", 0, "listing", "gui"), "menu")
     check("the sheet group that claims it is Look", Keymap.SHEET_GROUPS.look.indexOf("mute") >= 0, true)
+    // The split is what is drawn and not where the cursor goes, so it is claimed beside the rail.
+    check("the split is claimed under Look too", Keymap.SHEET_GROUPS.look.indexOf("toggleDual") >= 0, true)
 
     check("pointer contract remains populated", Keymap.POINTER.length > 10, true)
     var effective = Keymap.bindingRows("default", "gui")
     check("every effective binding resolves to the action it advertises", effective.every(function (row) {
         return Keymap.lookupFor("default", row.keycode, row.text, row.mask, "listing", "gui") === row.action
     }), true)
-    check("and the table is the size the strip left it", effective.length, 23)
+    check("and the table is the size the strip left it, plus the split's own chord", effective.length, 24)
 }
