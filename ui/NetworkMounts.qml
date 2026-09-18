@@ -26,6 +26,10 @@ Item {
     property string result: "idle"
     // What the helper printed when it refused the identity question, until the sentence is built.
     property string _authAsked: ""
+    // The sentence a failed credentialed attempt would say, held while gio is asked whether the
+    // location resolves anyway, and the credential verdict that goes with it.
+    property string _authReason: ""
+    property bool _authRefused: false
     property Item origin: null
     property Item _pendingOrigin: null
 
@@ -516,9 +520,19 @@ Item {
             // 124 is a host that never answered, 126/127 a helper that could not start, and 3 and 4
             // are the helper's own refusals over an unknown host key and an untrusted certificate.
             // None of the five is the server turning the credential down, so none invalidates it.
-            var refused = [124, 126, 127, 3, 4].indexOf(exitCode) < 0
-            root.failMount(Errors.connectFailure(exitCode, root._pendingUri),
-                           root.passwordFor(root._pendingUri), refused)
+            var refused = [124, 126, 127, 3, 4, 5, 6].indexOf(exitCode) < 0
+            // The same rule the plain mount leg has always followed: a refusal for a location that
+            // is already mounted and a refusal for one that does not exist differ only in a
+            // sentence, so the code is not read -- gio is asked whether the location resolves. It is
+            // how an operator whose server is already mounted gets in: gio refuses the second mount
+            // with "Location is already mounted", exit 2, which this leg used to report as
+            // "authentication was refused" over a password the server never looked at. Measured here
+            // on 2026-09-18 against a live sftp mount. The sentence is held for the probe to use if
+            // the location really is unreachable.
+            root._authReason = Errors.connectFailure(exitCode, root._pendingUri)
+            root._authRefused = refused
+            root._mountFailed = true
+            root.runInfo(root._pendingUri)
         }
     }
 
@@ -554,6 +568,10 @@ Item {
             if (timedOut) return
             var path = Mounts.localPath(String(infoOut.text || root._infoOutput || ""))
             if (exitCode === 0 && path.length > 0) {
+                // Reachable, so whatever the mount call answered is not a failure: a location
+                // already mounted resolves here exactly as one this attempt mounted does.
+                root._authReason = ""
+                root._authRefused = false
                 root.result = "mounted"
                 root.finishRequest(true, "")
                 root.opened(path, root._pendingOrigin)
@@ -568,6 +586,16 @@ Item {
                 return
             }
             if (failed) {
+                // The credentialed leg's own sentence when it had one: it names what the server
+                // said, where this leg can only say that nothing answered.
+                if (root._authReason.length > 0) {
+                    var reason = root._authReason
+                    var refused = root._authRefused
+                    root._authReason = ""
+                    root._authRefused = false
+                    root.failMount(reason, root.passwordFor(root._pendingUri), refused)
+                    return
+                }
                 root.failMount("Connect failed: network location was refused", "")
                 return
             }

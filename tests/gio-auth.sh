@@ -48,6 +48,10 @@ password)
 no-prompt)
     exit 0
     ;;
+already-mounted)
+    printf 'gio: the location is already mounted\n' >&2
+    exit 2
+    ;;
 *) exit 2 ;;
 esac
 EOS
@@ -91,6 +95,15 @@ no_prompt_status=$rc
 [[ "$rc" -ne 0 ]] || { printf 'gio-auth: FAIL no-prompt child accepted\n'; exit 1; }
 [[ ! -s "$received" ]] || { printf 'gio-auth: FAIL no-prompt child received input\n'; exit 1; }
 [[ ! -s "$output" ]] || { printf 'gio-auth: FAIL no-prompt helper produced output\n'; exit 1; }
+
+# A gio that ended before it ever asked for a password authenticated nothing, so its refusal is 6
+# and not the credential's: "Location is already mounted" is exit 2 from gio and the commonest way
+# here, and ui/NetworkMounts.qml answers it by asking gio whether the location resolves anyway.
+received="$dir/already.received"
+output="$dir/already.output"
+run_helper already-mounted "$received" "$output"
+[[ "$?" -eq 6 ]] || { printf 'gio-auth: FAIL a refusal before the password prompt did not answer 6\n'; exit 1; }
+[[ ! -s "$received" ]] || { printf 'gio-auth: FAIL a refusal before the prompt still took the password\n'; exit 1; }
 
 received="$dir/password.received"
 output="$dir/password.output"

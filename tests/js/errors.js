@@ -179,6 +179,13 @@ function run(check) {
           [Errors.isQuestion(Errors.identityQuestion("", false, "sftp://h/")),
            Errors.isQuestion(Errors.connectFailure(1, "smb://h/s"))].join(","), "true,false")
 
+    // 6 is gio ending before it ever asked for a password, most often "Location is already
+    // mounted": the credential was not looked at, so the sentence does not name it. It is only ever
+    // shown when the probe that follows finds the location unreachable too.
+    check("a refusal before the password prompt does not name the credential",
+          Errors.connectFailure(6, "sftp://user@host/path"),
+          "Connect failed: the server refused the connection before asking for a password")
+
     check("and every other scheme reads it as the credential",
           Errors.connectFailure(1, "smb://host/share"), "Connect failed: authentication was refused")
     check("no uri at all answers rather than throwing",

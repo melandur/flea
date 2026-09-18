@@ -152,6 +152,9 @@ function connectFailure(exitCode, uri) {
         return "Connect failed: this server's identity is not known. Connect to it once in a terminal to check and accept its key, then retry."
     if (exitCode === 4)
         return "Connect failed: this server's certificate is not trusted."
+    // 6: gio ended before it ever asked for a password, so the credential was never looked at.
+    if (exitCode === 6)
+        return "Connect failed: the server refused the connection before asking for a password"
     if (/^(ftp|ftps|dav|davs):/i.test(String(uri || "")))
         return "Connect failed: host refused the TLS handshake"
     return "Connect failed: authentication was refused"

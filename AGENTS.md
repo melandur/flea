@@ -1204,6 +1204,19 @@ had bound its own F5 long before the listing had one. It is not a navigation: `u
 `pendingSelect`, so a reload lands on the row it left rather than on the first one. Measured here: a
 folder created behind an open window appeared on the press, with the cursor still on its own row.
 
+**A credentialed connect that failed is asked to prove it, because "already mounted" is not a
+refused password.** The operator's screenshot of 2026-09-18: SFTP to submit02.unibe.ch with a path,
+a right password, and "Connect failed: authentication was refused". Measured here against their live
+mount: `gio mount sftp://user@host/storage/homefs/user` answers exit 2 and "Location is already
+mounted", because gvfs mounts the SERVER and it was mounted already, while
+`gio info` on the same URI resolves the deep path perfectly. `tools/flea-gio-auth` forwarded gio's
+code and `ui/js/Errors.js` read every unknown code as the credential, so the one thing that was
+fine was the one thing blamed. The plain mount leg had always ignored that code and asked `gio info`
+instead; the credentialed leg does now too, holding its own sentence for the case where the location
+really is unreachable. The helper also tells the two apart at the source: **exit 6 is a gio that
+ended before it ever asked for a password**, so nothing was authenticated, and that code stays out
+of the set that invalidates a held credential.
+
 **The identity question is put in front of the operator, and nothing accepts a key for them.**
 The operator's ruling of 2026-09-18, after the sentence below left them with a server they could
 only trust from a terminal. `tools/flea-gio-auth` still refuses GIO's identity prompt by itself, but
