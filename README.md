@@ -114,11 +114,13 @@ every other `.gz` on the box with it. A rule is one ending and one installed app
 longest ending wins, and everything with no rule opens exactly the way it did before. Enter obeys
 the rule too, including on an ending Flea would otherwise have shown in its own archive view.
 
-**Space** opens Quick Look from any view, and so does **→**. Every kind behaves the same way in
-it: **↑** and **↓** move to the next file with the preview following, **Space** fills the window and
-**Space** again brings the inset surface back, and **←** leaves. Once it fills the window the arrows
-move the content instead: a PDF's pages, a media file's playhead, a text file's or an archive
-listing's own scroll. Page through a PDF, play media or inspect an archive.
+**→** opens Quick Look on the row under the cursor, from any view, and **Space** marks that row
+instead: selection is what the listing's own Space does, and **Ctrl+A** marks the whole folder.
+Every kind behaves the same way in the preview: **↑** and **↓** move to the next file with the
+preview following, **Space** fills the window and **Space** again brings the inset surface back, and
+**←** leaves. Once it fills the window the arrows move the content instead: a PDF's pages, a media
+file's playhead, a text file's or an archive listing's own scroll. Page through a PDF, play media or
+inspect an archive.
 
 <p align="center">
   <img src="docs/images/pdf.png" alt="PDF preview with page navigation">
@@ -183,7 +185,8 @@ Press **?** for the full keymap, or **,** to change settings.
 |---|---|
 | Move / parent / browse in | `↓` `↑` / `←` / `→` |
 | Open with the default app | `Enter` |
-| Quick Look / fill the window / leave it | `Space` or `→` / `Space` / `←` or `Esc` |
+| Select the row / the whole folder | `Space` / `Ctrl+A` |
+| Quick Look / fill the window / leave it | `→` / `Space` / `←` or `Esc` |
 | Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` |
 | Copy the file's path | `Ctrl+B` |
 | Rename / trash / undo | `F2` / `Delete` / `Ctrl+Z` |

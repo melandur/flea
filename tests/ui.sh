@@ -998,17 +998,19 @@ row_index_of() {
     fail "no row named $want in a listing of $total"
 }
 
-# Seeks to the named row and presses Space, leaving the result for the caller to assert.
+# Seeks to the named row and presses Right, which is what opens the preview since the 2026-09-18
+# ruling gave Space to selection; the result is left for the caller to assert.
 open_row() {
     goto_row "$(row_index_of "$1")"
-    key -k space >/dev/null
+    key -k Right >/dev/null
     settle
 }
 
-# Same seek, but skips the trailing settle, so the poll below races the clip's play window and not the settle too.
+# The same seek and the same Right, without the trailing settle, so the poll below races the clip's
+# play window and not the settle too.
 open_row_fast() {
     goto_row "$(row_index_of "$1")"
-    key -k space >/dev/null
+    key -k Right >/dev/null
 }
 
 # The player starts asynchronously, so a state read taken at once would catch loading and prove nothing.
@@ -1940,7 +1942,7 @@ case_mute() {
 
     launch "$dir"
     wait_listing 1
-    key -k space >/dev/null
+    key -k Right >/dev/null
     for _attempt in $(seq 1 60); do
         [[ "$(ipc previewOpen)" == "true" ]] && break
         sleep 0.25
@@ -1989,7 +1991,7 @@ case_mute() {
     key -k Escape >/dev/null
     settle
     [[ "$(ipc previewOpen)" == "false" ]] || fail "mute: escape left the preview open"
-    key -k space >/dev/null
+    key -k Right >/dev/null
     for _attempt in $(seq 1 60); do
         [[ "$(ipc previewOpen)" == "true" ]] && break
         sleep 0.25
@@ -4058,8 +4060,8 @@ PYEOF
     omarchy-drive move "$((hx + wx))" "$((hy + wy))" >/dev/null
     settle
     [[ "$(ipc previewOpen)" == "false" ]] || fail "preview: hovering a row opened the preview"
-    # Negative control: Space still opens it, so the two checks above proved a real absence, not a broken previewOpen read.
-    key -k space >/dev/null
+    # Negative control: Right still opens it, so the two checks above proved a real absence, not a broken previewOpen read.
+    key -k Right >/dev/null
     settle
     [[ "$(ipc previewOpen)" == "true" ]] || fail "preview: space stopped opening the preview after the click/hover checks"
     key -k Escape >/dev/null
@@ -5891,7 +5893,7 @@ case_networklive() {
 
     row=$(find_row_wall alpha.txt 25) || fail "networklive: alpha.txt absent"
     goto_row "$row"
-    key -k space >/dev/null
+    key -k Right >/dev/null
     settle
     [[ "$(ipc previewOpen)" == "true" && "$(ipc previewKind)" == "text" ]] \
         || fail "networklive: remote text preview failed"
@@ -8993,20 +8995,20 @@ case_previewviews() {
         switch_view list
         goto_row "$(row_index_of p.jpg)"
         switch_view "$mode"
-        key -k space >/dev/null
+        key -k Right >/dev/null
         for _attempt in $(seq 1 40); do [[ "$(ipc previewState)" == "image" ]] && break; sleep 0.1; done
         [[ "$(ipc previewOpen)" == "true" && "$(ipc previewKind)" == "image" && "$(ipc previewState)" == "image" ]] \
-            || fail "$mode: Space on p.jpg: open $(ipc previewOpen), kind $(ipc previewKind), state $(ipc previewState)"
+            || fail "$mode: Right on p.jpg: open $(ipc previewOpen), kind $(ipc previewKind), state $(ipc previewState)"
         key -k Escape >/dev/null
         settle
         [[ "$(ipc previewOpen)" == "false" ]] || fail "$mode: Escape did not close the preview"
         switch_view list
         goto_row "$(row_index_of manual.pdf)"
         switch_view "$mode"
-        key -k space >/dev/null
+        key -k Right >/dev/null
         for _attempt in $(seq 1 40); do [[ "$(ipc previewState)" == "pdf" ]] && break; sleep 0.1; done
         [[ "$(ipc previewKind)" == "pdf" && "$(ipc previewState)" == "pdf" && "$(ipc previewPdfPage)" == "0" ]] \
-            || fail "$mode: Space on manual.pdf: kind $(ipc previewKind), state $(ipc previewState), page $(ipc previewPdfPage)"
+            || fail "$mode: Right on manual.pdf: kind $(ipc previewKind), state $(ipc previewState), page $(ipc previewPdfPage)"
         # Inset, Right fills the window; expanded, it turns the page. Two Rights are therefore the
         # expansion and one turn, which is the 2026-09-18 contract for every kind at once.
         key -k Right >/dev/null
@@ -9020,18 +9022,18 @@ case_previewviews() {
         switch_view list
         goto_row "$(row_index_of broken.pdf)"
         switch_view "$mode"
-        key -k space >/dev/null
+        key -k Right >/dev/null
         for _attempt in $(seq 1 40); do [[ "$(ipc previewState)" == "This file could not be read." ]] && break; sleep 0.1; done
-        [[ "$(ipc previewState)" == "This file could not be read." ]] || fail "$mode: Space on broken.pdf reads '$(ipc previewState)'"
+        [[ "$(ipc previewState)" == "This file could not be read." ]] || fail "$mode: Right on broken.pdf reads '$(ipc previewState)'"
         key -k Escape >/dev/null
         settle
         switch_view list
         goto_row "$(row_index_of a.zip)"
         switch_view "$mode"
-        key -k space >/dev/null
+        key -k Right >/dev/null
         for _attempt in $(seq 1 40); do [[ "$(ipc previewState)" == "archive" ]] && break; sleep 0.1; done
         [[ "$(ipc previewKind)" == "archive" && "$(ipc previewState)" == "archive" && "$(ipc previewArchiveNames)" == *"sample.txt"* ]] \
-            || fail "$mode: Space on a.zip: kind $(ipc previewKind), state $(ipc previewState), members '$(ipc previewArchiveNames)'"
+            || fail "$mode: Right on a.zip: kind $(ipc previewKind), state $(ipc previewState), members '$(ipc previewArchiveNames)'"
         preview_surface_lit "$mode-zip" 50 "a.zip's members"
         key -k Escape >/dev/null
         settle
@@ -9040,9 +9042,9 @@ case_previewviews() {
             switch_view list
             goto_row "$(row_index_of "$name")"
             switch_view "$mode"
-            key -k space >/dev/null
+            key -k Right >/dev/null
             for _attempt in $(seq 1 60); do [[ "$(ipc previewState)" == "image" ]] && break; sleep 0.1; done
-            [[ "$(ipc previewKind)" == "image" && "$(ipc previewState)" == "image" ]] || fail "$mode: Space on $name: kind $(ipc previewKind), state $(ipc previewState)"
+            [[ "$(ipc previewKind)" == "image" && "$(ipc previewState)" == "image" ]] || fail "$mode: Right on $name: kind $(ipc previewKind), state $(ipc previewState)"
             preview_surface_lit "$mode-$name" 200 "$name's picture"
             key -k Escape >/dev/null
             settle
@@ -9051,10 +9053,10 @@ case_previewviews() {
             switch_view list
             goto_row "$(row_index_of "$name")"
             switch_view "$mode"
-            key -k space >/dev/null
+            key -k Right >/dev/null
             for _attempt in $(seq 1 40); do [[ "$(ipc previewState)" == "text" ]] && break; sleep 0.1; done
             [[ "$(ipc previewKind)" == "text" && "$(ipc previewText)" == *"$([[ $name == sample.txt ]] && echo 'hello from flea' || echo 'fn main')"* ]] \
-                || fail "$mode: Space on $name: kind $(ipc previewKind), state $(ipc previewState), text '$(ipc previewText | cut -c1-40)'"
+                || fail "$mode: Right on $name: kind $(ipc previewKind), state $(ipc previewState), text '$(ipc previewText | cut -c1-40)'"
             preview_surface_lit "$mode-$name" 50 "$name's text"
             key -k Escape >/dev/null
             settle
@@ -9064,9 +9066,9 @@ case_previewviews() {
             switch_view list
             goto_row "$(row_index_of "$name")"
             switch_view "$mode"
-            key -k space >/dev/null
+            key -k Right >/dev/null
             for _attempt in $(seq 1 40); do [[ "$(ipc previewState)" == "playing" ]] && break; sleep 0.1; done
-            [[ "$(ipc previewMediaLoaded)" == "true" && "$(ipc previewState)" == "playing" ]] || fail "$mode: Space on $name: loaded $(ipc previewMediaLoaded), state $(ipc previewState)"
+            [[ "$(ipc previewMediaLoaded)" == "true" && "$(ipc previewState)" == "playing" ]] || fail "$mode: Right on $name: loaded $(ipc previewMediaLoaded), state $(ipc previewState)"
             sleep 0.8
             p1=$(ipc previewPosition)
             shot "previewviews-$mode-$name-1"
@@ -9090,9 +9092,9 @@ case_previewviews() {
         switch_view list
         goto_row "$(row_index_of shut.jpg)"
         switch_view "$mode"
-        key -k space >/dev/null
+        key -k Right >/dev/null
         for _attempt in $(seq 1 40); do [[ "$(ipc previewState)" == "This image could not be read." ]] && break; sleep 0.1; done
-        [[ "$(ipc previewState)" == "This image could not be read." ]] || fail "$mode: Space on shut.jpg reads '$(ipc previewState)'"
+        [[ "$(ipc previewState)" == "This image could not be read." ]] || fail "$mode: Right on shut.jpg reads '$(ipc previewState)'"
         key k >/dev/null
         key k >/dev/null
         for _attempt in $(seq 1 60); do [[ "$(ipc previewState)" == "image" ]] && break; sleep 0.1; done
@@ -9102,7 +9104,7 @@ case_previewviews() {
         settle
         printf 'PREVIEWVIEWS %s image=4 pdf=ok error=ok archive=ok text=2 media=4 recovery=ok\n' "$mode"
     done
-    # The column player and the two things that must end it: another view, and Space on the same file.
+    # The column player and the two things that must end it: another view, and the overlay Right opens over the same file.
     switch_view list
     goto_row "$(row_index_of v.mp4)"
     switch_view columns
@@ -9121,13 +9123,13 @@ case_previewviews() {
     omarchy-drive click "$((wx + cx))" "$((wy + cy))" left >/dev/null
     sleep 1.2
     [[ "$(ipc columnMediaPlaying)" == "true" ]] || fail "previewviews: play did not restart in the column"
-    key -k space >/dev/null
+    key -k Right >/dev/null
     for _attempt in $(seq 1 40); do [[ "$(ipc previewKind)" == "video" ]] && break; sleep 0.1; done
     sleep 1
     p1=$(ipc previewPosition)
     sleep 1
     p2=$(ipc previewPosition)
-    [[ "$(ipc previewOpen)" == "true" && "$(ipc previewKind)" == "video" ]] && (( p2 > p1 )) || fail "previewviews: Space over the playing column: open $(ipc previewOpen), kind $(ipc previewKind), position $p1 then $p2"
+    [[ "$(ipc previewOpen)" == "true" && "$(ipc previewKind)" == "video" ]] && (( p2 > p1 )) || fail "previewviews: Right over the playing column: open $(ipc previewOpen), kind $(ipc previewKind), position $p1 then $p2"
     [[ "$(ipc columnPlayerLoaded)" == "false" ]] || fail "previewviews: the column kept its player under the Space preview"
     key -k Escape >/dev/null
     settle

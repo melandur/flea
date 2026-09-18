@@ -20,7 +20,10 @@ function run(check) {
     key("Right", "", none, "pageForward")
     key("Return", "", none, "open")
     key("Enter", "", none, "open")
-    key("Space", " ", none, "preview")
+    // The 2026-09-18 ruling: Space marks the row and Right is what opens the preview, so the
+    // listing's own Space is the selection and only the preview contexts still read it as the card.
+    key("Space", " ", none, "toggleSelect")
+    key("A", "", ctrl, "selectAll")
     key("Tab", "", none, "focusNext")
     key("Escape", "", none, "escape")
     key("Delete", "", none, "trash")
@@ -65,7 +68,8 @@ function run(check) {
     // Ctrl+T is not here: it lost the terminal and now carries the split, checked in the table
     // above. Nor are Ctrl+N, Ctrl+M and Ctrl+H, which the 2026-09-18 trio took for New Folder,
     // New File and the hidden toggle; all three are in that table too.
-    var goneChords = [["1", ctrl], ["2", ctrl], ["3", ctrl], ["A", ctrl], ["D", ctrl], ["U", ctrl],
+    // Ctrl+A is not here any more: Select all took it back, and the table above is where it is checked.
+    var goneChords = [["1", ctrl], ["2", ctrl], ["3", ctrl], ["D", ctrl], ["U", ctrl],
                       ["E", ctrl], ["L", ctrl], ["W", ctrl],
                       ["Tab", ctrl], ["Space", ctrl], ["PageUp", ctrl], ["PageDown", ctrl],
                       ["P", alt], ["Down", shift], ["Up", shift], ["Delete", shift],
@@ -143,6 +147,10 @@ function run(check) {
     check("the sheet spells move with the arrow", capFor("cursorDown"), "down")
     check("the sheet spells parent with the arrow", capFor("parent"), "left")
     check("the sheet spells browse in with the arrow", capFor("pageForward"), "right")
+    // Both halves of the ruling are on the card: the key that marks a row and the chord that marks
+    // the folder, which is the pair a listing cannot be operated from the keyboard without.
+    check("the sheet spells select with the key that does it", capFor("toggleSelect"), "space")
+    check("and select all with its chord", capFor("selectAll"), "ctrl-a")
     check("the sheet spells copy with its chord", capFor("copy"), "ctrl-c")
     check("the sheet spells the file path with its chord", capFor("copypath"), "ctrl-b")
     check("the sheet spells the sidebar with its chord", capFor("sidebar"), "ctrl-g")
@@ -190,6 +198,6 @@ function run(check) {
     check("every effective binding resolves to the action it advertises", effective.every(function (row) {
         return Keymap.lookupFor("default", row.keycode, row.text, row.mask, "listing", "gui") === row.action
     }), true)
-    check("and the table is the size the strip left it, plus the split's chord and the creation trio",
-          effective.length, 26)
+    check("and the table is the size the strip left it, plus the split's chord, the creation trio and Select all",
+          effective.length, 27)
 }

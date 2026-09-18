@@ -1197,6 +1197,17 @@ close so a newly installed application is in the list next time. A File types ru
 `ui/SettingsFavourite.qml`, the same component a favourite and a shelf pin use, with the drag grip
 hidden: a favourite's order is the operator's and a rule's is its ending's length.
 
+**Space marks a row and Right opens the preview, the operator's ruling of 2026-09-18.** Right
+already opened a quick look on a file row, through `ui/js/Focus.js` `lookup`'s `pageForward` branch,
+so the preview lost nothing by giving Space up, and selection had no key at all since the bare
+letters left the table: the pointer was the only way to mark a row, and `Ctrl+A` came back in the
+same breath because a keyboard that can mark one row and not the whole folder is half a selection.
+The listing's `[[code]] Space` row is `toggleSelect` and the `[[ctrl]] A` row is `selectAll`; both
+are claimed by the `move` sheet group, because selection is not drawn, not narrowed and not written,
+and the row it marks is the one the cursor is on. **The preview keeps Space through the preset rows
+alone**, which scope it to `preview,pdf,media`, so the one key means selection in a listing and the
+expansion in an open preview and the two can never be read in the same context.
+
 **Every kind the preview draws answers the same keyboard, and the state is the only thing that
 changes what an arrow means.** This is the operator's ruling of 2026-09-18, "we want that all
 preview files behave the same way", and it replaces a table that bound Left three different ways at
