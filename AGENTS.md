@@ -1204,6 +1204,28 @@ had bound its own F5 long before the listing had one. It is not a navigation: `u
 `pendingSelect`, so a reload lands on the row it left rather than on the first one. Measured here: a
 folder created behind an open window appeared on the press, with the cursor still on its own row.
 
+**A window that comes back must never come back with nothing focused.** Focus lives on an item, and
+an item that was hidden or destroyed while the window was inactive -- the second pane of a split
+that was left, a dialog that closed behind the window's back -- takes the scene's focus with it. The
+window then answers no key at all, which reads as a hung file manager and is the one defect a
+keyboard-first window may not have; it was seen on this box on 2026-09-18, both panes reporting
+`activeFocus` false with the processes healthy. `ui/shell.qml`'s window `onActiveChanged` is the
+floor: on activation, if no pane holds focus, the current pane is given it. It is a floor and not a
+route -- every surface still hands focus back deliberately when it closes -- and it does nothing at
+all when something is already focused.
+
+**Entering the split hands the keyboard to the pane that just appeared.** The operator's ruling of
+2026-09-18: "when control t then automatically do the tab so that focus goes to opened tab" -- Ctrl+T
+used to open the second pane and leave the cursor in the first, so the chord needed a Tab after it
+every time. `ui/shell.qml` `onDualModeChanged` sets `focusSide = 1` and focuses it. The stored
+`dual.focus` is deliberately not read there: it exists to restore a window, and `onDualModeChanged`
+is guarded on `initialized`, so a toggle at runtime is the one case that is not a restore. The
+Loader is what lands it on the FIRST split of a window, where `secondPane.item` is still null when
+the handler runs: `focusSide` is set before the item can exist, and `onLoaded` focuses
+`focusSide` once it does. Measured through a console.log probe on this box: `item=false` on the
+first call, then `item=true` and `secondFocus=true` from the loader. Leaving the split still puts
+the keyboard back on the primary pane, which is the only pane left.
+
 **Right in the rail opens the place and takes the keyboard into it; Enter opens it and stays.** The
 operator's ruling of 2026-09-18: "when in side view and arrow right open go directly with active
 selection to the opened folder". Both were one action before, so opening a place from the sidebar

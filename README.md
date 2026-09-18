@@ -212,7 +212,7 @@ Press **?** for the full keymap, or **,** to change settings.
 | Show or hide hidden files | `Ctrl+H` |
 | Search | `Ctrl+F` |
 | Show or hide the sidebar | `Ctrl+G` |
-| Split the window in two, or join it | `Ctrl+T` |
+| Split the window in two, or join it | `Ctrl+T` (the new pane takes the keyboard) |
 | Context menu | `m`, `Menu` or `Shift+F10` |
 | Settings / keymap sheet | `,` / `?` |
 | Move focus between the sidebar and the list | `Tab` |

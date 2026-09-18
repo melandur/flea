@@ -39,6 +39,19 @@ ShellRoot {
         Connections {
             target: view.Window.window
             function onSceneGraphError(error, message) { fleaWindow.handleSceneGraphError(error, message) }
+            // A window that comes back with nothing focused answers no key at all, which reads as a
+            // hung file manager and is the one defect a keyboard-first window may not have. It is
+            // reachable: focus lives on an item, and an item that was hidden or destroyed while the
+            // window was inactive -- the second pane of a split that was left, a dialog that closed
+            // behind the window's back -- takes the scene's focus with it. This is the floor, not a
+            // route: every surface still hands focus back deliberately, and this only refuses to
+            // leave the window with none.
+            function onActiveChanged() {
+                if (!view.Window.window || !view.Window.window.active || !view.initialized) return
+                if (view.currentPane && view.currentPane.activeFocus) return
+                if (view.dualMode) view.focusPane(view.focusSide)
+                else primaryPane.forceActiveFocus()
+            }
         }
 
         // Quickshell 0.3.1 has no exit API and Qt.quit() is a no-op, so the shell signals itself.
@@ -132,7 +145,14 @@ ShellRoot {
             onDualModeChanged: {
                 if (!initialized) return
                 if (!dualMode) { focusSide = 0; primaryPane.forceActiveFocus() }
-                else if (initialized) { focusPane(focusSide); rememberPaths() }
+                // The split just opened, so the keyboard goes to the pane that just appeared: the
+                // operator's ruling of 2026-09-18, "when control t then automatically do the tab so
+                // that focus goes to opened tab", which is the Tab press the chord used to need
+                // after it. The stored dual.focus is for restoring a window, not for this: it is
+                // read by the startup path at Component.onCompleted and by the loader below, and a
+                // toggle at runtime is the one case that is neither. The loader re-focuses when the
+                // second pane finishes building, which is why focusSide is set before it can.
+                else { focusSide = 1; focusPane(1); rememberPaths() }
             }
 
             Backend {
