@@ -26,18 +26,22 @@ if {$argc == 2} {
 set password_sent 0
 
 spawn -noecho gio mount $uri
+# 3 and 4 are this helper's own refusals, and they are not authentication failures: the password was
+# never wrong, the server was never vouched for. They are separate codes because ui/js/Errors.js says
+# what happened in one sentence, and "authentication was refused" over an unknown host key sends the
+# operator to retype a password that was right all along.
 expect {
     -re {Choice: *$} {
         set password ""
         catch {close}
         catch {wait}
-        exit 1
+        exit 3
     }
     -re {Continue anyway.*y/n} {
         set password ""
         catch {close}
         catch {wait}
-        exit 1
+        exit 4
     }
     -re {Store password.*never/session/permanent} {
         send -- "$store\r"

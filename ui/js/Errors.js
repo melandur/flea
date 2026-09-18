@@ -113,6 +113,12 @@ function connectFailure(exitCode, uri) {
     if (exitCode === 124) return "Connect failed: host did not respond"
     if (exitCode === 126 || exitCode === 127)
         return "Connect failed: authentication helper is unavailable"
+    // tools/flea-gio-auth's own two refusals. Neither is a wrong password, and saying so sent the
+    // operator back to a password that was right: the server is the thing that was not vouched for.
+    if (exitCode === 3)
+        return "Connect failed: this server's identity is not known. Connect to it once in a terminal to check and accept its key, then retry."
+    if (exitCode === 4)
+        return "Connect failed: this server's certificate is not trusted."
     if (/^(ftp|ftps|dav|davs):/i.test(String(uri || "")))
         return "Connect failed: host refused the TLS handshake"
     return "Connect failed: authentication was refused"

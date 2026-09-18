@@ -98,6 +98,12 @@ function act(action, root, menuId, paths) {
     case "focusPreview": root.focusPreviewColumn(); return
     case "windowNew": root.newWindow(); return
     case "toggleHidden": root.toggleHidden(); return
+    // F5. The row under the cursor is handed back through pendingSelect, so the listing is read
+    // again and the cursor lands where it was rather than on the first row.
+    case "refresh":
+        var row = root.rowFor(root.cursorIndex)
+        root.refresh(row ? root.join(root.path, row.n) : "")
+        return
     case "sidebar": root.toggleRail(); return
     // Popups handle Escape first; the focused listing then unwinds filter, search, status and marks.
     case "escape":

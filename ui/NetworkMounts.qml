@@ -471,9 +471,10 @@ Item {
                 root.runInfo(root._pendingUri)
                 return
             }
-            // 124 is a host that never answered and 126/127 a helper that could not start; neither
-            // is the server turning the credential down, so neither invalidates it.
-            var refused = exitCode !== 124 && exitCode !== 126 && exitCode !== 127
+            // 124 is a host that never answered, 126/127 a helper that could not start, and 3 and 4
+            // are the helper's own refusals over an unknown host key and an untrusted certificate.
+            // None of the five is the server turning the credential down, so none invalidates it.
+            var refused = [124, 126, 127, 3, 4].indexOf(exitCode) < 0
             root.failMount(Errors.connectFailure(exitCode, root._pendingUri),
                            root.passwordFor(root._pendingUri), refused)
         }

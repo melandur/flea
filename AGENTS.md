@@ -1197,6 +1197,22 @@ close so a newly installed application is in the list next time. A File types ru
 `ui/SettingsFavourite.qml`, the same component a favourite and a shelf pin use, with the drag grip
 hidden: a favourite's order is the operator's and a rule's is its ending's length.
 
+**F5 re-reads the directory on screen and keeps the cursor where it is.** The operator's ruling of
+2026-09-18, and the key every file manager on this desktop already answers with; `ui/TrashView.qml`
+had bound its own F5 long before the listing had one. It is not a navigation: `ui/js/Nav.js`
+`refresh` leaves the history alone, and `ui/js/Focus.js` hands the cursor row's path back through
+`pendingSelect`, so a reload lands on the row it left rather than on the first one. Measured here: a
+folder created behind an open window appeared on the press, with the cursor still on its own row.
+
+**A connect refused over an unknown host key is not a refused password, and says so.**
+`tools/flea-gio-auth` answers GIO's identity and certificate warnings by refusing and closing, which
+is the right answer for a helper that cannot ask anyone, but it exited 1 for both — and 1 is what
+`ui/js/Errors.js` `connectFailure` reads as "authentication was refused", so the operator was sent
+back to retype a password the server never objected to. The two refusals have their own codes now,
+3 for an unverified identity and 4 for an untrusted certificate, `ui/NetworkMounts.qml` keeps both
+out of the set that invalidates a held credential, and the sentence for 3 says the one thing that
+gets past it: connect once in a terminal, check the key, accept it, retry.
+
 **The rail's NETWORK heading is drawn whenever the Network built-in is on, empty list or not.** It
 used to hide with its own rows, the way DEVICES and FAVORITES still do, and that heading is the only
 way into the connect dialog: a box with nothing mounted and nothing in the bookmarks file had no

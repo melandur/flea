@@ -61,8 +61,10 @@ for flow in identity certificate; do
     run_helper "$flow" "$received" "$output"
     rc=$?
     case "$flow" in
-    identity) identity_status=$rc ;;
-    certificate) certificate_status=$rc ;;
+    identity) identity_status=$rc
+        [[ "$rc" -eq 3 ]] || { printf 'gio-auth: FAIL identity refusal answered %s, not 3\n' "$rc"; exit 1; } ;;
+    certificate) certificate_status=$rc
+        [[ "$rc" -eq 4 ]] || { printf 'gio-auth: FAIL certificate refusal answered %s, not 4\n' "$rc"; exit 1; } ;;
     esac
     [[ "$rc" -ne 0 ]] || { printf 'gio-auth: FAIL %s warning accepted\n' "$flow"; exit 1; }
     ! grep -Fq -- "$fake_secret" "$received" \

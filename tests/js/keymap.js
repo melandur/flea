@@ -28,6 +28,8 @@ function run(check) {
     key("Escape", "", none, "escape")
     key("Delete", "", none, "trash")
     key("F2", "", none, "rename")
+    // F5 re-reads the directory on screen, the key every file manager on this desktop answers with.
+    key("F5", "", none, "refresh")
     key("C", "", ctrl, "copy")
     key("V", "", ctrl, "paste")
     key("X", "", ctrl, "cut")
@@ -151,6 +153,7 @@ function run(check) {
     // the folder, which is the pair a listing cannot be operated from the keyboard without.
     check("the sheet spells select with the key that does it", capFor("toggleSelect"), "space")
     check("and select all with its chord", capFor("selectAll"), "ctrl-a")
+    check("and the reload with the key every file manager uses", capFor("refresh"), "f5")
     check("the sheet spells copy with its chord", capFor("copy"), "ctrl-c")
     check("the sheet spells the file path with its chord", capFor("copypath"), "ctrl-b")
     check("the sheet spells the sidebar with its chord", capFor("sidebar"), "ctrl-g")
@@ -198,6 +201,6 @@ function run(check) {
     check("every effective binding resolves to the action it advertises", effective.every(function (row) {
         return Keymap.lookupFor("default", row.keycode, row.text, row.mask, "listing", "gui") === row.action
     }), true)
-    check("and the table is the size the strip left it, plus the split's chord, the creation trio and Select all",
-          effective.length, 27)
+    check("and the table is the size the strip left it, plus the split's chord, the creation trio, Select all and F5",
+          effective.length, 28)
 }

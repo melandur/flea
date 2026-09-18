@@ -204,6 +204,7 @@ Press **?** for the full keymap, or **,** to change settings.
 | Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` |
 | Copy the file's path | `Ctrl+B` |
 | Rename / trash / undo | `F2` / `Delete` / `Ctrl+Z` |
+| Reload this folder | `F5` |
 | New folder / new file | `Ctrl+N` / `Ctrl+M` |
 | Show or hide hidden files | `Ctrl+H` |
 | Search | `Ctrl+F` |

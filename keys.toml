@@ -142,6 +142,15 @@ action = "toggleSelect"
 key = "F2"
 action = "rename"
 
+# F5 re-reads the directory on screen, the key every file manager on this desktop answers with it,
+# and the operator's ruling of 2026-09-18. ui/TrashView.qml already bound its own F5 before the
+# listing had one. It is not a navigation: ui/js/Nav.js refresh leaves the history alone and the
+# cursor row is passed back through pendingSelect, so a reload keeps your place instead of dropping
+# it to the top, which is what a watch-driven reload does too.
+[[code]]
+key = "F5"
+action = "refresh"
+
 # The keyboard's way into the menu a right click raises: the row's own menu in the listing, Eject
 # and Unmount in the rail. The tagline is "keyboard-first" and before this key neither had one, so
 # m is no longer a type-ahead letter; ui/js/Focus.js routes it by which view has focus.
@@ -173,7 +182,7 @@ action = "keymapSheet"
 # the one the cursor is on, which is the only thing on the card it could be read beside.
 move = ["cursorDown", "cursorUp", "open", "parent", "pageForward", "focusNext", "escape",
         "toggleSelect", "selectAll"]
-look = ["preview", "sidebar", "toggleDual", "toggleHidden", "mute", "keymapSheet"]
+look = ["preview", "sidebar", "toggleDual", "toggleHidden", "mute", "keymapSheet", "refresh"]
 find = ["search"]
 change = ["copy", "cut", "paste", "copypath", "rename", "trash", "undo", "newFolder", "newFile",
           "menu", "settings"]
@@ -262,6 +271,11 @@ label = "paste"
 keys = "f2"
 action = "rename"
 label = "rename"
+
+[[sheet]]
+keys = "f5"
+action = "refresh"
+label = "reload"
 
 [[sheet]]
 keys = "delete"

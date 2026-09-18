@@ -149,6 +149,14 @@ function run(check) {
           Errors.connectFailure(127, "smb://host/share"), "Connect failed: authentication helper is unavailable")
     check("a scheme that negotiates a handshake reads the refusal as one",
           Errors.connectFailure(1, "davs://host/dav"), "Connect failed: host refused the TLS handshake")
+    // The helper's own two refusals, which are not a wrong password: 3 is an unknown host key and
+    // 4 an untrusted certificate, and both used to read as "authentication was refused", which sent
+    // the operator back to retype a password the server never objected to.
+    check("an unknown host key says so, and what to do about it",
+          Errors.connectFailure(3, "sftp://user@host/"),
+          "Connect failed: this server's identity is not known. Connect to it once in a terminal to check and accept its key, then retry.")
+    check("an untrusted certificate says that instead",
+          Errors.connectFailure(4, "davs://host/dav"), "Connect failed: this server's certificate is not trusted.")
     check("and every other scheme reads it as the credential",
           Errors.connectFailure(1, "smb://host/share"), "Connect failed: authentication was refused")
     check("no uri at all answers rather than throwing",
