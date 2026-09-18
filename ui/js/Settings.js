@@ -391,6 +391,11 @@ function placesRows(state) {
     rows.push({ kind: "check", id: "places.rail", label: "Show sidebar", glyph: "columns", on: data.rail !== "hidden", available: data.autoHide !== true })
     rows.push(choice("places.sidebarWidth", "Sidebar width", "maximize", Places.WIDTH_STOPS,
         ["160 px", "192 px", "224 px", "256 px"], Places.sidebarWidth(data.sidebarWidth)))
+    // The one network row a panel can carry: everything else about a place is the place's own.
+    rows.push({ kind: "group", label: "Network" })
+    rows.push({ kind: "check", id: "places.rememberPasswords", label: "Remember passwords",
+        caption: "in the login keyring", glyph: "lock", on: data.rememberPasswords === true })
+    rows.push({ kind: "hint", label: "Off, a password is used for the one connection and never stored. On, the system keyring keeps it, the same store Nautilus and GNOME use, and the next connection needs no password at all." })
     // Trash lives in Places, and the sweep is off until switched on: permanent deletion is outside the undo journal.
     rows.push({ kind: "group", label: "Trash" })
     // The eyebrow says TRASH, so the label does not repeat it; a fuller one elided the caption to "permanently, once a...".

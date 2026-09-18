@@ -48,11 +48,11 @@ EOS
 chmod +x "$dir/bin/gio"
 
 run_helper() {
-    local flow=$1 received=$2 output=$3
+    local flow=$1 received=$2 output=$3 store=${4:-}
     : > "$received"
     printf '%s\n' "$fake_secret" | FAKE_GIO_FLOW="$flow" FAKE_GIO_RECEIVED="$received" \
         FLEA_GIO_AUTH_TIMEOUT=5 PATH="$dir/bin:/usr/bin:/bin" \
-        ./tools/flea-gio-auth 'sftp://user@example.test/' > "$output" 2>&1
+        ./tools/flea-gio-auth 'sftp://user@example.test/' $store > "$output" 2>&1
 }
 
 for flow in identity certificate; do
@@ -84,6 +84,7 @@ received="$dir/password.received"
 output="$dir/password.output"
 run_helper password "$received" "$output"
 rc=$?
+password_status=$rc
 [[ "$rc" -eq 0 ]] || { printf 'gio-auth: FAIL password-only helper=%s\n' "$rc"; exit 1; }
 [[ "$(grep -Fxc -- "$fake_secret" "$received")" -eq 1 ]] \
     || { printf 'gio-auth: FAIL password delivery was not exactly once\n'; exit 1; }
@@ -92,5 +93,28 @@ rc=$?
 [[ ! -s "$output" ]] \
     || { printf 'gio-auth: FAIL password-only helper produced output\n'; exit 1; }
 
-printf 'gio-auth: identity=%s certificate=%s no-prompt=%s password=%s once=ok storage=never redaction=ok\n' \
-    "$identity_status" "$certificate_status" "$no_prompt_status" "$rc"
+# Settings > Places > Remember passwords is the only thing that answers that prompt differently,
+# and it reaches this helper as an argument: never by default, permanent when the switch is on, and
+# nothing else at all, because the answer becomes a keyring write.
+received="$dir/permanent.received"
+output="$dir/permanent.output"
+run_helper password "$received" "$output" permanent
+rc=$?
+[[ "$rc" -eq 0 ]] || { printf 'gio-auth: FAIL permanent helper=%s\n' "$rc"; exit 1; }
+[[ "$(sed -n '2p' "$received")" == permanent ]] \
+    || { printf 'gio-auth: FAIL storage response was not permanent\n'; exit 1; }
+[[ ! -s "$output" ]] || { printf 'gio-auth: FAIL permanent helper produced output\n'; exit 1; }
+
+received="$dir/session.received"
+run_helper password "$received" "$dir/session.output" session
+[[ "$(sed -n '2p' "$received")" == session ]] \
+    || { printf 'gio-auth: FAIL storage response was not session\n'; exit 1; }
+
+received="$dir/bogus.received"
+run_helper password "$received" "$dir/bogus.output" forever
+rc=$?
+[[ "$rc" -eq 2 ]] || { printf 'gio-auth: FAIL an unknown storage choice was accepted, helper=%s\n' "$rc"; exit 1; }
+[[ ! -s "$received" ]] || { printf 'gio-auth: FAIL a refused storage choice still spawned gio\n'; exit 1; }
+
+printf 'gio-auth: identity=%s certificate=%s no-prompt=%s password=%s once=ok storage=never,permanent,session redaction=ok\n' \
+    "$identity_status" "$certificate_status" "$no_prompt_status" "$password_status"

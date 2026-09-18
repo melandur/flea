@@ -15,6 +15,9 @@ Item {
     property var entries: []
     // Secrets live only here for this QML process lifetime; the map is never serialized or exposed.
     property var _passwords: ({})
+    // Settings > Places > Network. Read here rather than passed through four signatures, because it
+    // is a standing choice about this box and not a fact about one connection.
+    readonly property bool rememberPasswords: (ViewState.state.places || {}).rememberPasswords === true
     property string result: "idle"
     property Item origin: null
     property Item _pendingOrigin: null
@@ -299,6 +302,17 @@ Item {
         if (authenticated === true || root.credentialed(uri)) {
             var password = request.password || root.passwordFor(uri)
             if (password.length === 0) {
+                // Settings > Places > Remember passwords: the secret may be in the login keyring,
+                // which is gvfs's own store, and a plain mount is what reads it. Only worth trying
+                // while that switch is on: with it off nothing of Flea's was ever put there, and a
+                // mount that has to fail first would only delay the prompt the operator wants.
+                if (root.rememberPasswords) {
+                    root.result = "mounting"
+                    mountProcess.command = ["gio", "mount", uri]
+                    mountProcess.running = true
+                    mountTimeout.restart()
+                    return
+                }
                 root.result = "missing-credential"
                 var reason = "Enter the password to mount this location."
                 if (!root.finishRequest(false, reason))
@@ -309,8 +323,12 @@ Item {
             password = ""
             root._authAwaitingStart = true
             root.result = "mounting"
+            // The third argument is what GIO's own "Store password?" prompt is answered with: the
+            // login keyring on, which is what makes the NEXT connection need no password, and never
+            // off, which is what this helper always answered before the switch existed.
             authProcess.command = ["timeout", String(root.authTimeoutSeconds),
-                                   Quickshell.env("FLEA_GIO_AUTH") || "/usr/lib/flea/flea-gio-auth", root._pendingUri]
+                                   Quickshell.env("FLEA_GIO_AUTH") || "/usr/lib/flea/flea-gio-auth",
+                                   root._pendingUri, root.rememberPasswords ? "permanent" : "never"]
             authProcess.running = true
             return
         }

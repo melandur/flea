@@ -25,7 +25,8 @@ pub const DEFAULTS: &str = r#"{
     "favourites": [],
     "showHome": true, "showNetwork": true,
     "showDevices": true, "showTrash": true,
-    "driveSize": false, "trashCount": false, "showUnmounted": false, "rail": "shown", "autoHide": false, "sidebarWidth": 192
+    "driveSize": false, "trashCount": false, "showUnmounted": false, "rail": "shown", "autoHide": false, "sidebarWidth": 192,
+    "rememberPasswords": false
   },
   "shelf": {
     "enabled": false, "bar": true, "rail": "off",
@@ -106,6 +107,11 @@ pub const PLACES: &[(&str, Rule)] = &[
     ("rail", Rule::Word(&["shown", "hidden"])),
     ("autoHide", Rule::Bool),
     ("sidebarWidth", Rule::SidebarWidth),
+    // Settings > Places > Network: whether a network password is handed to the login keyring, which
+    // is what tools/flea-gio-auth answers GIO's own "Store password?" prompt with. Off is what this
+    // helper always did, and it stays the default: a file manager does not start writing secrets to
+    // a keyring because the operator typed one into a dialog once.
+    ("rememberPasswords", Rule::Bool),
 ];
 
 // The shelf's own six. SettingsRest rule 3: the panel offers 1, 2, 3 or 5 and both kinds off is what

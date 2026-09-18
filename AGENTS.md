@@ -1197,6 +1197,20 @@ close so a newly installed application is in the list next time. A File types ru
 `ui/SettingsFavourite.qml`, the same component a favourite and a shelf pin use, with the drag grip
 hidden: a favourite's order is the operator's and a rule's is its ending's length.
 
+**A network password is the connection's alone until Settings > Places says otherwise.**
+`tools/flea-gio-auth` answered GIO's own "Store password? [never/session/permanent]" prompt with
+`never` from the day it was written, which is the right default for a file manager and the wrong
+one for the operator who asked, on 2026-09-18, for Nautilus's own "remember password and done".
+So the answer is now an argument, `never` or `permanent`, `places.rememberPasswords` decides it, and
+the switch is off in the shipped defaults. What `permanent` writes to is gvfs's own store, the login
+keyring, which is the same one Nautilus fills, so a location saved in either is already known to the
+other and Flea stores no secret of its own anywhere. **The switch also changes what an empty password
+means on a saved place**: with it on, a credentialed URI with nothing in hand runs a plain
+`gio mount` first, because that is what reads the keyring, and only a failure brings up the prompt;
+with it off, the prompt comes straight away, since nothing of Flea's was ever put there and a mount
+that has to fail first would only delay it. The in-process `_passwords` map is unchanged either way:
+it is what stops one dialog asking twice, and it never outlives the window.
+
 **A directory's name is drawn as the filesystem holds it, with no trailing slash.** The operator's
 ruling of 2026-09-18, reversing FleaWindow.html's own decoration, which `ui/List.qml` turned on for
 every listing row through `ui/Row.qml`'s `dirSuffix`. Both are gone rather than made a setting: the

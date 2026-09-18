@@ -208,7 +208,16 @@ function runCompletionRows(check) {
     check("and the two buttons under the list are gone",
           places.filter(function (row) { return row.kind === "favouriteActions" }).length, 0)
     check("optional rail details default off", [find(places, "places.driveSize").on, find(places, "places.trashCount").on, find(places, "places.showUnmounted").on].join(","), "false,false,false")
-    check("the Rail controls follow the ruled order", places.slice(-7, -2).map(function (row) { return row.label }).join("|"), "Show Trash count|Show unmounted drives|Auto-hide sidebar|Show sidebar|Sidebar width")
+    // Counted from the Rail group rather than from the end: Network and Trash both sit under it now,
+    // and an index from the tail would move again the next time either grows a row.
+    var railAt = places.map(function (row) { return row.label }).indexOf("Rail")
+    check("the Rail controls follow the ruled order",
+          places.slice(railAt + 1, railAt + 6).map(function (row) { return row.label }).join("|"),
+          "Show drive size|Show Trash count|Show unmounted drives|Auto-hide sidebar|Show sidebar")
+    // Settings > Places > Network: one switch, off, and one line saying what On means.
+    var remember = find(places, "places.rememberPasswords")
+    check("the network password switch is off until it is switched on", remember.on, false)
+    check("and it says where the password would go", remember.caption, "in the login keyring")
     // Directive 74: two handles on one remembered state, so the row reads the word ctrl-g writes.
     check("Show sidebar is checked while the rail is shown", find(places, "places.rail").on, true)
     check("and auto-hide ships off, so nothing hides itself", find(places, "places.autoHide").on, false)

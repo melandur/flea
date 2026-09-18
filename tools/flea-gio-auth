@@ -1,15 +1,28 @@
 #!/usr/bin/expect -f
 # Mounts one GIO URI with one password read from stdin and no secret output.
+#   flea-gio-auth <uri> [never|session|permanent]
+# The second argument is what GIO's own "Store password?" prompt is answered with, and it defaults
+# to never, which is what this helper always answered before Settings > Places grew the switch. On
+# permanent the secret goes into the login keyring, gvfs's own store, and a later plain `gio mount`
+# of the same URI needs no password at all: that is the whole of "remember password" here, and it is
+# the same store Nautilus writes to, so a location saved in one is already known to the other.
 log_user 0
 set timeout 30
 if {[info exists env(FLEA_GIO_AUTH_TIMEOUT)]} {
     set timeout $env(FLEA_GIO_AUTH_TIMEOUT)
 }
 
-if {$argc != 1 || [gets stdin password] < 0 || $password eq ""} {
+if {$argc < 1 || $argc > 2 || [gets stdin password] < 0 || $password eq ""} {
     exit 2
 }
 set uri [lindex $argv 0]
+set store "never"
+if {$argc == 2} {
+    set store [lindex $argv 1]
+    if {$store ne "never" && $store ne "session" && $store ne "permanent"} {
+        exit 2
+    }
+}
 set password_sent 0
 
 spawn -noecho gio mount $uri
@@ -27,7 +40,7 @@ expect {
         exit 1
     }
     -re {Store password.*never/session/permanent} {
-        send -- "never\r"
+        send -- "$store\r"
         exp_continue
     }
     -re {(Password|password|Passphrase|passphrase).*:} {
