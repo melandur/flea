@@ -207,7 +207,8 @@ pub fn thumbed_line(row: usize, file: &str, ms: f64) -> String {
     format!(r#"{{"t":"thumbed","row":{},"file":"{}","ms":{:.3}}}"#, row, escape(file), ms)
 }
 
-// partial is true when the 2000 ms deadline cut the walk short, see docs/protocol.md "dirsized".
+// partial is true when the 250 ms deadline cut the walk short, a subtree refused, or an unbounded
+// mount was reached, see docs/protocol.md "dirsized".
 pub fn dirsized_line(row: usize, bytes: u64, partial: bool, ms: f64) -> String {
     format!(r#"{{"t":"dirsized","row":{},"bytes":{},"partial":{},"ms":{:.3}}}"#, row, bytes, partial, ms)
 }

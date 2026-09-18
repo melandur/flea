@@ -10,7 +10,7 @@ use crate::backend::metareq::spawn as spawn_meta;
 use crate::backend::opsdispatch::{cancel_transfer, do_mkdir, do_newfile, do_rename, do_undo, report_op, resolve_rows, start_duplicate, start_trash, start_transfer, start_menu_transfer, start_redo, Ops};
 use crate::backend::opsreq::OpMsg;
 use crate::backend::mime::Db;
-use crate::backend::dirsizereq::{pump_dirsize, queue_dirsizes, report_dirsize};
+use crate::backend::dirsizereq::{forget_dirsizes_under, pump_dirsize, queue_dirsizes, report_dirsize};
 use crate::backend::events::{spawn_forwarder, spawn_op_forwarder, spawn_reader, Event};
 use crate::backend::fsinfo::{fsinfo_line, read as read_fsinfo};
 use crate::backend::fsinfo::dev_of;
@@ -76,6 +76,7 @@ pub fn run() -> i32 {
         dirsizes: HashMap::new(),
         dirsize_queue: Vec::new(),
         dirsize_running: false,
+        dirsize_generation: 0,
         dirsize_stop: Arc::new(AtomicBool::new(false)),
         search: None,
         search_reported: Instant::now(),
@@ -130,6 +131,11 @@ pub fn run() -> i32 {
             // The one line no client asked for, and only ever for the directory being listed now.
             Event::Changed(wd) => {
                 if watch.is_current(wd) {
+                    // The rows of this directory may have changed size, and no measurement here
+                    // would know: dropping them is what makes the Size column follow a copy or a
+                    // delete instead of showing what was true when the folder was first opened.
+                    let base = st.base.clone();
+                    forget_dirsizes_under(&mut st, &base);
                     say(&mut out, &changed_line(&st.base));
                 }
             }
@@ -144,7 +150,7 @@ pub fn run() -> i32 {
         }
         // After the event and not before it: a list that just landed has already cleared the queue,
         // and a walk that just reported has already lowered the running flag.
-        pump_dirsize(&mut st, &walkers);
+        pump_dirsize(&mut out, &mut st, &walkers);
     }
     // Nothing waits on a walker, but a raised flag ends the one in flight inside an entry rather
     // than at the end of whatever tree it is in.
@@ -377,6 +383,12 @@ fn handle_line(
 pub fn cancel_dirsizes(st: &mut State) {
     st.dirsize_stop.store(true, Ordering::Relaxed);
     st.dirsize_stop = Arc::new(AtomicBool::new(false));
+    // The generation moves, so the walk this cancelled is abandoned rather than waited for: a worker
+    // stuck in a call that never returns would otherwise hold dirsize_running true for the life of
+    // the process, and no dirsize would ever be answered again. Every list and every navigation
+    // reaches here, so the queue always has a way back.
+    st.dirsize_generation = st.dirsize_generation.wrapping_add(1);
+    st.dirsize_running = false;
     st.dirsize_queue.clear();
 }
 

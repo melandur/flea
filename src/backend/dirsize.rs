@@ -1,6 +1,8 @@
 use crate::backend::mountinfo::mount_type_in;
+use std::ffi::OsString;
 use std::os::unix::fs::MetadataExt;
-use std::path::Path;
+use std::os::unix::ffi::OsStringExt;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -15,14 +17,75 @@ const DEADLINE_MS: u64 = 250;
 // one getdents or stat that never returns is not bounded by it at all: /home/melandur/TresoritDrive
 // (fuse.tresoritfs) burned the whole ceiling on every visit and `du` on it does not finish in 25 s.
 // These answer partial immediately instead, which is the honest total for a tree nothing can measure.
+//
+// Named rather than taken by a `fuse.` prefix, which was the first shape of this and refused every
+// local FUSE filesystem with it: mergerfs, gocryptfs, bindfs and squashfuse are bounded, and a home
+// on one would have shown no folder size at all. An unlisted slow mount is not a hazard any more,
+// only slow: it costs one deadline, off the loop, and a partial answer is never remembered.
 fn is_unbounded(kind: &str) -> bool {
-    kind.starts_with("fuse.")
-        || matches!(kind, "fuse" | "nfs" | "nfs4" | "cifs" | "smb3" | "smbfs" | "afs" | "ceph" | "glusterfs" | "davfs" | "ftp" | "sshfs")
+    matches!(
+        kind,
+        "nfs" | "nfs4" | "cifs" | "smb3" | "smbfs" | "afs" | "ceph" | "glusterfs" | "davfs" | "ftp"
+            | "sshfs"
+            | "fuse.sshfs"
+            | "fuse.rclone"
+            | "fuse.s3fs"
+            | "fuse.davfs2"
+            | "fuse.tresoritfs"
+            | "fuse.dropbox"
+            | "fuse.onedriver"
+            | "fuse.mega"
+            | "fuse.gvfsd-fuse"
+            | "fuse.portal"
+    )
 }
 
 // Split from walk() so a test names the type without needing such a mount on the box.
 pub fn refuses(path: &Path, mountinfo: &str) -> bool {
     mount_type_in(path, mountinfo).map(|kind| is_unbounded(&kind)).unwrap_or(false)
+}
+
+// Every unbounded mount point in the table. refuses() answers for the walk root, which is only the
+// root: a walk of /home descends into /home/<user>/TresoritDrive without ever asking again, which is
+// the case the first shape of this missed. Collected once per walk and compared on the way down.
+pub fn unbounded_mounts(body: &str) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for line in body.lines() {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        let split = match fields.iter().position(|field| *field == "-") {
+            Some(value) => value,
+            None => continue,
+        };
+        if fields.len() <= split + 1 || fields.len() < 5 {
+            continue;
+        }
+        if is_unbounded(fields[split + 1]) {
+            out.push(PathBuf::from(OsString::from_vec(unescape_field(fields[4]))));
+        }
+    }
+    out
+}
+
+// The same octal unescaping src/backend/mountinfo.rs does, over the one field this needs.
+fn unescape_field(field: &str) -> Vec<u8> {
+    let bytes = field.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\\' && i + 3 < bytes.len() {
+            let digits = &bytes[i + 1..=i + 3];
+            if digits.iter().all(|b| (b'0'..=b'7').contains(b)) {
+                if let Ok(byte) = u8::try_from(digits.iter().fold(0u32, |v, b| v * 8 + u32::from(b - b'0'))) {
+                    out.push(byte);
+                    i += 4;
+                    continue;
+                }
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    out
 }
 
 pub struct DirSize {
@@ -44,7 +107,20 @@ pub fn walk_cancellable(path: &Path, stop: &AtomicBool) -> DirSize {
         return DirSize { bytes, partial: true };
     }
     let deadline = Instant::now() + Duration::from_millis(DEADLINE_MS);
-    walk_while(path, &|| stop.load(Ordering::Relaxed) || Instant::now() >= deadline)
+    let skip = unbounded_mounts(&mountinfo);
+    walk_guarded(path, &|| stop.load(Ordering::Relaxed) || Instant::now() >= deadline, &skip)
+}
+
+// walk_while with a set of directories it will not descend into, each one marking the total partial.
+pub fn walk_guarded(path: &Path, stop: &dyn Fn() -> bool, skip: &[PathBuf]) -> DirSize {
+    let mut bytes = 0u64;
+    let mut partial = false;
+    match path.symlink_metadata() {
+        Ok(meta) => bytes += meta.size(),
+        Err(_) => partial = true,
+    }
+    walk_into(path, stop, skip, &mut bytes, &mut partial);
+    DirSize { bytes, partial }
 }
 
 pub fn walk_until(path: &Path, deadline: Instant) -> DirSize {
@@ -55,20 +131,17 @@ pub fn walk_until(path: &Path, deadline: Instant) -> DirSize {
 // two seconds; the transfer needs the whole total, however long the tree takes, or it draws no
 // estimate at all, so the stop it is given is its own cancel rather than a deadline.
 pub fn walk_while(path: &Path, stop: &dyn Fn() -> bool) -> DirSize {
-    let mut bytes = 0u64;
-    let mut partial = false;
-    // The target's own directory entry counts too, matching what `du -s` reports for the directory itself.
-    match path.symlink_metadata() {
-        Ok(meta) => bytes += meta.size(),
-        Err(_) => partial = true,
-    }
-    walk_into(path, stop, &mut bytes, &mut partial);
-    DirSize { bytes, partial }
+    walk_guarded(path, stop, &[])
 }
 
 // Recursion, not an explicit stack: a tree deep enough to blow it is not a shape this one box produces.
-fn walk_into(path: &Path, stop: &dyn Fn() -> bool, bytes: &mut u64, partial: &mut bool) {
+fn walk_into(path: &Path, stop: &dyn Fn() -> bool, skip: &[PathBuf], bytes: &mut u64, partial: &mut bool) {
     if stop() {
+        *partial = true;
+        return;
+    }
+    // A mount nothing can measure, reached from an ancestor rather than asked for directly.
+    if skip.iter().any(|mount| mount == path) {
         *partial = true;
         return;
     }
@@ -118,7 +191,7 @@ fn walk_into(path: &Path, stop: &dyn Fn() -> bool, bytes: &mut u64, partial: &mu
         };
         *bytes += meta.size();
         if file_type.is_dir() {
-            walk_into(&entry.path(), stop, bytes, partial);
+            walk_into(&entry.path(), stop, skip, bytes, partial);
         }
     }
 }
@@ -236,6 +309,52 @@ mod tests {
         assert!(refuses(Path::new("/mnt/share"), info));
         assert!(!refuses(Path::new("/home/gm/code"), info), "a local tree is still walked");
         assert!(!refuses(Path::new("/home/gm"), ""), "an unreadable mountinfo refuses nothing");
+    }
+
+    // refuses() answers for the walk root only. Listing /home and asking for the size of the user's
+    // own directory is not refused -- that mount is local -- and walks straight into the cloud mount
+    // inside it, which is the case the first shape of this missed entirely.
+    #[test]
+    fn an_unbounded_mount_below_the_root_is_not_descended_into() {
+        let (_sandbox, d) = fixture("dirsize-nested-mount");
+        let inner = d.join("cloud");
+        fs::create_dir(&inner).unwrap();
+        fs::write(inner.join("big.bin"), vec![0u8; 80_000]).unwrap();
+        let whole = walk_guarded(&d, &|| false, &[]);
+        let guarded = walk_guarded(&d, &|| false, &[inner.clone()]);
+        assert!(!whole.partial, "nothing refused, so the tree is walked whole");
+        assert!(guarded.partial, "a skipped mount makes the total a floor");
+        assert!(
+            guarded.bytes < whole.bytes,
+            "and the skipped subtree is not counted: {} against {}",
+            guarded.bytes,
+            whole.bytes
+        );
+    }
+
+    // The mount points themselves, which is what the walk carries down rather than re-reading
+    // /proc/self/mountinfo for every directory it enters.
+    #[test]
+    fn the_unbounded_mount_points_are_collected_with_their_paths_decoded() {
+        let info = "1 0 8:1 / / rw - btrfs /dev/a rw\n\
+                    2 1 0:9 / /home/gm/My\\040Cloud rw - fuse.rclone remote: rw\n\
+                    3 1 0:10 / /home/gm/code rw - btrfs /dev/a rw\n\
+                    4 1 0:11 / /mnt/nas rw - nfs4 server:/x rw\n";
+        let mounts = unbounded_mounts(info);
+        assert_eq!(mounts.len(), 2, "only the two unbounded ones: {:?}", mounts);
+        assert!(mounts.contains(&PathBuf::from("/home/gm/My Cloud")), "{:?}", mounts);
+        assert!(mounts.contains(&PathBuf::from("/mnt/nas")), "{:?}", mounts);
+    }
+
+    // A local FUSE filesystem is bounded and must still be measured: the prefix rule this replaced
+    // refused mergerfs, gocryptfs, bindfs and squashfuse along with the cloud mounts.
+    #[test]
+    fn a_local_fuse_filesystem_is_still_walked() {
+        let local = "1 0 0:9 / /srv/pool rw - fuse.mergerfs pool rw\n";
+        assert!(!refuses(Path::new("/srv/pool/films"), local));
+        assert!(unbounded_mounts(local).is_empty());
+        let cloud = "1 0 0:9 / /srv/pool rw - fuse.rclone remote: rw\n";
+        assert!(refuses(Path::new("/srv/pool/films"), cloud));
     }
 
     // A refused mount still answers, because the Size cell needs a floor and a marker, not silence.

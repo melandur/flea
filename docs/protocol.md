@@ -810,14 +810,20 @@ recursive apparent size (every entry's own `st_size`, symlinks not followed and 
 own small size rather than their target's), and `ms` is the walk's own wall-clock time. The
 target's own directory entry counts too, matching what `du -s` reports for the directory itself.
 
-**`partial` is true when the 2000&nbsp;ms deadline cut the walk short, or a subtree inside it
-answered permission denied.** Either way `bytes` is a floor, honestly labelled, never a wrong
-exact number: everything the walk actually saw before it had to stop is still counted. The
-shipped client renders a partial answer with a leading `>`.
+**`partial` is true when the 250&nbsp;ms deadline cut the walk short, a subtree inside it
+answered permission denied, or it reached a mount that cannot be bounded.** Either way `bytes`
+is a floor, honestly labelled, never a wrong exact number: everything the walk actually saw
+before it had to stop is still counted. The shipped client renders a partial answer with a
+leading `>`. **A partial answer is never remembered**, so the next ask walks again rather than
+freezing one arbitrary floor for the session: which floor a timed-out walk reaches depends on
+what the page cache happened to hold, and the same `/usr/lib` answered 1.4 GB cold and 3.3 GB warm.
 
-**A result for a superseded listing is dropped, never reported against the current one.** A
-`list` or a `sort` clears the answered-row cache and cancels the queue, the same rule and the
-same reason `thumbed` follows: both change which row an index names.
+**A result for a superseded listing is dropped, never reported against the current one**, and so
+is one from a walk a `dirsizecancel` abandoned: both are recognised on the way back rather than
+waited for. What a `list` or a `sort` cancels is the queue and the walk in flight. It no longer
+discards the answers, which are keyed by path; those are held until the directory's own mtime
+moves, until the watch reports the listed directory changed, or until ten seconds pass,
+whichever comes first.
 
 ### transferstarted
 

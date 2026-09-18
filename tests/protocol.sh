@@ -397,6 +397,35 @@ out=$(dirsize_run \
 check "returning to a directory answers its size again" "2" "$(echo "$out" | grep -c '"t":"dirsized"')"
 check "and the second answer came from the cache rather than a second walk" "1" "$(echo "$out" | grep -c '"ms":0.000')"
 
+# ...but only while the answer is still true. Nothing tells this process that a tree it measured has
+# changed, so a remembered answer is checked against the directory's own mtime before it is given
+# back. Without that, writing into a measured folder left the Size column reporting the old number as
+# an exact, final size: 1 kB for a directory holding 50 MB.
+printf 'abcdefghij' > "$DZ/sub/grew.txt"
+out=$(dirsize_run \
+    "$(printf '{"c":"list","path":"%s","first":10}\n{"c":"dirsize","rows":[0]}\n' "$DZ")" \
+    "$(printf '{"c":"quit"}\n')")
+first=$(echo "$out" | grep -oE '"bytes":[0-9]+' | head -1 | cut -d: -f2)
+printf '%0500d' 0 > "$DZ/sub/grew.txt"
+out=$(dirsize_run "$(printf '{"c":"list","path":"%s","first":10}\n{"c":"dirsize","rows":[0]}\n' "$DZ")")
+second=$(echo "$out" | grep -oE '"bytes":[0-9]+' | head -1 | cut -d: -f2)
+[ -n "$first" ] && [ -n "$second" ] && [ "$second" -gt "$first" ] 2>/dev/null
+check "a directory that grew is measured again rather than answered from the cache" "0" "$?"
+check "and the re-measure was a real walk, not a cached zero" "0" "$(echo "$out" | grep -c '"ms":0.000')"
+
+# A partial answer is a floor, and which floor depends on what the page cache held, so it is never
+# remembered: the next ask walks again rather than freezing one arbitrary number for the session.
+mkdir -p "$DZ/denied/inner"
+printf 'abc' > "$DZ/denied/inner/x.txt"
+chmod 000 "$DZ/denied/inner"
+# denied sorts before sub, so it is row 0 once it exists.
+out=$(dirsize_run \
+    "$(printf '{"c":"list","path":"%s","first":10}\n{"c":"dirsize","rows":[0]}\n' "$DZ")" \
+    "$(printf '{"c":"dirsize","rows":[0]}\n')")
+chmod 755 "$DZ/denied/inner"
+check "a refused subtree answers partial" "2" "$(echo "$out" | grep -c '"partial":true')"
+check "and a partial answer is never served from the cache" "0" "$(echo "$out" | grep -c '"ms":0.000')"
+
 # list and sort both reassign what a row index names, the same reason a list or a sort clears the thumbnail map, see docs/protocol.md "dirsized".
 SZ_SB="$FIXTURE_ROOT/flea-dirsize-sort-test-$$"
 SZ="$SZ_SB/tree"

@@ -112,6 +112,9 @@ Item {
     Connections {
         target: ViewState
         function onThumbnailModeChanged() { if (root.visible) settle.restart() }
+        // Without this, switching folder sizes back on left every directory row showing its dash
+        // until the operator happened to scroll, resize or navigate.
+        function onFolderSizesChanged() { if (root.visible) settle.restart() }
     }
 
     Timer {

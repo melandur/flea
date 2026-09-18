@@ -1501,6 +1501,32 @@ queue too, not only thumbnails. What it no longer invalidates is the answers: `s
 keyed by path rather than by row index, so a sort renames nothing in it and returning to a
 directory already measured is answered from it rather than walked again.
 
+**That cache is the dangerous half of the change and was shipped wrong once.** Keying by path
+removed the re-walk on every listing, and with it the only invalidation there was: a directory
+measured at 1 kB read back as an exact 1 kB after 50 MB was written into it, for the life of the
+process. Nothing tells this process that a tree changed — the watch is on the directory being
+listed, not on what is under each row. Three things bound it now, and all three are needed. The
+directory's own `mtime` is read before the walk and re-checked on every cache hit, which catches
+anything written or removed directly inside it. `Event::Changed` drops every entry whose parent is
+the listed directory. `FRESH`, ten seconds, bounds the one case neither covers: a change deeper
+down, which moves no mtime anything here is holding. A **partial** answer is never remembered at
+all, because which floor a timed-out walk reaches depends on what the page cache held — the same
+`/usr/lib` answered 1.4 GB cold and 3.3 GB warm — and remembering one would freeze an arbitrary
+number for the session.
+
+Two more traps the same shape. `refuses()` answers for the walk *root*, so a walk of `/home`
+descends into a cloud mount two levels down without ever asking again: `unbounded_mounts()`
+collects every such mount point once per walk and `walk_into` refuses to enter one. And the type
+list is named rather than a `fuse.` prefix, which refused mergerfs, gocryptfs, bindfs and
+squashfuse — all local and bounded — along with the cloud mounts. An unlisted slow mount is no
+longer a hazard, only slow: one deadline, off the loop, and never remembered.
+
+`dirsize_running` is cleared in exactly one place, on the report coming back, so a worker wedged in
+a `getdents` that never returns would hold it true forever and no `dirsize` would be answered again
+for the life of the process. `dirsize_generation` is the way out: every cancel bumps it and frees
+the flag at once, and a result carrying a stale generation is dropped rather than believed. Every
+`list` and every navigation reaches `cancel_dirsizes`, so the queue always has a way back.
+
 `src/backend/thumbs.rs` is 393 lines by `wc -l`, over the soft budget and under the hard cap. Its
 `#[cfg(test)]` is at line 250, so 144 of those are the test module, and that is where the cost sits: proving cancellation without a
 race needs a worker pinned inside a real child, and the round trip through a real thumbnailer,
