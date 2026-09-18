@@ -1197,6 +1197,15 @@ close so a newly installed application is in the list next time. A File types ru
 `ui/SettingsFavourite.qml`, the same component a favourite and a shelf pin use, with the drag grip
 hidden: a favourite's order is the operator's and a rule's is its ending's length.
 
+**The rail's NETWORK heading is drawn whenever the Network built-in is on, empty list or not.** It
+used to hide with its own rows, the way DEVICES and FAVORITES still do, and that heading is the only
+way into the connect dialog: a box with nothing mounted and nothing in the bookmarks file had no
+door to add its first place through, which is what the operator hit on 2026-09-18 with a screenshot
+of a rail showing PLACES and DEVICES and no NETWORK at all. `ui/Sidebar.qml` `networkShown` is the
+switch it follows now, Settings > Places > Built in > Network, which is the operator's own answer
+rather than a count of what happens to be mounted. A heading that carries an action cannot be
+allowed to self-hide; one that carries only a label may.
+
 **A network password is the connection's alone until Settings > Places says otherwise.**
 `tools/flea-gio-auth` answered GIO's own "Store password? [never/session/permanent]" prompt with
 `never` from the day it was written, which is the right default for a file manager and the wrong

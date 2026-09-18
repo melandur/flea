@@ -48,6 +48,9 @@ Item {
     // And the request that Edit's own attempt went out with, so no other mount answers for it.
     property string editingRequest: ""
     readonly property var networkEntries: root.placesState.showNetwork === false ? [] : mounts.entries
+    // Whether the NETWORK group is drawn at all, which is the operator's own switch and not a count:
+    // Settings > Places > Built in > Network is what takes the heading, its plus and its rows away.
+    readonly property bool networkShown: root.placesState.showNetwork !== false
     // The poll rebinds its delegates in place, so a rename left standing would edit a different share.
     onNetworkEntriesChanged: root.cancelRename()
     // Phones ride the DEVICES group behind the block devices: a plugged phone is a device to the person holding it, whatever transport gvfs reaches it over.
@@ -406,14 +409,17 @@ Item {
 
             // The OEM panel idiom's own group gap, not the tighter row-to-row rhythm rows keep inside a group.
             Item {
-                visible: root.networkEntries.length > 0
+                visible: root.networkShown
                 width: rail.width
                 height: Style.spacing.panelGap
             }
 
-            // Self-hides with its list below when gio, the bookmarks file and Dropbox all have nothing to say.
+            // Shown whenever the Network built-in is on, empty list or not: the heading carries the
+            // only way into the connect dialog, and it used to hide with its own rows, so a box with
+            // nothing mounted and nothing bookmarked had no door to add the first place through —
+            // the operator hit exactly that on 2026-09-18. DEVICES may self-hide; this one may not.
             Item {
-                visible: root.networkEntries.length > 0
+                visible: root.networkShown
                 width: rail.width
                 height: netHeading.implicitHeight + Style.spacing.rowGap
 
