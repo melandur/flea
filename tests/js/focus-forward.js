@@ -89,9 +89,35 @@ function run(check) {
           Focus.handleKey(right, unloaded, sidebar()) + "|" + unloaded.said, "true|")
     check("unloaded handling still asks only for the held cursor row", unloaded.rowsRead.join(","), "37")
 
+    // The rail's Right is an open that takes the keyboard with it, which is the 2026-09-18 ruling:
+    // opening a place from the sidebar used to leave the cursor there and cost a second press to
+    // reach the listing it had just opened. Enter keeps the old behaviour, so a walk down PLACES can
+    // still open one place after another.
     var rail = pane(null, "rail")
-    check("right activates the selected rail row", Focus.lookup(right, rail), "open")
+    check("right opens the selected rail row and goes in", Focus.lookup(right, rail), "openInto")
     check("rail lookup does not inspect the hidden listing", rail.rowsRead.length, 0)
+
+    var railHandled = handlePane(null)
+    railHandled.focusView = "rail"
+    var railSidebar = sidebar()
+    railSidebar.entries = [{ kind: "favourite" }]
+    railSidebar.cursorIndex = 0
+    railSidebar.opened = 0
+    railSidebar.activate = function () { railSidebar.opened += 1 }
+    check("and the press both opens the place and hands the listing the keyboard",
+          Focus.handleKey(right, railHandled, railSidebar) + "|" + railSidebar.opened + "|" + railHandled.focusView,
+          "true|1|list")
+
+    // A rail with nothing in it has nothing to open, so the keyboard stays where it is rather than
+    // being handed to a listing the press never reached.
+    var emptyRail = handlePane(null)
+    emptyRail.focusView = "rail"
+    var emptySidebar = sidebar()
+    emptySidebar.entries = []
+    emptySidebar.cursorIndex = 0
+    emptySidebar.activate = function () { emptySidebar.opened = true }
+    check("an empty rail keeps the keyboard",
+          Focus.handleKey(right, emptyRail, emptySidebar) + "|" + emptyRail.focusView, "true|rail")
 
     var share = pane({ d: false })
     share.shareBrowser.active = true

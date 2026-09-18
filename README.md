@@ -215,7 +215,8 @@ Press **?** for the full keymap, or **,** to change settings.
 | Split the window in two, or join it | `Ctrl+T` |
 | Context menu | `m`, `Menu` or `Shift+F10` |
 | Settings / keymap sheet | `,` / `?` |
-| Move focus | `Tab` |
+| Move focus between the sidebar and the list | `Tab` |
+| Open a sidebar place, and go into it | `Enter` / `→` |
 
 That is the whole keyboard: the four arrows, the Ctrl chords and a handful of named keys. Nothing
 else is bound, and there is one preset rather than four. Everything the old bare letters reached —

@@ -16,7 +16,15 @@ function act(action, root, sidebar) {
     case "cursorFirst": sidebar.cursorIndex = 0; return
     case "cursorLast": sidebar.cursorIndex = Math.max(0, sidebar.entries.length - 1); return
     // activate(), not a direct opened(path): a Network entry may need mounting first.
-    case "open": if (sidebar.entries.length > 0) sidebar.activate(sidebar.cursorIndex); return
+    // Two spellings of the one action, and Focus.handleKey is what tells them apart afterwards:
+    // Enter opens the place and leaves the cursor in the rail, so a walk down PLACES can open one
+    // after another, and Right opens it and hands the keyboard to the listing, which is what Right
+    // means everywhere else in this window -- go in. The operator's ruling of 2026-09-18: "when in
+    // side view and arrow right open go directly with active selection to the opened folder".
+    case "open":
+    case "openInto":
+        if (sidebar.entries.length > 0) sidebar.activate(sidebar.cursorIndex)
+        return
     // Focus.LIST's own value, written out because importing Focus.js back would be a cycle.
     case "escape":
         if (root.statusBar && root.statusBar.escapePressed()) return

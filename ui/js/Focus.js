@@ -57,7 +57,12 @@ function lookup(event, root) {
     // Right browses in, and on a file row that is the preview. An open preview never reaches this,
     // because Right resolves to previewForward in all three of its contexts first.
     if (action === "pageForward") {
-        if (shareBrowserHere(root) || root.focusView === RAIL)
+        // The rail's own Right: an open that takes the keyboard into what it opened, which is what
+        // ui/js/RailKeys.js and handleKey below read the second name for. The share browser has no
+        // listing of its own to hand anything to, so it keeps the plain open.
+        if (root.focusView === RAIL)
+            return "openInto"
+        if (shareBrowserHere(root))
             return "open"
         var row = root.rowFor(root.cursorIndex)
         return row && (row.d || (Format.isSymlink(row.p) && row.i === "folder")) ? "open" : (row ? "preview" : "")
@@ -320,6 +325,9 @@ function handleKey(event, root, sidebar) {
     }
     if (root.focusView === RAIL && sidebar) {
         RailKeys.act(action, root, sidebar)
+        // Right opened the place, so the listing is where the next key belongs: the cursor is
+        // already on a row there, which is what makes this one press instead of two.
+        if (action === "openInto" && sidebar.entries.length > 0) root.focusView = LIST
         return true
     }
     if (Grid.arrow(event, action, root)) return true

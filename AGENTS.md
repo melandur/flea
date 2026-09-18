@@ -1204,6 +1204,18 @@ had bound its own F5 long before the listing had one. It is not a navigation: `u
 `pendingSelect`, so a reload lands on the row it left rather than on the first one. Measured here: a
 folder created behind an open window appeared on the press, with the cursor still on its own row.
 
+**Right in the rail opens the place and takes the keyboard into it; Enter opens it and stays.** The
+operator's ruling of 2026-09-18: "when in side view and arrow right open go directly with active
+selection to the opened folder". Both were one action before, so opening a place from the sidebar
+left the cursor there and cost a second Tab to reach the listing it had just opened. `ui/js/Focus.js`
+`lookup` gives the rail's Right its own name, `openInto`, `ui/js/RailKeys.js` answers it exactly as
+it answers `open` -- `sidebar.activate`, because a network row may need mounting first -- and
+`handleKey` is what moves `focusView` afterwards. Enter keeps the old behaviour on purpose: a walk
+down PLACES opening one place after another is a real thing to want, and Right already means "go in"
+everywhere else in this window. **An empty rail keeps the keyboard**, because there was nothing to
+open and a listing nobody opened is not somewhere to put the cursor. The share browser's own Right
+keeps the plain `open`: it has no listing of its own to hand anything to.
+
 **A credentialed connect that failed is asked to prove it, because "already mounted" is not a
 refused password.** The operator's screenshot of 2026-09-18: SFTP to submit02.unibe.ch with a path,
 a right password, and "Connect failed: authentication was refused". Measured here against their live
