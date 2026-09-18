@@ -64,6 +64,9 @@ Item {
     readonly property bool modeShown: !root.searching && root.cols.mode
     // The search column set keeps Size and drops the other three, so only this one ignores searching.
     readonly property bool sizeShown: root.cols.size
+    // Only a directory has children to count, but the column is drawn for every row so the numbers
+    // line up: a file's cell is empty, the way its Size cell is never a folder's walked total.
+    readonly property bool itemsShown: !root.searching && root.cols.items
     readonly property bool dateShown: !root.searching && root.cols.date
     readonly property bool kindShown: !root.searching && root.cols.kind
 
@@ -242,9 +245,25 @@ Item {
     }
 
     Text {
-        id: size
+        id: items
         anchors.right: modified.left
         anchors.rightMargin: root.dateShown && !root.dualMode ? Theme.spacing.gap : 0
+        anchors.verticalCenter: parent.verticalCenter
+        visible: root.itemsShown && !root.dropTarget
+        width: root.itemsShown ? Theme.column.items : 0
+        text: root.row ? root.itemsText() : ""
+        color: root.cellColor()
+        font.family: Theme.font.family
+        font.pixelSize: Theme.font.caption
+        horizontalAlignment: Text.AlignRight
+        elide: Text.ElideRight
+        textFormat: Text.PlainText
+    }
+
+    Text {
+        id: size
+        anchors.right: items.left
+        anchors.rightMargin: root.itemsShown && !root.dualMode ? Theme.spacing.gap : 0
         anchors.verticalCenter: parent.verticalCenter
         visible: root.sizeShown && !root.dropTarget
         width: root.sizeShown ? root.sizeWidth : 0
@@ -342,10 +361,24 @@ Item {
         if (!root.row.d) {
             return Format.size(root.row.s)
         }
-        if (!root.dirSize) {
+        // The walk is asked for by the Items column too now, so its answer carries a size even when
+        // the operator has switched folder sizes off; the setting decides what the Size cell says,
+        // not whether an answer happens to be in hand.
+        if (!root.dirSize || !ViewState.folderSizes) {
             return "·"
         }
         return (root.dirSize.partial ? ">" : "") + Format.size(root.dirSize.bytes)
+    }
+
+    // The directory's own children, from the same walk the Size cell reads: "·" while it is out or
+    // never asked, and empty for a row that is not a directory at all, because a file's children are
+    // not zero, they are not a thing. A link is not followed, so it has none either.
+    function itemsText() {
+        if (!root.row.d || Format.isSymlink(root.row.p))
+            return ""
+        if (!root.dirSize || root.dirSize.entries === null || root.dirSize.entries === undefined)
+            return "·"
+        return String(root.dirSize.entries)
     }
 
     // The window's one stamp, or the picker's compact three; both are cell text and nothing more.
@@ -398,6 +431,7 @@ Item {
         switch (key) {
         case "mode": return mode
         case "size": return size
+        case "items": return items
         case "date": return modified
         case "kind": return kind
         }

@@ -131,6 +131,8 @@ Singleton {
         // mode is a permanent column per the operator's ruling; Row and Header both read this width.
         readonly property int mode: Math.round(root.modeChars * glyphMetrics.advanceWidth)
         readonly property int size: Math.round(root.sizeChars * glyphMetrics.advanceWidth)
+        // The Items count: six digits is a million children, which no directory on this box has.
+        readonly property int items: Math.round(root.itemsChars * glyphMetrics.advanceWidth)
         readonly property int date: Math.round(root.dateChars * glyphMetrics.advanceWidth)
         // Trash's Deleted column: the same sixteen characters in the size that draws them, ceil because a rounded width elides at base 14.
         readonly property int trashDate: Math.ceil(root.dateChars * bodyGlyphMetrics.advanceWidth)
@@ -214,6 +216,7 @@ Singleton {
     // characters holds 84.5% of a 25,473-name sample of /usr/bin, /usr/include,
     // /usr/share/applications and this repo whole, and every further two buys under five points.
     readonly property int nameMinChars: 20
+    readonly property int itemsChars: 6
 
     // DualPane specifies these slots at bodySmall 13; mark, gap and padding remain shared tokens.
     readonly property QtObject dualColumn: QtObject {
@@ -267,7 +270,7 @@ Singleton {
     readonly property var columnTokens: ({
         rowPaddingX: root.spacing.rowPaddingX, gap: root.spacing.gap, iconSize: root.iconSize,
         nameMin: root.column.nameMin, mode: root.column.mode,
-        size: root.column.size, date: root.column.date, kind: root.column.kind
+        size: root.column.size, items: root.column.items, date: root.column.date, kind: root.column.kind
     })
     function columnSet(dateWidth) { return dateWidth === undefined ? root.columnTokens : Object.assign({}, root.columnTokens, {date: dateWidth}); }
     function columns(width, hidden, dateWidth) { return Columns.set(width, root.columnSet(dateWidth), hidden); }

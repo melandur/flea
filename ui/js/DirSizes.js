@@ -57,11 +57,14 @@ function cancelled(state) {
 }
 
 // The cap bounds a policy bug, not normal use, the same reason ui/js/Thumbs.js has one; callers pass Pane's own thumbCap.
-function remember(state, row, bytes, partial, cap) {
+// entries is the directory's own child count, which the same walk answered: -1 off the wire is a
+// directory whose entries could not be read, and it is kept as null so the Items cell can tell that
+// from a folder measured as empty.
+function remember(state, row, bytes, partial, entries, cap) {
     if (state.file[row] === undefined) {
         state.order.push(row)
     }
-    state.file[row] = { bytes: bytes, partial: partial }
+    state.file[row] = { bytes: bytes, partial: partial, entries: entries >= 0 ? entries : null }
     while (state.order.length > cap) {
         delete state.file[state.order.shift()]
     }

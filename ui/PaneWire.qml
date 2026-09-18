@@ -259,9 +259,9 @@ Item {
         }
 
         // A dirsized line for the previous listing is still in the pipe when open() clears the map.
-        function onDirSized(row, bytes, partial) {
+        function onDirSized(row, bytes, partial, entries) {
             if (!pane.listInFlight)
-                pane.dirSizeState = DirSizes.remember(pane.dirSizeState, row, bytes, partial, pane.thumbCap)
+                pane.dirSizeState = DirSizes.remember(pane.dirSizeState, row, bytes, partial, entries, pane.thumbCap)
         }
 
         // Sample input: {"t":"transferstarted","id":12,"n":2,"moving":true}

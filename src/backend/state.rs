@@ -37,7 +37,9 @@ pub struct State {
     // them: returning to a folder used to re-walk it whole, 2679 ms every time on this box. The
     // Instant is what bounds how wrong that can get, because nothing here is told when a tree
     // changes: only a complete walk is kept, and only until it goes stale.
-    pub dirsizes: HashMap<PathBuf, (u64, Instant, Option<std::time::SystemTime>)>,
+    // bytes, the directory's own child count, when it was measured, and the mtime it was measured
+    // at; the count rides the same entry because the same walk answered both.
+    pub dirsizes: HashMap<PathBuf, (u64, Option<u64>, Instant, Option<std::time::SystemTime>)>,
     // Rows still to walk, one at a time; dirsizecancel empties this without touching dirsizes.
     pub dirsize_queue: Vec<usize>,
     // Whether a walker thread is out. One at a time is still the rule; the one is no longer the loop.

@@ -437,7 +437,7 @@ QtObject {
             var item = root.pane.itemFor(i)
             if (!item)
                 return ""
-            var keys = ["mode", "size", "date", "kind"]
+            var keys = ["mode", "size", "items", "date", "kind"]
             var flags = []
             for (var k = 0; k < keys.length; k++) {
                 var cell = item.cell(keys[k])
@@ -445,12 +445,9 @@ QtObject {
             }
             return flags.join("|")
         }
-        // The rendered Size cell text; describe() keeps the row's raw s so existing rowAt assertions keep their meaning.
-        function rowSizeText(i: int): string {
-            var item = root.pane.itemFor(i)
-            var cell = item ? item.cell("size") : null
-            return cell ? cell.text : ""
-        }
+        // The rendered text of one cell; describe() keeps the row's raw s so existing rowAt assertions keep their meaning. Items is the directory's own child count, which no screenshot reads back reliably.
+        function rowCellText(i: int, key: string): string { var item = root.pane.itemFor(i); var cell = item ? item.cell(key) : null; return cell ? cell.text : "" }
+        function rowSizeText(i: int): string { return root.seam.rowCellText(i, "size") }
         function headerTitles(): string { return root.pane.header.titles() }
         function sortMark(): string { return root.pane.header.sortBy + ":" + (root.pane.header.sortDesc ? "desc" : "asc") }
         // Four siblings share one parent, so plain x/width already agree; itemRect reads a Text's painted bounds, not its anchored box.

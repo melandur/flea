@@ -346,7 +346,11 @@ being deduplicated against the job that was just dropped.
 Example: `{"c":"dirsize","rows":[4,9]}`
 
 Asks for the recursive apparent size of those row indices, and answers one `dirsized` line
-per row that names a directory. **This is the only thing that ever walks a directory looking
+per row that names a directory. Each answer also carries `entries`, the number of children the
+directory itself holds, counted by one `read_dir` of that directory and not by the recursion:
+that is what the Items column draws, it is exact even on a walk the deadline stopped, and `-1`
+is a directory whose entries could not be read at all, which the column draws as nothing rather
+than as a zero nobody measured. **This is the only thing that ever walks a directory looking
 for size**, the same rule `thumb` follows for thumbnails: a row no client named is never
 walked. A row that is not a directory, or past the end of the listing, is skipped in silence.
 
@@ -367,7 +371,9 @@ directory costs nothing; a row already queued costs nothing extra either.
 **What the shipped client sends.** `ui/List.qml` sends `dirsize` only when the list settles, the
 same 120&nbsp;ms timer `thumb` already waits on, so a fling issues nothing at all. One request
 names only the directory rows currently visible and not already known, and only while the
-`folderSizes` setting is on. `ui/js/Nav.js` sends `dirsizecancel` on every navigation, so the
+`folderSizes` setting is on or the Items column is drawn: the count and the size are one answer,
+so either column asking is the walk being asked for. What the Size cell then SAYS still follows
+the setting alone, so a count on screen never turns folder sizes back on behind it. `ui/js/Nav.js` sends `dirsizecancel` on every navigation, so the
 click that leaves a directory ends the walk it asked for rather than queueing behind it.
 
 ### dirsizecancel

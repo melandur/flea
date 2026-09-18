@@ -84,10 +84,24 @@ Item {
         text: root.title("Mode", "mode")
     }
 
+    // No TapHandler: nothing sorts by a count, because ui/js/Sort.js has no order for one and a
+    // header that answered a click with nothing would read as a column that had lost its sort.
     PanelSectionHeader {
-        id: headerSize
+        id: headerItems
         anchors.right: headerDate.left
         anchors.rightMargin: root.cols.date && !root.dualMode ? Theme.spacing.gap : 0
+        anchors.verticalCenter: parent.verticalCenter
+        visible: root.cols.items
+        width: root.cols.items ? Theme.column.items : 0
+        text: "Items"
+        horizontalAlignment: Text.AlignRight
+        elide: Text.ElideRight
+    }
+
+    PanelSectionHeader {
+        id: headerSize
+        anchors.right: headerItems.left
+        anchors.rightMargin: root.cols.items && !root.dualMode ? Theme.spacing.gap : 0
         anchors.verticalCenter: parent.verticalCenter
         visible: root.cols.size
         width: root.cols.size ? root.sizeWidth : 0
@@ -150,7 +164,7 @@ Item {
 
     // What the header case reads, built from the same values the header renders.
     function titles() {
-        return "Name|Mode|Size|Modified|Kind"
+        return "Name|Mode|Size|Items|Modified|Kind"
     }
 
     // What the header is drawing right now, for the seam that reads it beside a row's.
@@ -162,6 +176,7 @@ Item {
         case "name": return headerName
         case "mode": return headerMode
         case "size": return headerSize
+        case "items": return headerItems
         case "date": return headerDate
         case "kind": return headerKind
         }

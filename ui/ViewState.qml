@@ -39,7 +39,7 @@ QtObject {
     readonly property var columns: Array.isArray(root.state.columns) ? root.state.columns : root.defaultColumns
     readonly property var hiddenCols: {
         var out = []
-        var optional = ["mode", "size", "date", "kind"]
+        var optional = ["mode", "size", "items", "date", "kind"]
         for (var i = 0; i < optional.length; i++) {
             if (root.columns.indexOf(optional[i]) < 0)
                 out.push(optional[i])

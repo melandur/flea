@@ -91,6 +91,18 @@ fn unescape_field(field: &str) -> Vec<u8> {
 pub struct DirSize {
     pub bytes: u64,
     pub partial: bool,
+    // The directory's OWN children, counted without descending: what a file manager's Items column
+    // means, and what `ls -A | wc -l` answers. None is a directory whose entries could not be read
+    // at all, which the column draws as nothing rather than as a zero it did not measure. Counted
+    // by its own read_dir rather than inside the recursion below, so a walk the deadline stopped
+    // still answers an exact count beside its partial total.
+    pub entries: Option<u64>,
+}
+
+// Hidden children included: the count is of what the directory holds, not of what a listing with
+// the operator's current Show hidden files setting happens to draw.
+fn children(path: &Path) -> Option<u64> {
+    Some(std::fs::read_dir(path).ok()?.filter_map(Result::ok).count() as u64)
 }
 
 // walk_until is the testable core: a test passes an already-past deadline to force partial without waiting.
@@ -104,7 +116,8 @@ pub fn walk_cancellable(path: &Path, stop: &AtomicBool) -> DirSize {
     let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
     if refuses(path, &mountinfo) {
         let bytes = path.symlink_metadata().map(|m| m.size()).unwrap_or(0);
-        return DirSize { bytes, partial: true };
+        // A refused mount is not descended into, and its own children are still countable.
+        return DirSize { bytes, partial: true, entries: children(path) };
     }
     let deadline = Instant::now() + Duration::from_millis(DEADLINE_MS);
     let skip = unbounded_mounts(&mountinfo);
@@ -120,7 +133,7 @@ pub fn walk_guarded(path: &Path, stop: &dyn Fn() -> bool, skip: &[PathBuf]) -> D
         Err(_) => partial = true,
     }
     walk_into(path, stop, skip, &mut bytes, &mut partial);
-    DirSize { bytes, partial }
+    DirSize { bytes, partial, entries: children(path) }
 }
 
 pub fn walk_until(path: &Path, deadline: Instant) -> DirSize {
@@ -367,9 +380,12 @@ mod tests {
         // walk_cancellable reads the real /proc/self/mountinfo, where this fixture is a plain tree,
         // so the refusal itself is asserted above and this is the shape the answer takes.
         let own = fs::symlink_metadata(&d).unwrap().size();
-        let answered = DirSize { bytes: own, partial: true };
+        let answered = DirSize { bytes: own, partial: true, entries: children(&d) };
         assert_eq!(answered.bytes, own);
         assert!(answered.partial);
+        // The children of a mount nothing can measure are still countable, which is the whole
+        // reason the count is its own read_dir rather than a number the recursion accumulates.
+        assert_eq!(answered.entries, Some(1));
     }
 
     // Issue: only the scroll handlers cancelled a walk, so a navigation waited for one it would discard.

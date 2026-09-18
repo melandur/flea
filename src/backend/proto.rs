@@ -209,8 +209,11 @@ pub fn thumbed_line(row: usize, file: &str, ms: f64) -> String {
 
 // partial is true when the 250 ms deadline cut the walk short, a subtree refused, or an unbounded
 // mount was reached, see docs/protocol.md "dirsized".
-pub fn dirsized_line(row: usize, bytes: u64, partial: bool, ms: f64) -> String {
-    format!(r#"{{"t":"dirsized","row":{},"bytes":{},"partial":{},"ms":{:.3}}}"#, row, bytes, partial, ms)
+pub fn dirsized_line(row: usize, bytes: u64, partial: bool, entries: Option<u64>, ms: f64) -> String {
+    // entries is the directory's own child count for the Items column, and -1 is a directory whose
+    // entries could not be read: the column draws nothing for it rather than a zero nobody measured.
+    format!(r#"{{"t":"dirsized","row":{},"bytes":{},"partial":{},"entries":{},"ms":{:.3}}}"#,
+        row, bytes, partial, entries.map(|n| n as i64).unwrap_or(-1), ms)
 }
 
 // Sample output: {"t":"paths","paths":["/home/gm/a.txt","/home/gm/b.txt"]}

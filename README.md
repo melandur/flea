@@ -99,6 +99,10 @@ If you previously pinned another directory handler, restore that handler explici
   <img src="docs/images/list.png" width="49%" alt="Columns view with the preview column, file details and the iPhone on the Devices rail">
 </p>
 
+Right-click the column header, or open Settings → View → Columns, to switch a column on: Mode,
+Size, **Items** — how many children a folder holds — Modified and Kind. The count comes from the
+same walk the Size column reads, so a folder answers both at once.
+
 Turn on **File type marks and colours** in Settings → Display and a row's mark and ink come from its
 name rather than from its MIME class, so `.json`, `.toml` and `.md` stop sharing one document mark.
 The marks are Flea's own lucide set; the colours are yazi's table, which is

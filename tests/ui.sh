@@ -3479,7 +3479,7 @@ case_header() {
     mark=$(ipc sortMark)
     printf 'HEADER titles=%s mark=%s\n' "$titles" "$mark"
     shot header
-    [[ "$titles" == "Name|Mode|Size|Modified|Kind" ]] || fail "header: titles are $titles"
+    [[ "$titles" == "Name|Mode|Size|Items|Modified|Kind" ]] || fail "header: titles are $titles"
     [[ "$mark" == "name:asc" ]] || fail "header: the sort mark reads $mark"
 
     # Gaps are anchored constants, so this only guards the wiring; overflow is guarded per cell in case_overflow.
@@ -3493,7 +3493,12 @@ case_header() {
         "$name_x" "$name_w" "$mode_x" "$mode_w" "$size_x" "$size_w" "$date_x" "$date_w" "$kind_x" "$kind_w"
     (( mode_x >= name_x + name_w )) || fail "header: mode starts at $mode_x, before name ends at $((name_x + name_w))"
     (( size_x >= mode_x + mode_w )) || fail "header: size starts at $size_x, before mode ends at $((mode_x + mode_w))"
-    (( date_x >= size_x + size_w )) || fail "header: date starts at $date_x, before size ends at $((size_x + size_w))"
+    # Items sits between Size and Modified, and it is off in the shipped defaults, so its cell has
+    # no width here: what this guards is that the chain still runs left to right through it.
+    local items_x items_w
+    IFS='|' read -r items_x items_w <<< "$(ipc headerCellRect items)"
+    (( items_x >= size_x + size_w )) || fail "header: items starts at $items_x, before size ends at $((size_x + size_w))"
+    (( date_x >= items_x + items_w )) || fail "header: date starts at $date_x, before items ends at $((items_x + items_w))"
     (( kind_x >= date_x + date_w )) || fail "header: kind starts at $kind_x, before date ends at $((date_x + date_w))"
 
     kill_flea

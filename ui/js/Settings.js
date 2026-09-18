@@ -361,9 +361,11 @@ function aboutRows(facts) {
 function columnRows(state) {
     var columns = (state.data || {}).columns || ["name", "size", "date"]
     var rows = [{ kind: "group", label: "Columns" }, { kind: "lock", label: "Name", glyph: "file" }]
-    for (var i = 0; i < 4; i++) {
-        var id = ["mode", "size", "date", "kind"][i]
-        rows.push({ kind: "check", id: "column:" + id, label: ["Mode", "Size", "Date", "Kind"][i], on: columns.indexOf(id) >= 0 })
+    // Items is the directory's own child count, which the header's right-click menu offers too.
+    var ids = ["mode", "size", "items", "date", "kind"]
+    var labels = ["Mode", "Size", "Items", "Date", "Kind"]
+    for (var i = 0; i < ids.length; i++) {
+        rows.push({ kind: "check", id: "column:" + ids[i], label: labels[i], on: columns.indexOf(ids[i]) >= 0 })
     }
     rows.push({ kind: "action", id: "backView", label: "Back to View", value: "Back" })
     return rows

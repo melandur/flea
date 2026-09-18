@@ -9,7 +9,9 @@
 // The optional columns, widest first, which is the order they drop in. Kind goes first: the row
 // already marks its kind with a glyph and most names carry the extension, so it is the most
 // redundant column as well as the widest. Mode goes last, because it is the permanent column.
-var DROP_ORDER = ["kind", "date", "size", "mode"]
+// items is the directory's own child count: narrow, and only directories draw one, so it outlives
+// the date it sits beside and drops before Size, the column every row has something to say in.
+var DROP_ORDER = ["kind", "date", "items", "size", "mode"]
 
 // The row width each optional column needs before it is drawn, keyed by column. t carries the
 // tokens ui/Theme.qml resolved: rowPaddingX, gap, iconSize, nameMin, and one width per column.
@@ -39,6 +41,7 @@ function set(width, t, hidden) {
     return {
         mode: width >= f.mode && !h["mode"],
         size: width >= f.size && !h["size"],
+        items: width >= f.items && !h["items"],
         date: width >= f.date && !h["date"],
         kind: width >= f.kind && !h["kind"]
     }
@@ -50,7 +53,9 @@ function dualSet(width, t, hidden) {
     var showSize = (hidden || []).indexOf("size") < 0 && width >= base + t.size
     var showDate = (hidden || []).indexOf("date") < 0
         && width >= base + (showSize ? t.size : 0) + t.date
-    return {mode: false, kind: false, size: showSize, date: showDate}
+    // The split's panes are half a window wide, so they carry the two columns the board names and
+    // no more; Items is one of the three a dual pane never draws.
+    return {mode: false, kind: false, items: false, size: showSize, date: showDate}
 }
 
 function names(s) {

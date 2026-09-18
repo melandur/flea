@@ -36,6 +36,8 @@ pub struct DirSizeDone {
     pub path: PathBuf,
     pub bytes: u64,
     pub partial: bool,
+    // The directory's own children, for the Items column; None is a directory that could not be read.
+    pub entries: Option<u64>,
     pub ms: f64,
     pub cancelled: bool,
     // The generation the walk started in. A cancel moves it on, so a result from before that is a
@@ -64,12 +66,12 @@ pub fn forget_dirsizes_under(st: &mut State, base: &std::path::Path) {
 // whose own mtime has not moved since. The mtime catches the case that matters and FRESH bounds the
 // one it cannot -- a file written into a directory changes that directory's mtime, but a file
 // written deeper down changes only its own parent's, which nothing here is holding.
-fn fresh(st: &State, path: &PathBuf) -> Option<u64> {
-    let (bytes, at, mtime) = st.dirsizes.get(path)?;
+fn fresh(st: &State, path: &PathBuf) -> Option<(u64, Option<u64>)> {
+    let (bytes, entries, at, mtime) = st.dirsizes.get(path)?;
     if at.elapsed() >= FRESH || *mtime != mtime_of(path) {
         return None;
     }
-    Some(*bytes)
+    Some((*bytes, *entries))
 }
 
 // Answered rows are re-answered at once, matching thumb's own cache-hit shape; only a directory can be asked for.
@@ -80,8 +82,8 @@ pub fn queue_dirsizes(out: &mut BufWriter<io::Stdout>, st: &mut State, rows: &[u
         }
         let path = st.base.join(st.listing.name(row));
         // Only whole walks are ever remembered, so an answer from here is never partial.
-        if let Some(bytes) = fresh(st, &path) {
-            writeln!(out, "{}", dirsized_line(row, bytes, false, 0.0)).ok();
+        if let Some((bytes, entries)) = fresh(st, &path) {
+            writeln!(out, "{}", dirsized_line(row, bytes, false, entries, 0.0)).ok();
             continue;
         }
         if st.dirsize_queue.contains(&row) {
@@ -114,8 +116,8 @@ pub fn pump_dirsize(out: &mut BufWriter<io::Stdout>, st: &mut State, tx: &Sender
     let path = st.base.join(st.listing.name(row));
     // Re-checked here and not only at enqueue: a row asked for twice while the first walk was out
     // queued twice and was walked twice, 217 ms and then 154 ms for the same directory.
-    if let Some(bytes) = fresh(st, &path) {
-        writeln!(out, "{}", dirsized_line(row, bytes, false, 0.0)).ok();
+    if let Some((bytes, entries)) = fresh(st, &path) {
+        writeln!(out, "{}", dirsized_line(row, bytes, false, entries, 0.0)).ok();
         out.flush().ok();
         return pump_dirsize(out, st, tx);
     }
@@ -134,6 +136,7 @@ pub fn pump_dirsize(out: &mut BufWriter<io::Stdout>, st: &mut State, tx: &Sender
             path,
             bytes: result.bytes,
             partial: result.partial,
+            entries: result.entries,
             ms: since(t),
             // Raised by a navigation or a scroll, which means the floor this walk reached answers a
             // question nobody is asking any more; it is neither reported nor remembered.
@@ -164,12 +167,12 @@ pub fn report_dirsize(out: &mut BufWriter<io::Stdout>, st: &mut State, done: Dir
         if st.dirsizes.len() >= REMEMBERED {
             st.dirsizes.clear();
         }
-        st.dirsizes.insert(done.path.clone(), (done.bytes, Instant::now(), done.mtime));
+        st.dirsizes.insert(done.path.clone(), (done.bytes, done.entries, Instant::now(), done.mtime));
     }
     let still_named = done.row < st.listing.len() && st.base.join(st.listing.name(done.row)) == done.path;
     if !still_named {
         return;
     }
-    writeln!(out, "{}", dirsized_line(done.row, done.bytes, done.partial, done.ms)).ok();
+    writeln!(out, "{}", dirsized_line(done.row, done.bytes, done.partial, done.entries, done.ms)).ok();
     out.flush().ok();
 }

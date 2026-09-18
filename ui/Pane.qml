@@ -472,7 +472,7 @@ FocusScope {
         sortBy: root.backend.sortBy
         sortDesc: root.backend.sortDesc
         dualMode: root.dualMode
-        hiddenCols: root.dualMode ? ["mode", "kind"].concat(ViewState.hiddenCols) : ViewState.hiddenCols
+        hiddenCols: root.dualMode ? ["mode", "kind", "items"].concat(ViewState.hiddenCols) : ViewState.hiddenCols
         onSortRequested: function (key) { Sort.column(root, key) }
         onMenuRequested: function (pos) { menu.openForHeader(pos) }
         searchMode: root.searchMode

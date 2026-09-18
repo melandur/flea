@@ -44,8 +44,11 @@ pub const DEFAULTS: &str = r#"{
   "open": { "rules": [] }
 }"#;
 
-// The list row's optional columns in the order ui/js/Columns.js lays them out; name is never optional.
-pub const OPTIONAL_COLUMNS: [&str; 4] = ["mode", "size", "date", "kind"];
+// The four optional columns 0.1.3's view.json knew, which is what its hiddenCols could have named.
+// The migration inverts that list, so it has to be the list of that day and not today's: over the
+// current set it would turn the Items column on for every migrated file, and Items is off in the
+// shipped defaults. What the columns are NOW is COLUMN_KEYS below, less the name.
+pub const LEGACY_COLUMNS: [&str; 4] = ["mode", "size", "date", "kind"];
 
 // Omarchy's own textSizeStops, so an override can never land on a size the OEM panel could not produce.
 pub const TEXT_SIZE_STOPS: [f64; 7] = [9.0, 10.0, 11.0, 12.0, 14.0, 16.0, 20.0];
@@ -76,7 +79,9 @@ pub enum Rule {
     Group(&'static [(&'static str, Rule)]),
 }
 
-pub const COLUMN_KEYS: &[&str] = &["name", "mode", "size", "date", "kind"];
+// items is the directory's own child count, which only a directory row draws; it is optional the
+// way the other four are, so a file that never shows one costs nothing for it.
+pub const COLUMN_KEYS: &[&str] = &["name", "mode", "size", "items", "date", "kind"];
 
 pub const SORT: &[(&str, Rule)] = &[("key", Rule::Word(&["name", "size", "date", "kind"])), ("reverse", Rule::Bool)];
 

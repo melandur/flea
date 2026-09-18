@@ -67,10 +67,13 @@ get() {
 # is exactly the number of real findings that can land under it unseen. property-override's ceiling
 # was 1 for the one accepted case, ui/OmarchyMark.qml:13 overriding "scale"; that file left the
 # tree with the Omarchy logo it drew, so the ceiling is re-measured at 0.
+# unresolved-type went 6 to 7 on 2026-09-18 with the Items column: every one of these findings is
+# "anchors" on a PanelSectionHeader, the qs.Ui type below that qmllint cannot resolve, so the count
+# is the number of header cells and a seventh column is a seventh finding of the same false one.
 actionable="import|13
 unused-imports|0
 signal-handler-parameters|0
-unresolved-type|6
+unresolved-type|7
 property-override|0"
 
 # import qs.Commons never resolves under qmllint (it is a Quickshell module, not a Qt one), so

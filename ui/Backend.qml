@@ -21,7 +21,7 @@ Item {
     signal localSendPeers(var peers, string reason)
     signal localSendSent(bool ok, string reason)
     signal thumbed(int row, string file)
-    signal dirSized(int row, real bytes, bool partial)
+    signal dirSized(int row, real bytes, bool partial, int entries)
     signal searching(int total, int scanned, real ms)
     signal searched(int total, int scanned, real ms, bool cancelled)
     // The write operations, see docs/protocol.md; every one of them is reversible with undo.
@@ -292,7 +292,7 @@ Item {
 
     // Sample input: {"t":"rows","start":0,"rows":[{"n":"a.txt","d":false,"s":3,"m":1787790423,"p":33188,"i":"text-x-generic","t":false,"k":0}],"kinds":["Plain text document"],"ms":1.250}
     // Sample input: {"t":"thumbed","row":2,"file":"/home/gm/.cache/thumbnails/large/b98fa4.png","ms":75.823}
-    // Sample input: {"t":"dirsized","row":4,"bytes":1048576,"partial":false,"ms":12.500}
+    // Sample input: {"t":"dirsized","row":4,"bytes":1048576,"partial":false,"entries":12,"ms":12.500}
     // Sample input: {"t":"changed","path":"/home/gm/Downloads","sizes":true}
     // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114}
     // Sample input: {"t":"transferstarted","id":12,"n":2,"moving":true}

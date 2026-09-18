@@ -18,9 +18,11 @@ function run(check) {
     check("a row asked and still waiting reports no size", DirSizes.sizeFor(s, 10), null)
     check("a row waiting on an answer is pending", DirSizes.hasPending(s), true)
 
-    s = DirSizes.remember(s, 10, 4096, false, 240)
+    s = DirSizes.remember(s, 10, 4096, false, 12, 240)
     check("an answered row reports its bytes", DirSizes.sizeFor(s, 10).bytes, 4096)
     check("and reports whether it is partial", DirSizes.sizeFor(s, 10).partial, false)
+    // The same answer carries the directory's own child count, which the Items column draws.
+    check("and the count of the children the same walk saw", DirSizes.sizeFor(s, 10).entries, 12)
     check("and is never asked for again", DirSizes.plan(s, rows, 10, 10, 10).length, 0)
     check("rows 11 and 13 are still pending", DirSizes.hasPending(s), true)
 
@@ -39,16 +41,20 @@ function run(check) {
     // The cap bounds a policy bug: normal use only ever records the rows a viewport held.
     var capped = DirSizes.empty()
     for (var i = 0; i < 5; i++) {
-        capped = DirSizes.remember(capped, i, 1000 + i, false, 3)
+        capped = DirSizes.remember(capped, i, 1000 + i, false, -1, 3)
     }
     check("the cap evicts the oldest entry", DirSizes.sizeFor(capped, 0), null)
     check("and keeps the newest", DirSizes.sizeFor(capped, 4).bytes, 1004)
     check("and holds exactly the cap", capped.order.length, 3)
 
-    capped = DirSizes.remember(capped, 4, 2004, true, 3)
+    capped = DirSizes.remember(capped, 4, 2004, true, 7, 3)
     check("answering one row twice does not grow the order", capped.order.length, 3)
     check("and the newer answer wins", DirSizes.sizeFor(capped, 4).bytes, 2004)
     check("including its partial flag", DirSizes.sizeFor(capped, 4).partial, true)
+    check("and its count, which a partial walk still answers exactly", DirSizes.sizeFor(capped, 4).entries, 7)
+    // -1 off the wire is a directory whose entries could not be read; null is what the cell reads
+    // as "nothing to say", where 0 would claim a folder was measured and found empty.
+    check("an unreadable directory records no count rather than a zero", DirSizes.sizeFor(capped, 3).entries, null)
 
     check("each empty state is its own", DirSizes.empty() === DirSizes.empty(), false)
 }

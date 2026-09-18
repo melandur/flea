@@ -18,7 +18,7 @@ function route(root, message) {
     } else if (message.t === "thumbed") {
         root.thumbed(message.row, message.file)
     } else if (message.t === "dirsized") {
-        root.dirSized(message.row, message.bytes, message.partial)
+        root.dirSized(message.row, message.bytes, message.partial, message.entries)
     } else if (message.t === "searching") {
         root.searching(message.n, message.scanned, message.ms)
     } else if (message.t === "searched") {

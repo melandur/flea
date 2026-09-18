@@ -57,7 +57,7 @@ ListView {
         cursor: listingIndex === root.pane.cursorIndex
         paneFocused: root.pane.paneFocused
         dualMode: root.pane.dualMode
-        hiddenCols: root.pane.dualMode ? ["mode", "kind"].concat(ViewState.hiddenCols) : ViewState.hiddenCols
+        hiddenCols: root.pane.dualMode ? ["mode", "kind", "items"].concat(ViewState.hiddenCols) : ViewState.hiddenCols
         hovered: hover.hovered
         thumb: root.thumbFor(listingIndex)
         selected: root.pane.isSelected(listingIndex)
@@ -230,8 +230,13 @@ ListView {
     }
 
     // Same idiom as requestThumbs, minus a cancel: onContentYChanged already sent it, see above.
+    // The Items column reads the same answer the Size column does, so the walk is asked for when
+    // either wants it: folder sizes switched off no longer means no dirsize at all, it means the
+    // walk is asked for only while the count is on screen.
     function requestDirSizes() {
-        if (!root.visible || root.pane.shownTotal === 0 || root.pane.listInFlight || !ViewState.folderSizes)
+        if (!root.visible || root.pane.shownTotal === 0 || root.pane.listInFlight)
+            return
+        if (!ViewState.folderSizes && ViewState.hiddenCols.indexOf("items") >= 0)
             return
         // Thumbs.viewport() is reused: it takes no thumb-specific state, only geometry.
         var view = root.visibleRange()

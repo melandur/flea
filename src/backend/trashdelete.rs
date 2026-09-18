@@ -374,17 +374,22 @@ impl Reviewed {
             return crate::backend::dirsize::DirSize {
                 bytes: 0,
                 partial: true,
+                // Nothing was measured, so nothing was counted either; Trash draws no Items column.
+                entries: None,
             };
         }
         let mut result = match self.path.symlink_metadata() {
             Ok(meta) if meta.is_dir() => crate::backend::dirsize::walk_until(&self.path, deadline),
+            // A file, not a directory: it has no children to count.
             Ok(meta) => crate::backend::dirsize::DirSize {
                 bytes: meta.len(),
                 partial: false,
+                entries: None,
             },
             Err(_) => crate::backend::dirsize::DirSize {
                 bytes: 0,
                 partial: true,
+                entries: None,
             },
         };
         result.partial |= !self.unchanged();

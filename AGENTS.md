@@ -1197,6 +1197,25 @@ close so a newly installed application is in the list next time. A File types ru
 `ui/SettingsFavourite.qml`, the same component a favourite and a shelf pin use, with the drag grip
 hidden: a favourite's order is the operator's and a rule's is its ending's length.
 
+**The Items column is the directory's OWN children, and it rides the size walk's answer.** The
+operator asked for it on 2026-09-18, a column that can be switched on like the other four. What it
+counts is one `read_dir` of the directory itself, in `src/backend/dirsize.rs` `children`, not the
+recursion beside it: a count of the whole tree is not what "how many things are in this folder"
+means, and counting the top level separately is what makes the number exact even on a walk the
+250 ms deadline stopped, where the size beside it is only a floor. Hidden children are counted,
+because the number is of what the directory holds and not of what the current Show hidden files
+setting happens to draw. It travels on the `dirsized` line as `entries`, and `-1` there is a
+directory whose entries could not be read, which `ui/js/DirSizes.js` keeps as null so the cell can
+tell that from a folder measured empty. **The two columns are one answer**, so `ui/List.qml` asks
+for a walk when `folderSizes` is on OR the Items column is drawn, and `ui/Row.qml` `sizeText` was
+given an explicit `folderSizes` guard the same day: the walk now happens for reasons the Size cell
+knows nothing about, and without that guard switching Items on quietly turned folder sizes back on
+in the cell beside it. Nothing sorts by the count: `ui/js/Sort.js` has no order for one, so
+`ui/Header.qml`'s Items cell is the one header with no `TapHandler` at all. `src/uischema.rs`
+`LEGACY_COLUMNS` is the four columns 0.1.3's `view.json` knew, kept frozen beside today's set,
+because that migration inverts `hiddenCols` and over the current list it would switch Items on for
+every migrated file when the shipped default is off.
+
 **Held, Space paints.** The same day's second ruling, "allow me to keep space pressed": a press per
 row is what the operator had, and a sweep is what they asked for. `ui/js/Marks.js` holds the state
 as one number, `painting`, which the press sets to 1 when it marked the row and -1 when it unmarked

@@ -179,13 +179,21 @@ fn emits_a_thumbed_line_for_a_generated_row_and_for_a_failed_one() {
 #[test]
 fn emits_a_dirsized_line_complete_and_partial() {
     assert_eq!(
-        dirsized_line(4, 1048576, false, 12.5),
-        r#"{"t":"dirsized","row":4,"bytes":1048576,"partial":false,"ms":12.500}"#
+        dirsized_line(4, 1048576, false, Some(12), 12.5),
+        r#"{"t":"dirsized","row":4,"bytes":1048576,"partial":false,"entries":12,"ms":12.500}"#
     );
     // partial:true is a floor, not a wrong exact number; the cell renders it with a leading ">".
+    // The count beside it is exact either way: it is one read_dir of the directory itself, which a
+    // deadline that stopped the recursion never reached.
     assert_eq!(
-        dirsized_line(9, 200, true, 2000.0),
-        r#"{"t":"dirsized","row":9,"bytes":200,"partial":true,"ms":2000.000}"#
+        dirsized_line(9, 200, true, Some(3), 2000.0),
+        r#"{"t":"dirsized","row":9,"bytes":200,"partial":true,"entries":3,"ms":2000.000}"#
+    );
+    // A directory whose entries could not be read at all: -1, which the Items cell draws as nothing
+    // rather than as the zero it would read a real count of an empty directory as.
+    assert_eq!(
+        dirsized_line(2, 0, true, None, 1.0),
+        r#"{"t":"dirsized","row":2,"bytes":0,"partial":true,"entries":-1,"ms":1.000}"#
     );
 }
 

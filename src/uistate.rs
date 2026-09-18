@@ -1,7 +1,7 @@
 // The ui.json merges with no disk in them: read a file onto the defaults, apply one caller patch,
 // and carry 0.1.3's view.json across.
 use crate::jsondoc::{self, Json};
-use crate::uischema::{defaults, is_theme_id, Rule, COLUMN_KEYS, OPTIONAL_COLUMNS, SCHEMA, TEXT_SIZE_STOPS, SIDEBAR_STOPS};
+use crate::uischema::{defaults, is_theme_id, Rule, COLUMN_KEYS, LEGACY_COLUMNS, SCHEMA, TEXT_SIZE_STOPS, SIDEBAR_STOPS};
 
 // Never fails: a file this cannot read is a file whose every key falls back to the shipped default.
 pub fn from_file(text: &str) -> Json {
@@ -20,7 +20,7 @@ pub fn from_view_json(text: &str) -> Json {
         None => return out,
     };
     let mut shown = vec![Json::Str("name".to_string())];
-    for key in OPTIONAL_COLUMNS {
+    for key in LEGACY_COLUMNS {
         if !hidden.iter().any(|h| h == key) {
             shown.push(Json::Str(key.to_string()));
         }

@@ -77,8 +77,8 @@ assert ['moveto', 'moveTo', 'Move to', 'file'] in rows
 assert ['openwith', 'openWith', 'Open with', 'file'] in rows
 assert {row[3] for row in rows if row[0] == 'open'} == {'file', 'trash'}
 assert {row[3] for row in rows if row[0] == 'paste'} == {'file', 'background'}
-assert {row[0] for row in rows if row[3] == 'header'} == {'col:mode', 'col:size', 'col:date', 'col:kind'}
-print('ACCEPTANCE_MENU ids=30 header=4 context_rows=' + str(len(rows)))
+assert {row[0] for row in rows if row[3] == 'header'} == {'col:mode', 'col:size', 'col:items', 'col:date', 'col:kind'}
+print('ACCEPTANCE_MENU ids=30 header=5 context_rows=' + str(len(rows)))
 PY
 mkdir -p "$SB/broken-menu/ui/js"
 printf 'var INVENTORY = [["open","Open","folder","F","open"],["broken"]]\n' > "$SB/broken-menu/ui/js/Menu.js"

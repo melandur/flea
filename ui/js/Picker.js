@@ -24,7 +24,8 @@ function isRecent(location) {
 
 // SendPicker.html draws a chooser row as the name, a 70px size and an 80px date, so the two columns
 // the window's rows also carry are hidden here at every width rather than at some of them.
-var HIDDEN_COLS = ["mode", "kind"]
+// The picker's board draws a name, a size and a date; a child count is not one of its columns.
+var HIDDEN_COLS = ["mode", "kind", "items"]
 
 // Every field defaulted, because a request that arrived short must still open a window.
 function request(text) {
