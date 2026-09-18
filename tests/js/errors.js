@@ -157,6 +157,28 @@ function run(check) {
           "Connect failed: this server's identity is not known. Connect to it once in a terminal to check and accept its key, then retry.")
     check("an untrusted certificate says that instead",
           Errors.connectFailure(4, "davs://host/dav"), "Connect failed: this server's certificate is not trusted.")
+    // The identity question: not a failure, and the sentence carries the fingerprint a person has to
+    // look at. ui/NetworkDialog.qml reads it by its own prefix and offers Connect anyway.
+    var firstTime = "Can't verify the identity of \u201csubmit02.unibe.ch\u201d.\nThe identity sent by the remote computer is SHA256:abc123def.\n[1] Log In Anyway\nChoice: "
+    check("an unseen host names itself and its key",
+          Errors.identityQuestion(firstTime, false, "sftp://mm19v770@submit02.unibe.ch/"),
+          "Verify: submit02.unibe.ch has not been connected to from this computer before. It offers SHA256:abc123def. Connect anyway?")
+    var moved = "WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED\nThe host key for submit02.unibe.ch has changed: SHA256:zzz999.\nChoice: "
+    check("a changed key says that first and says what it can mean",
+          Errors.identityQuestion(moved, true, "sftp://mm19v770@submit02.unibe.ch/").indexOf(
+              "Verify: submit02.unibe.ch answers with a DIFFERENT key") === 0, true)
+    check("and still carries the key it now offers",
+          Errors.identityQuestion(moved, true, "sftp://u@submit02.unibe.ch/").indexOf("SHA256:zzz999") > 0, true)
+    // A colon-separated MD5 print is what older servers answer with, and no print at all must not
+    // leave the sentence claiming one.
+    check("an older colon-separated print is read too",
+          Errors.identityQuestion("The identity is 1a:2b:3c:4d:5e:6f:70:81.", false, "sftp://h/").indexOf("1a:2b:3c:4d:5e:6f:70:81") > 0, true)
+    check("and a prompt with no print in it says so rather than inventing one",
+          Errors.identityQuestion("Choice: ", false, "sftp://h/").indexOf("an unreadable key") > 0, true)
+    check("a question is told from a failure by its own prefix",
+          [Errors.isQuestion(Errors.identityQuestion("", false, "sftp://h/")),
+           Errors.isQuestion(Errors.connectFailure(1, "smb://h/s"))].join(","), "true,false")
+
     check("and every other scheme reads it as the credential",
           Errors.connectFailure(1, "smb://host/share"), "Connect failed: authentication was refused")
     check("no uri at all answers rather than throwing",

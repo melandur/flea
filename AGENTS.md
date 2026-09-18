@@ -1204,6 +1204,21 @@ had bound its own F5 long before the listing had one. It is not a navigation: `u
 `pendingSelect`, so a reload lands on the row it left rather than on the first one. Measured here: a
 folder created behind an open window appeared on the press, with the cursor still on its own row.
 
+**The identity question is put in front of the operator, and nothing accepts a key for them.**
+The operator's ruling of 2026-09-18, after the sentence below left them with a server they could
+only trust from a terminal. `tools/flea-gio-auth` still refuses GIO's identity prompt by itself, but
+it now PRINTS the question first, on stdout, before any password has been sent and with nothing else
+in it: gvfs's own words, which carry the host and the fingerprint. `ui/js/Errors.js`
+`identityQuestion` turns that into one sentence, `ui/NetworkMounts.qml` reports it as the connect's
+reason rather than as a failure, and `ui/NetworkDialog.qml` reads its "Verify: " prefix, leaves the
+form exactly as it is and relabels its own button **Connect anyway**. Pressing it raises
+`trustRequested`, which reaches `NetworkMounts.trustOnce` through the rail, and the next attempt
+passes the helper the one word that answers the prompt. **The trust is spent by that attempt**: it
+is never remembered here, because the acceptance itself is gvfs's to keep in `known_hosts` once the
+mount goes through, and a second question means a second key to look at. **Exit 5 is a key that
+CHANGED**, told from 3 by the prompt's own wording, and its sentence says so first and says what it
+can mean, because a rebuilt server and something impersonating one look identical from here.
+
 **A connect refused over an unknown host key is not a refused password, and says so.**
 `tools/flea-gio-auth` answers GIO's identity and certificate warnings by refusing and closing, which
 is the right answer for a helper that cannot ask anyone, but it exited 1 for both — and 1 is what

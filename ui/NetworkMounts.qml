@@ -15,10 +15,17 @@ Item {
     property var entries: []
     // Secrets live only here for this QML process lifetime; the map is never serialized or exposed.
     property var _passwords: ({})
+    // The identity the operator accepted, one uri and one connect at a time: taken by the answer to
+    // the question ui/NetworkDialog.qml puts in front of them, and spent by the next attempt. It is
+    // never remembered across connects, because the acceptance itself is gvfs's to keep in
+    // known_hosts once the mount goes through; a second question means a second key to look at.
+    property var _trusted: ({})
     // Settings > Places > Network. Read here rather than passed through four signatures, because it
     // is a standing choice about this box and not a fact about one connection.
     readonly property bool rememberPasswords: (ViewState.state.places || {}).rememberPasswords === true
     property string result: "idle"
+    // What the helper printed when it refused the identity question, until the sentence is built.
+    property string _authAsked: ""
     property Item origin: null
     property Item _pendingOrigin: null
 
@@ -257,6 +264,23 @@ Item {
 
     // forgetPassword, not forget: forget(uri) below is the bookmark writer, and one name for both
     // would have made a refused connect delete the saved place.
+    // ui/Sidebar.qml trustNetwork: the operator looked at the fingerprint and said yes.
+    function trustOnce(uri) {
+        var next = Object.assign({}, root._trusted)
+        next[Mounts.normalize(uri)] = true
+        root._trusted = next
+    }
+
+    function trustedFor(uri) { return root._trusted[Mounts.normalize(uri)] === true }
+
+    function spendTrust(uri) {
+        var key = Mounts.normalize(uri)
+        if (root._trusted[key] === undefined) return
+        var next = Object.assign({}, root._trusted)
+        delete next[key]
+        root._trusted = next
+    }
+
     function forgetPassword(uri) {
         var key = Mounts.normalize(uri)
         if (root._passwords[key] === undefined) return
@@ -329,6 +353,10 @@ Item {
             authProcess.command = ["timeout", String(root.authTimeoutSeconds),
                                    Quickshell.env("FLEA_GIO_AUTH") || "/usr/lib/flea/flea-gio-auth",
                                    root._pendingUri, root.rememberPasswords ? "permanent" : "never"]
+            // Only when the operator answered the question: the helper refuses the identity prompt
+            // without it, which is what puts the fingerprint on screen in the first place.
+            if (root.trustedFor(root._pendingUri))
+                authProcess.command = authProcess.command.concat(["trust"])
             authProcess.running = true
             return
         }
@@ -450,6 +478,9 @@ Item {
         environment: root.gioEnvironment
         stdinEnabled: true
         stderr: StdioCollector { waitForEnd: true }
+        // The identity question, and only ever that: tools/flea-gio-auth prints it before any
+        // password has been sent and prints nothing else at all, ever.
+        stdout: StdioCollector { id: authOut; waitForEnd: true; onStreamFinished: root._authAsked = text }
         onStarted: {
             root._authAwaitingStart = false
             var password = root._pendingPassword
@@ -467,8 +498,19 @@ Item {
         onExited: function (exitCode) {
             if (root._authCancelled) { root._authCancelled = false; return }
             root._pendingPassword = ""
+            root.spendTrust(root._pendingUri)
             if (exitCode === 0) {
                 root.runInfo(root._pendingUri)
+                return
+            }
+            // 3 and 5 are a question rather than a failure: the address was right and the password
+            // was never tried, and what is missing is a person looking at a fingerprint. The held
+            // credential survives it, or the dialog would ask for a password it already has.
+            if (exitCode === 3 || exitCode === 5) {
+                var asked = String(authOut.text || root._authAsked || "")
+                root._authAsked = ""
+                root.failMount(Errors.identityQuestion(asked, exitCode === 5, root._pendingUri),
+                               root.passwordFor(root._pendingUri), false)
                 return
             }
             // 124 is a host that never answered, 126/127 a helper that could not start, and 3 and 4

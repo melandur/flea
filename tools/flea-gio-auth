@@ -1,6 +1,6 @@
 #!/usr/bin/expect -f
 # Mounts one GIO URI with one password read from stdin and no secret output.
-#   flea-gio-auth <uri> [never|session|permanent]
+#   flea-gio-auth <uri> [never|session|permanent] [trust]
 # The second argument is what GIO's own "Store password?" prompt is answered with, and it defaults
 # to never, which is what this helper always answered before Settings > Places grew the switch. On
 # permanent the secret goes into the login keyring, gvfs's own store, and a later plain `gio mount`
@@ -12,16 +12,26 @@ if {[info exists env(FLEA_GIO_AUTH_TIMEOUT)]} {
     set timeout $env(FLEA_GIO_AUTH_TIMEOUT)
 }
 
-if {$argc < 1 || $argc > 2 || [gets stdin password] < 0 || $password eq ""} {
+if {$argc < 1 || $argc > 3 || [gets stdin password] < 0 || $password eq ""} {
     exit 2
 }
 set uri [lindex $argv 0]
 set store "never"
-if {$argc == 2} {
+if {$argc >= 2} {
     set store [lindex $argv 1]
     if {$store ne "never" && $store ne "session" && $store ne "permanent"} {
         exit 2
     }
+}
+# The third argument is the operator's own answer to the identity question, and there is exactly one
+# word for it: without it this helper refuses and reports what it was asked, so ui/NetworkDialog.qml
+# can put the fingerprint in front of a person. Nothing here decides to trust a server.
+set trust 0
+if {$argc == 3} {
+    if {[lindex $argv 2] ne "trust"} {
+        exit 2
+    }
+    set trust 1
 }
 set password_sent 0
 
@@ -32,15 +42,36 @@ spawn -noecho gio mount $uri
 # operator to retype a password that was right all along.
 expect {
     -re {Choice: *$} {
+        if {$trust} {
+            send -- "1\r"
+            exp_continue
+        }
+        # The question itself, verbatim, on stdout: it carries the host and the fingerprint and
+        # nothing else, it is printed before any password has been sent, and ui/js/Errors.js is what
+        # turns it into one sentence. 5 says the key CHANGED, which is the case that is not a first
+        # meeting; 3 is a host this box has never seen.
+        set asked $expect_out(buffer)
         set password ""
         catch {close}
         catch {wait}
+        puts -nonewline $asked
+        flush stdout
+        if {[regexp -nocase {changed|differs|MAN-IN-THE-MIDDLE} $asked]} {
+            exit 5
+        }
         exit 3
     }
     -re {Continue anyway.*y/n} {
+        if {$trust} {
+            send -- "y\r"
+            exp_continue
+        }
+        set asked $expect_out(buffer)
         set password ""
         catch {close}
         catch {wait}
+        puts -nonewline $asked
+        flush stdout
         exit 4
     }
     -re {Store password.*never/session/permanent} {

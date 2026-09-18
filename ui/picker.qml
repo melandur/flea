@@ -545,6 +545,7 @@ ShellRoot {
                         onClosed: list.forceActiveFocus()
                         onMountRequested: function(requestId, uri, label, password) { places.retry(requestId, uri, label, password) }
                         onCancelRequested: function(requestId) { places.cancelNetwork(requestId) }
+                        onTrustRequested: function(uri) { places.trustNetwork(uri) }
                     }
                 }
             }

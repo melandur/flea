@@ -109,6 +109,39 @@ function notYours(mode) {
 // so ui/NetworkMounts.qml keeps its budget. "timeout" answers 124 for its own deadline and the shell
 // answers 126 or 127 for a helper it could not run at all; every other code is the server refusing,
 // which reads as the handshake for the schemes that negotiate one.
+// The prefix ui/NetworkDialog.qml reads a question by, the way it reads a failure by "Connect
+// failed:". A question is not a failure: the address was right, the password was never tried, and
+// the only thing missing is a person saying yes to a key.
+var VERIFY = "Verify: "
+
+// What tools/flea-gio-auth printed when it refused GIO's identity question, as one sentence with
+// the fingerprint in it. changed is exit 5, a key this box has seen before and that is not the same
+// key today, which is the case that is not a first meeting and is worded so nobody skims past it.
+function identityQuestion(text, changed, uri) {
+    var body = String(text || "")
+    var print = body.match(/((?:SHA256|SHA1|MD5):[A-Za-z0-9+\/=]+)/)
+                || body.match(/\b([0-9a-f]{2}(?::[0-9a-f]{2}){5,})\b/i)
+    var host = hostOf(uri)
+    var key = print ? print[1] : "an unreadable key"
+    if (changed) {
+        return VERIFY + host + " answers with a DIFFERENT key than the one this computer accepted before. "
+            + "It now offers " + key + ". A rebuilt server does this; so does something pretending to be it. "
+            + "Connect anyway?"
+    }
+    return VERIFY + host + " has not been connected to from this computer before. It offers " + key
+        + ". Connect anyway?"
+}
+
+function isQuestion(message) {
+    return String(message || "").indexOf(VERIFY) === 0
+}
+
+// The host the uri names, for a sentence that would otherwise have to quote the whole address.
+function hostOf(uri) {
+    var match = String(uri || "").match(/^[a-z][a-z0-9+.-]*:\/\/(?:[^@\/]*@)?([^\/:]+)/i)
+    return match ? match[1] : "that server"
+}
+
 function connectFailure(exitCode, uri) {
     if (exitCode === 124) return "Connect failed: host did not respond"
     if (exitCode === 126 || exitCode === 127)

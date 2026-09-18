@@ -148,6 +148,8 @@ Item {
         root.awaitingNetwork = false
         network.cancelLocation(requestId)
     }
+    // The chooser draws the same dialog, so it answers the same identity question the window does.
+    function trustNetwork(uri) { network.trustOnce(uri) }
     Connections {
         target: root.picker
         function onPathChanged() { root.awaitingNetwork = false; root.awaitingDevice = "" }

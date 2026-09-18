@@ -421,6 +421,12 @@ ShellRoot {
                     networkDialog.owner.saveNetwork(requestId, uri, label, password, networkDialog.origin)
                 }
                 function onCancelRequested(requestId) { if (networkDialog.owner) networkDialog.owner.cancelNetwork(requestId) }
+                // The identity question's own answer, raised by the dialog immediately before the
+                // mount request it belongs to; the owner is whichever rail is about to run it.
+                function onTrustRequested(uri) {
+                    var owner = networkDialog.owner || (networkDialog.origin ? networkDialog.origin.sidebar : null)
+                    if (owner) owner.trustNetwork(uri)
+                }
             }
 
             Connections {

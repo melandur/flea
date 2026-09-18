@@ -102,7 +102,10 @@ If you previously pinned another directory handler, restore that handler explici
 **Connect to a server** with the **+** beside NETWORK in the sidebar: pick SMB, SFTP, FTPS, WebDAV
 or NFS, fill in the host, the share or path and your username and password, and the dialog shows the
 exact URI it will hand to `gio mount` before it does. The place is saved to the same
-`~/.config/gtk-3.0/bookmarks` Nautilus reads, so both file managers list it. A password is used for
+`~/.config/gtk-3.0/bookmarks` Nautilus reads, so both file managers list it. The first connection to an SSH server shows you its
+fingerprint and waits: the button becomes **Connect anyway**, and a key that has *changed* since you
+last connected says that first, because a rebuilt server and an impostor look identical from here.
+A password is used for
 that one connection and nothing is stored, unless you switch on Settings → Places → **Remember
 passwords**, which hands it to the login keyring — the store GNOME and Nautilus already use — and the
 next connection then needs no password at all.

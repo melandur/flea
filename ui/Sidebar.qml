@@ -174,6 +174,8 @@ Item {
         mounts.saveLocation(uri, label, password, requestId, origin)
     }
     function cancelNetwork(requestId) { mounts.cancelLocation(requestId) }
+    // The operator looked at the fingerprint and said yes; the next connect spends it.
+    function trustNetwork(uri) { mounts.trustOnce(uri) }
 
     function networkResult() {
         return mounts.result

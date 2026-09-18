@@ -4,6 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "." as Flea
+import "js/Errors.js" as Errors
 import "js/Mounts.js" as Mounts
 import "js/Protocols.js" as Protocols
 import "js/Motion.js" as Motion
@@ -17,6 +18,9 @@ Item {
     property bool dropboxInstalled: false
     property bool retrying: false
     property bool failedConnect: false
+    // The server asked to be vouched for: ui/js/Errors.js identityQuestion is on screen, the address
+    // and the password are both fine, and the next press is the operator saying yes to a key.
+    property bool verifying: false
     property int requestSerial: 0
     property string requestId: ""
     property string mountedUri: ""
@@ -36,6 +40,8 @@ Item {
 
     signal closed()
     signal mountRequested(string requestId, string uri, string label, string password)
+    // Raised just before the mount request the operator answered the identity question with.
+    signal trustRequested(string uri)
     signal cancelRequested(string requestId)
 
     // A plain overlay, not a QQC Popup, the same call ui/ContextMenu.qml already made.
@@ -51,6 +57,7 @@ Item {
         root.statusText = ""
         root.retrying = false
         root.failedConnect = false
+        root.verifying = false
         root.mountedUri = ""
         root.saveNewPlace = true
         root.saveCommitted = false
@@ -115,6 +122,12 @@ Item {
             root.failedConnect = false
             return
         }
+        // The answer to the identity question rides the same submit: trust first, then the attempt
+        // it is spent on, both synchronous, so the helper is started with it already in hand.
+        if (root.verifying) {
+            root.verifying = false
+            root.trustRequested(Mounts.normalize(form.uri))
+        }
         root.pendingUri = Mounts.normalize(form.uri)
         root.pendingLabel = form.labelText()
         root.unacknowledgedUri = ""
@@ -149,6 +162,15 @@ Item {
     function saveFailed(message) {
         root.saving = false
         root.statusText = message
+        root.verifying = Errors.isQuestion(message)
+        if (root.verifying) {
+            // Not a failed connect: nothing about the address or the credential was refused, so the
+            // form is left exactly as it is and the button below becomes the answer to the question.
+            root.retrying = true
+            root.failedConnect = false
+            pendingFocus.forceActiveFocus()
+            return
+        }
         if (message.indexOf("Connect failed:") === 0) {
             root.unacknowledgedUri = Mounts.normalize(root.pendingUri)
             root.unacknowledgedReason = message
@@ -199,6 +221,7 @@ Item {
         if (root.saveCommitted) return "Close"
         if (root.saving) return "Saving..."
         if (root.connecting) return "Connecting..."
+        if (root.verifying) return "Connect anyway"
         return root.retrying ? "Retry" : "Connect and save"
     }
     function formMetrics() { return Math.round(card.padding) + "|" + Math.round(content.spacing) }

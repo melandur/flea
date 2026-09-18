@@ -33,6 +33,12 @@ certificate)
     printf 'Password: '
     record_answer
     ;;
+changed)
+    printf 'WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED\nThe host key for the server has changed: SHA256:zzz999\n[1] Log In Anyway\n[2] Cancel Login\nChoice: '
+    record_answer
+    printf 'Password: '
+    record_answer
+    ;;
 password)
     printf 'Password: '
     record_answer
@@ -48,11 +54,11 @@ EOS
 chmod +x "$dir/bin/gio"
 
 run_helper() {
-    local flow=$1 received=$2 output=$3 store=${4:-}
+    local flow=$1 received=$2 output=$3 store=${4:-} trust=${5:-}
     : > "$received"
     printf '%s\n' "$fake_secret" | FAKE_GIO_FLOW="$flow" FAKE_GIO_RECEIVED="$received" \
         FLEA_GIO_AUTH_TIMEOUT=5 PATH="$dir/bin:/usr/bin:/bin" \
-        ./tools/flea-gio-auth 'sftp://user@example.test/' $store > "$output" 2>&1
+        ./tools/flea-gio-auth 'sftp://user@example.test/' $store $trust > "$output" 2>&1
 }
 
 for flow in identity certificate; do
@@ -69,8 +75,12 @@ for flow in identity certificate; do
     [[ "$rc" -ne 0 ]] || { printf 'gio-auth: FAIL %s warning accepted\n' "$flow"; exit 1; }
     ! grep -Fq -- "$fake_secret" "$received" \
         || { printf 'gio-auth: FAIL %s warning received password\n' "$flow"; exit 1; }
-    [[ ! -s "$output" ]] \
-        || { printf 'gio-auth: FAIL %s warning produced output\n' "$flow"; exit 1; }
+    # It reports the question now, which is the whole point of refusing it in a file manager: the
+    # operator has to see the fingerprint. What it still must never print is the secret.
+    [[ -s "$output" ]] \
+        || { printf 'gio-auth: FAIL %s warning reported nothing to show the operator\n' "$flow"; exit 1; }
+    ! grep -Fq -- "$fake_secret" "$output" \
+        || { printf 'gio-auth: FAIL %s warning printed the password\n' "$flow"; exit 1; }
 done
 
 received="$dir/no-prompt.received"
@@ -118,5 +128,38 @@ rc=$?
 [[ "$rc" -eq 2 ]] || { printf 'gio-auth: FAIL an unknown storage choice was accepted, helper=%s\n' "$rc"; exit 1; }
 [[ ! -s "$received" ]] || { printf 'gio-auth: FAIL a refused storage choice still spawned gio\n'; exit 1; }
 
-printf 'gio-auth: identity=%s certificate=%s no-prompt=%s password=%s once=ok storage=never,permanent,session redaction=ok\n' \
+# The identity question is the operator's to answer, so the helper both reports it and, told the one
+# word that means yes, sends it. What it prints is gvfs's own question, which carries the host and
+# the fingerprint a person has to look at, and it prints it before any password has been sent.
+received="$dir/asked.received"
+output="$dir/asked.output"
+run_helper identity "$received" "$output"
+[[ "$?" -eq 3 ]] || { printf 'gio-auth: FAIL the identity refusal did not answer 3\n'; exit 1; }
+grep -Fq 'Choice:' "$output" \
+    || { printf 'gio-auth: FAIL the identity question was not reported\n'; exit 1; }
+! grep -Fq -- "$fake_secret" "$output" \
+    || { printf 'gio-auth: FAIL the reported question carried the password\n'; exit 1; }
+
+received="$dir/changed.received"
+output="$dir/changed.output"
+run_helper changed "$received" "$output"
+[[ "$?" -eq 5 ]] || { printf 'gio-auth: FAIL a changed host key did not answer 5\n'; exit 1; }
+grep -Fq 'SHA256:zzz999' "$output" \
+    || { printf 'gio-auth: FAIL the changed key was not reported\n'; exit 1; }
+
+received="$dir/trusted.received"
+output="$dir/trusted.output"
+run_helper identity "$received" "$output" never trust
+[[ "$?" -eq 0 ]] || { printf 'gio-auth: FAIL a trusted identity was still refused\n'; exit 1; }
+[[ "$(sed -n '1p' "$received")" == 1 ]] \
+    || { printf 'gio-auth: FAIL trust did not answer the identity question\n'; exit 1; }
+[[ "$(grep -Fxc -- "$fake_secret" "$received")" -eq 1 ]] \
+    || { printf 'gio-auth: FAIL trust did not go on to send the password exactly once\n'; exit 1; }
+[[ ! -s "$output" ]] \
+    || { printf 'gio-auth: FAIL a trusted run still reported a question\n'; exit 1; }
+
+run_helper identity "$dir/word.received" "$dir/word.output" never yes
+[[ "$?" -eq 2 ]] || { printf 'gio-auth: FAIL a word other than trust was accepted\n'; exit 1; }
+
+printf 'gio-auth: identity=%s certificate=%s no-prompt=%s password=%s once=ok storage=never,permanent,session asked=3,5 trusted=ok redaction=ok\n' \
     "$identity_status" "$certificate_status" "$no_prompt_status" "$password_status"
