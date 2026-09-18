@@ -1475,10 +1475,16 @@ implementation stays one file because the URI builder, the digest-named paths an
 matching entries the rest of the desktop wrote, and the tests that pin that against a real
 entry have to see all three.
 
-`src/backend/run.rs` is 327 lines by `wc -l`, over the soft budget and under the hard cap, and has
-no test module at all: it is the command loop, the dirsize walk and the window writes, and every
-one of its behaviours is proved through the real binary by `tests/protocol.sh` and
-`tests/thumbs.sh`. The two small structs it carries, `Tables` for the four databases read
+`src/backend/run.rs` is over the soft budget and under the hard cap, and has no test module at all:
+it is the command loop and the window writes, and every one of its behaviours is proved through the
+real binary by `tests/protocol.sh` and `tests/thumbs.sh`. The dirsize walk left it on 2026-09-18:
+it ran inline, and one slow row made the backend deaf to every other request. Measured on this box
+against a `/home/melandur` holding a `fuse.tresoritfs` mount, a `list` issued while the walk ran
+waited 2235.4 ms for an answer whose own work was 0.036 ms; on a thread, with the mount refused and
+the deadline at 250 ms, the same click is answered in 2.3 ms and the queue drains in 530 ms rather
+than 2985 ms. The walk now has the shape `thumb` always had — a worker, and an `Event` the loop
+reports — which is why `Event` grew a `DirSize` variant rather than the loop growing a second
+spin condition. Only `search` still ticks. The two small structs it carries, `Tables` for the four databases read
 once per process and `State` for everything the loop mutates, exist so a handler takes six
 arguments instead of the twelve the flat form reached; their fields are `pub(crate)` because
 the thumbnail request policy in `src/backend/thumbreq.rs` is the same loop's other half. **It
@@ -1490,8 +1496,10 @@ that sentence.
 without a test module: `tests/protocol.sh` and `tests/thumbs.sh` prove it through the real
 binary. It is the thumbnail request policy alone, the per-row cache lookup, the queue-once
 map, cancel and result reporting, moved out of `run.rs` whole. Nothing in it touches the
-event loop, and `run.rs` keeps `forget_rows` because a listing change invalidates dirsize
-state too, not only thumbnails.
+event loop, and `run.rs` keeps `forget_rows` because a listing change invalidates the dirsize
+queue too, not only thumbnails. What it no longer invalidates is the answers: `st.dirsizes` is
+keyed by path rather than by row index, so a sort renames nothing in it and returning to a
+directory already measured is answered from it rather than walked again.
 
 `src/backend/thumbs.rs` is 393 lines by `wc -l`, over the soft budget and under the hard cap. Its
 `#[cfg(test)]` is at line 250, so 144 of those are the test module, and that is where the cost sits: proving cancellation without a

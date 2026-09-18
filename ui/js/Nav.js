@@ -103,6 +103,11 @@ function openWithoutHistory(pane, newPath) {
     pane.clearSelection()
     pane.listArea.primeSettle()
     pane.appliedListingPreferences = pane.listingPreferences
+    // The directory being left asked for folder sizes, and one of those walks may be running now.
+    // Until 2026-09-18 only the scroll handlers cancelled it, so the click that navigated queued
+    // behind a walk whose answer it would throw away: measured at 2235.4 ms leaving a home holding
+    // a fuse.tresoritfs mount. Sent before the listing, which is the request it must not delay.
+    pane.backend.dirsizecancel()
     pane.backend.list(newPath, pane.windowSize, pane.showHidden)
     // One statfs per directory, not per row: the bar's right half only changes when the pane moves.
     pane.backend.askFsInfo()

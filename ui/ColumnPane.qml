@@ -95,12 +95,13 @@ Item {
     // The same viewport plan the list runs, over this column's own scroll position. Only the active
     // column can ask: dirsize resolves against st.listing, which a peeked row has no index in.
     function requestDirSizes() {
-        if (root.pane === null || !root.visible || root.pane.total === 0 || root.pane.listInFlight)
+        if (root.pane === null || !root.visible || root.pane.total === 0 || root.pane.listInFlight
+                || !ViewState.folderSizes)
             return
         var range = root.visibleRange()
         var span = Filter.span(root.pane.shown, range.first, range.last)
         var ask = Filter.keep(DirSizes.plan(root.pane.dirSizeState, root.pane.rows, root.pane.held,
-            span.first, span.last, ViewState.thumbnailMode), root.pane.shown)
+            span.first, span.last), root.pane.shown)
         if (ask.length > 0) {
             root.pane.backend.dirsize(ask)
             settle.interval = root.pane.settleMs

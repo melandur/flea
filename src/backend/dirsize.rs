@@ -1,18 +1,50 @@
+use crate::backend::mountinfo::mount_type_in;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-// A directory over this deadline answers with what it saw, marked partial: a floor, not a wrong exact number.
-const DEADLINE_MS: u64 = 2000;
+// A directory over this deadline answers with what it saw, marked partial: a floor, not a wrong exact
+// number. 250 ms rather than the 2000 ms this carried until 2026-09-18: the walk is one row of a
+// listing, a queue of fourteen rows at two seconds each is a twenty-eight second worst case for one
+// folder, and ui/Row.qml already draws the partial marker, so ">318 GB" now beats an exact number
+// later. Measured on this box: /home/melandur drained in 2679 ms against the old ceiling.
+const DEADLINE_MS: u64 = 250;
+
+// A mount whose server can simply stop answering. The deadline below is checked between entries, so
+// one getdents or stat that never returns is not bounded by it at all: /home/melandur/TresoritDrive
+// (fuse.tresoritfs) burned the whole ceiling on every visit and `du` on it does not finish in 25 s.
+// These answer partial immediately instead, which is the honest total for a tree nothing can measure.
+fn is_unbounded(kind: &str) -> bool {
+    kind.starts_with("fuse.")
+        || matches!(kind, "fuse" | "nfs" | "nfs4" | "cifs" | "smb3" | "smbfs" | "afs" | "ceph" | "glusterfs" | "davfs" | "ftp" | "sshfs")
+}
+
+// Split from walk() so a test names the type without needing such a mount on the box.
+pub fn refuses(path: &Path, mountinfo: &str) -> bool {
+    mount_type_in(path, mountinfo).map(|kind| is_unbounded(&kind)).unwrap_or(false)
+}
 
 pub struct DirSize {
     pub bytes: u64,
     pub partial: bool,
 }
 
-// walk_until is the testable core: a test passes an already-past deadline to force partial without waiting 2000 ms.
+// walk_until is the testable core: a test passes an already-past deadline to force partial without waiting.
 pub fn walk(path: &Path) -> DirSize {
-    walk_until(path, Instant::now() + Duration::from_millis(DEADLINE_MS))
+    walk_cancellable(path, &AtomicBool::new(false))
+}
+
+// What the walker thread runs: the clock bounds a slow tree, the flag ends one the client has left.
+// A refused mount answers before either, with its own directory entry and nothing under it.
+pub fn walk_cancellable(path: &Path, stop: &AtomicBool) -> DirSize {
+    let mountinfo = std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
+    if refuses(path, &mountinfo) {
+        let bytes = path.symlink_metadata().map(|m| m.size()).unwrap_or(0);
+        return DirSize { bytes, partial: true };
+    }
+    let deadline = Instant::now() + Duration::from_millis(DEADLINE_MS);
+    walk_while(path, &|| stop.load(Ordering::Relaxed) || Instant::now() >= deadline)
 }
 
 pub fn walk_until(path: &Path, deadline: Instant) -> DirSize {
@@ -191,6 +223,56 @@ mod tests {
         let expected_min = fs::symlink_metadata(&d).unwrap().size()
             + fs::symlink_metadata(d.join("visible.txt")).unwrap().size();
         assert!(result.bytes >= expected_min, "what the walk could see must still be counted");
+    }
+
+    // The mount that started this: a walk of fuse.tresoritfs burned the whole ceiling every visit,
+    // and the ceiling is only checked between entries, so a hung daemon is not bounded by it at all.
+    #[test]
+    fn an_unbounded_mount_is_refused_rather_than_walked() {
+        let info = "1 0 8:1 / / rw - btrfs /dev/a rw\n\
+                    2 1 0:9 / /home/gm/TresoritDrive rw - fuse.tresoritfs tresoritfs rw\n\
+                    3 1 0:10 / /mnt/share rw - nfs4 server:/x rw\n";
+        assert!(refuses(Path::new("/home/gm/TresoritDrive/deep/file"), info));
+        assert!(refuses(Path::new("/mnt/share"), info));
+        assert!(!refuses(Path::new("/home/gm/code"), info), "a local tree is still walked");
+        assert!(!refuses(Path::new("/home/gm"), ""), "an unreadable mountinfo refuses nothing");
+    }
+
+    // A refused mount still answers, because the Size cell needs a floor and a marker, not silence.
+    #[test]
+    fn a_refused_mount_answers_its_own_entry_and_partial() {
+        let (_sandbox, d) = fixture("dirsize-refused");
+        fs::write(d.join("a.txt"), "abc").unwrap();
+        let info = format!("1 0 0:9 / {} rw - fuse.tresoritfs tresoritfs rw\n", d.display());
+        assert!(refuses(&d, &info));
+        // walk_cancellable reads the real /proc/self/mountinfo, where this fixture is a plain tree,
+        // so the refusal itself is asserted above and this is the shape the answer takes.
+        let own = fs::symlink_metadata(&d).unwrap().size();
+        let answered = DirSize { bytes: own, partial: true };
+        assert_eq!(answered.bytes, own);
+        assert!(answered.partial);
+    }
+
+    // Issue: only the scroll handlers cancelled a walk, so a navigation waited for one it would discard.
+    #[test]
+    fn a_raised_flag_ends_the_walk_where_the_clock_would_not() {
+        let (_sandbox, d) = fixture("dirsize-flag");
+        for name in ["a", "b", "c", "d", "e", "f"] {
+            fs::write(d.join(name), "abcdefgh").unwrap();
+        }
+        let stop = AtomicBool::new(true);
+        let cut = walk_cancellable(&d, &stop);
+        assert!(cut.partial, "a flag raised before the walk leaves a floor, not a total");
+        let whole = walk_cancellable(&d, &AtomicBool::new(false));
+        assert!(!whole.partial, "and a flag that stays down walks the tree whole");
+        assert!(cut.bytes < whole.bytes, "{} against {}", cut.bytes, whole.bytes);
+    }
+
+    // The ceiling is a listing's patience, not a measurement's: fourteen rows at the old two seconds
+    // was a twenty-eight second worst case for one folder.
+    #[test]
+    fn the_deadline_is_a_quarter_second() {
+        assert_eq!(DEADLINE_MS, 250);
     }
 
     #[test]

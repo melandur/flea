@@ -10,6 +10,7 @@ pub const DEFAULTS: &str = r#"{
   "sort": { "key": "name", "reverse": false },
   "dual": { "paths": [], "focus": 0 },
   "foldersFirst": true,
+  "folderSizes": true,
   "groupByKind": false,
   "hidden": false,
   "wrapAtEnds": false,
@@ -126,6 +127,9 @@ pub const SCHEMA: &[(&str, Rule)] = &[
     ("sort", Rule::Group(SORT)),
     ("dual", Rule::Group(DUAL)),
     ("foldersFirst", Rule::Bool),
+    // Settings > the Size column's own walk. On by default, which is what it always did; off is the
+    // one switch that stops it, since removing "size" from columns only stops the cell being drawn.
+    ("folderSizes", Rule::Bool),
     ("groupByKind", Rule::Bool),
     ("hidden", Rule::Bool),
     ("wrapAtEnds", Rule::Bool),
@@ -203,7 +207,7 @@ mod tests {
             keys,
             [
                 "view", "density", "columns", "addressBar", "sort", "dual", "foldersFirst",
-                "groupByKind", "hidden", "wrapAtEnds", "keyHints", "startIn", "startFolder",
+                "folderSizes", "groupByKind", "hidden", "wrapAtEnds", "keyHints", "startIn", "startFolder",
                 "lastPath", "newTab", "trashAutoEmpty", "trashSweptOn", "places", "shelf",
                 "preview", "keys",
                 "display", "menu"
@@ -214,6 +218,7 @@ mod tests {
         assert_eq!(d.get("addressBar").and_then(Json::as_str), Some("breadcrumb"));
         assert_eq!(d.get("keys").and_then(Json::as_str), Some("default"));
         assert_eq!(d.get("foldersFirst").and_then(Json::as_bool), Some(true));
+        assert_eq!(d.get("folderSizes").and_then(Json::as_bool), Some(true));
         assert_eq!(d.get("groupByKind").and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("hidden").and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("wrapAtEnds").and_then(Json::as_bool), Some(false));

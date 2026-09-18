@@ -40,7 +40,8 @@ function pane() {
         // A listing that answers is what moves the pane: ui/PaneWire.qml onListed takes the path off
         // the answer, because Nav.js no longer writes it before the backend has agreed.
         list: function (path, first, hidden) { p.sent.push("list " + path); if (!p.refuses) p.path = path },
-        askFsInfo: function () { p.sent.push("fsinfo") }
+        askFsInfo: function () { p.sent.push("fsinfo") },
+        dirsizecancel: function () { p.sent.push("dirsizecancel") }
     }
     return p
 }
@@ -80,7 +81,10 @@ function run(check) {
     var refused = browsing(["/home/gm"])
     refused.refuses = true
     Nav.open(refused, "/home/gm/Work/inner")
-    check("a refused hop asks for the directory", refused.sent.join("|"), "list /home/gm/Work/inner|fsinfo")
+    check("a refused hop asks for the directory", refused.sent.join("|"), "dirsizecancel|list /home/gm/Work/inner|fsinfo")
+    // The walk the directory being left asked for is ended before the listing is sent, not after:
+    // one runs at a time, so a listing queued behind one waited for it to finish first.
+    check("and cancels the folder-size walk before it", refused.sent[0], "dirsizecancel")
     check("and leaves the pane standing where it was", refused.path, "/home/gm/Work")
 
     var travel = browsing(["/home/gm"])
@@ -117,7 +121,7 @@ function run(check) {
     check("and forgets a half-pressed dd, the cursor and the selection",
           fresh.trashArmedAt + "|" + fresh.cursorIndex + "|" + fresh.cleared, "0|0|1")
     check("and asks the backend for the directory it was given",
-          fresh.sent.join(","), "list /home/gm/Work,fsinfo")
+          fresh.sent.join(","), "dirsizecancel,list /home/gm/Work,fsinfo")
     // A drop taken while the reply is still out lands in the directory asked for and not the one
     // being left, so the request is recorded; the stub above answers at once, which the real
     // backend does not, and ui/Pane.qml dropPath reads this only while the listing is in flight.

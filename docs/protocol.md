@@ -345,25 +345,36 @@ per row that names a directory. **This is the only thing that ever walks a direc
 for size**, the same rule `thumb` follows for thumbnails: a row no client named is never
 walked. A row that is not a directory, or past the end of the listing, is skipped in silence.
 
-Unlike `thumb`, there is no thread pool: the backend walks one directory at a time, inline in
-the same event loop that answers every other request. Between each directory it rechecks for a
-newer request (in particular `dirsizecancel`) before starting the next, so a walker never blocks
-the loop for longer than one directory's own 2000&nbsp;ms deadline. A row already answered for
-the current listing answers again at once from that cache; a row already queued costs nothing
-extra.
+One directory is walked at a time, but not by the loop: the walk runs on a thread of its own and
+reports back as an event, the same shape `thumb` uses. Until 2026-09-18 it ran inline, and a
+single slow row made the backend deaf to everything else — measured here, a `list` issued while
+`/home/melandur` was walking waited 2235&nbsp;ms for an answer whose own work was 0.036&nbsp;ms.
+A directory over its 250&nbsp;ms deadline answers with what it saw, marked `partial`.
+
+A mount whose server can stop answering is refused before it is walked at all, answering its own
+entry marked `partial`: the deadline is only checked between entries, so one `getdents` that
+never returns is not bounded by it. That covers every `fuse.*` type and nfs, cifs, smb3, afs,
+ceph, glusterfs, davfs, ftp and sshfs.
+
+Answers are remembered **by path**, so they survive a `list` or a sort and returning to a
+directory costs nothing; a row already queued costs nothing extra either.
 
 **What the shipped client sends.** `ui/List.qml` sends `dirsize` only when the list settles, the
 same 120&nbsp;ms timer `thumb` already waits on, so a fling issues nothing at all. One request
-names only the directory rows currently visible and not already known.
+names only the directory rows currently visible and not already known, and only while the
+`folderSizes` setting is on. `ui/js/Nav.js` sends `dirsizecancel` on every navigation, so the
+click that leaves a directory ends the walk it asked for rather than queueing behind it.
 
 ### dirsizecancel
 
 `{"c":"dirsizecancel"}`
 
-Drops every directory row still queued to be walked. Unlike `thumbcancel`, there is no rows
-form: the walker is one at a time, so a stale row left over from a scrolled-past viewport would
-delay the row the new viewport actually wants, and the client always means "everything" when it
-sends this. A row already answered is untouched; only the queue is cleared. No response line.
+Drops every directory row still queued to be walked **and ends the walk in flight**. Unlike
+`thumbcancel`, there is no rows form: the walker is one at a time, so a stale row left over from
+a scrolled-past viewport would delay the row the new viewport actually wants, and the client
+always means "everything" when it sends this. A cancelled walk reports nothing and is not
+remembered, since the floor it reached answers a question nobody is asking. A row already
+answered is untouched. No response line.
 
 A directory a `dirsizecancel` dropped can be asked for again straight away: cancelling forgets
 the row, so a later `dirsize` for it queues fresh work.

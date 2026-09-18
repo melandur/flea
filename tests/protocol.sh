@@ -337,7 +337,8 @@ check "hidden true includes both dotfile entries" "5" "$(echo "$out" | head -1 |
 check "the dotfile row is present" "1" "$(echo "$out" | sed -n 2p | grep -c '"n":"\.dotfile"')"
 check "the dot-directory row is present and marked a directory" "1" "$(echo "$out" | sed -n 2p | grep -c '"n":"\.dotdir","d":true')"
 
-# Task 16: directory sizes; each argument is one stage, and the walker only gets a turn between stages once stdin drains to empty, see docs/protocol.md "dirsize".
+# Task 16: directory sizes; each argument is one stage, and the pacing gives the walker thread time
+# to answer between them, see docs/protocol.md "dirsize".
 dirsize_run() {
   ( for stage in "$@"; do
       # $(...) strips a stage's trailing newline, so it comes back here or the next stage glues onto this one's last line.
@@ -359,7 +360,7 @@ printf 'de' > "$DZ/file.txt"
 out=$(dirsize_run "$(printf '{"c":"list","path":"%s","first":10}\n{"c":"dirsize","rows":[0]}\n' "$DZ")")
 check "a dirsize request answers one dirsized line" "1" "$(echo "$out" | grep -c '"t":"dirsized"')"
 check "it names the row it was asked for" "1" "$(echo "$out" | grep -c '"row":0')"
-check "the walk is not marked partial well inside the 2000 ms deadline" "1" "$(echo "$out" | grep -c '"partial":false')"
+check "the walk is not marked partial well inside the 250 ms deadline" "1" "$(echo "$out" | grep -c '"partial":false')"
 bytes=$(echo "$out" | grep -oE '"bytes":[0-9]+' | cut -d: -f2)
 [ -n "$bytes" ] && [ "$bytes" -gt 3 ] 2>/dev/null
 check "sub's size counts its own entry plus a.txt inside it" "0" "$?"
@@ -377,6 +378,24 @@ check "a repeated ask for an already-answered row still answers" "2" "$(echo "$o
 # dirsizecancel carries no rows and drops everything queued; no pacing here on purpose, so the row is cancelled before the walker could ever get a turn.
 out=$(printf '{"c":"list","path":"%s","first":10}\n{"c":"dirsize","rows":[0]}\n{"c":"dirsizecancel"}\n{"c":"quit"}\n' "$DZ" | $BIN --backend)
 check "a row cancelled before it was walked is never answered" "0" "$(echo "$out" | grep -c '"t":"dirsized"')"
+
+# A cancel must not wedge the walker. It ends the walk in flight as well as the queue, and the flag
+# that says one is out is cleared by the report the loop still receives; if either half were missed
+# the next dirsize would queue behind a walk that is over and never be answered at all.
+out=$(dirsize_run \
+    "$(printf '{"c":"list","path":"%s","first":10}\n{"c":"dirsize","rows":[0]}\n{"c":"dirsizecancel"}\n' "$DZ")" \
+    "$(printf '{"c":"dirsize","rows":[0]}\n')")
+check "a dirsize after a cancel is still answered" "1" "$(echo "$out" | grep -c '"t":"dirsized"')"
+
+# An answer is remembered by path, so leaving a directory and coming back answers from the cache
+# rather than walking again: measured on a real home, seven walks became none. A cached answer
+# carries ms 0.000, which is how this tells the two apart.
+out=$(dirsize_run \
+    "$(printf '{"c":"list","path":"%s","first":10}\n{"c":"dirsize","rows":[0]}\n' "$DZ")" \
+    "$(printf '{"c":"list","path":"%s","first":10}\n' "$DZ_SB")" \
+    "$(printf '{"c":"list","path":"%s","first":10}\n{"c":"dirsize","rows":[0]}\n' "$DZ")")
+check "returning to a directory answers its size again" "2" "$(echo "$out" | grep -c '"t":"dirsized"')"
+check "and the second answer came from the cache rather than a second walk" "1" "$(echo "$out" | grep -c '"ms":0.000')"
 
 # list and sort both reassign what a row index names, the same reason a list or a sort clears the thumbnail map, see docs/protocol.md "dirsized".
 SZ_SB="$FIXTURE_ROOT/flea-dirsize-sort-test-$$"

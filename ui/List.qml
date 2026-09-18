@@ -228,12 +228,12 @@ ListView {
 
     // Same idiom as requestThumbs, minus a cancel: onContentYChanged already sent it, see above.
     function requestDirSizes() {
-        if (!root.visible || root.pane.shownTotal === 0 || root.pane.listInFlight)
+        if (!root.visible || root.pane.shownTotal === 0 || root.pane.listInFlight || !ViewState.folderSizes)
             return
         // Thumbs.viewport() is reused: it takes no thumb-specific state, only geometry.
         var view = root.visibleRange()
         var span = Filter.span(root.pane.shown, view.first, view.last)
-        var ask = Filter.keep(DirSizes.plan(root.pane.dirSizeState, root.pane.rows, root.pane.held, span.first, span.last, ViewState.thumbnailMode), root.pane.shown)
+        var ask = Filter.keep(DirSizes.plan(root.pane.dirSizeState, root.pane.rows, root.pane.held, span.first, span.last), root.pane.shown)
         if (ask.length > 0) {
             root.pane.backend.dirsize(ask)
             settle.interval = root.pane.settleMs

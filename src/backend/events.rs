@@ -1,5 +1,6 @@
 // Every source of work the read loop waits on, and the threads that join them onto its one channel.
 // std has no select, so each blocking source is a thread and the loop only ever waits on the receiver.
+use crate::backend::dirsizereq::DirSizeDone;
 use crate::backend::opscancel::Live;
 use crate::backend::opsreq::OpMsg;
 use crate::backend::proto::{parse_request, Request, TRANSFER_CANCEL};
@@ -14,6 +15,9 @@ use std::thread;
 pub enum Event {
     Request(String),
     Thumb(Done),
+    // A folder-size walk finished on its own thread. It reaches the loop the way a thumbnail does,
+    // so the loop stays the only writer of stdout and the only toucher of State.
+    DirSize(DirSizeDone),
     // A write operation's own thread reports here, so the loop stays the only writer of stdout.
     Op(OpMsg),
     // The watch descriptor that saw it, so a burst belonging to the directory the client has already

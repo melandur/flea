@@ -10,6 +10,7 @@ use crate::backend::thumbspec::Thumbnailers;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -32,10 +33,16 @@ pub struct State {
     // Only the rows a client named, so this never grows with the directory; see AGENTS.md "Thumbnail requests".
     pub asked: Vec<(PathBuf, usize)>,
     pub outstanding: usize,
-    // Answered directory rows, kept until the next list or sort reassigns what a row index names.
-    pub dirsizes: HashMap<usize, (u64, bool)>,
+    // Answered directories, keyed by path rather than by row so a list or a sort does not discard
+    // them: returning to a folder used to re-walk it whole, 2679 ms every time on this box.
+    pub dirsizes: HashMap<PathBuf, (u64, bool)>,
     // Rows still to walk, one at a time; dirsizecancel empties this without touching dirsizes.
     pub dirsize_queue: Vec<usize>,
+    // Whether a walker thread is out. One at a time is still the rule; the one is no longer the loop.
+    pub dirsize_running: bool,
+    // Raised to end the walk in flight. Replaced rather than lowered on a cancel, so the thread that
+    // was told to stop cannot be un-told by the next walk arming the same flag.
+    pub dirsize_stop: Arc<AtomicBool>,
     // The subtree walk the loop ticks; None means no search is running.
     pub search: Option<Search>,
     // When the running walk last announced its count, so SEARCH_REPORT can throttle the stream.

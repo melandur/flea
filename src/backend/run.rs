@@ -10,7 +10,7 @@ use crate::backend::metareq::spawn as spawn_meta;
 use crate::backend::opsdispatch::{cancel_transfer, do_mkdir, do_newfile, do_rename, do_undo, report_op, resolve_rows, start_duplicate, start_trash, start_transfer, start_menu_transfer, start_redo, Ops};
 use crate::backend::opsreq::OpMsg;
 use crate::backend::mime::Db;
-use crate::backend::dirsizereq::{queue_dirsizes, walk_one_dirsize};
+use crate::backend::dirsizereq::{pump_dirsize, queue_dirsizes, report_dirsize};
 use crate::backend::events::{spawn_forwarder, spawn_op_forwarder, spawn_reader, Event};
 use crate::backend::fsinfo::{fsinfo_line, read as read_fsinfo};
 use crate::backend::fsinfo::dev_of;
@@ -36,6 +36,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -74,6 +75,8 @@ pub fn run() -> i32 {
         outstanding: 0,
         dirsizes: HashMap::new(),
         dirsize_queue: Vec::new(),
+        dirsize_running: false,
+        dirsize_stop: Arc::new(AtomicBool::new(false)),
         search: None,
         search_reported: Instant::now(),
     };
@@ -93,11 +96,14 @@ pub fn run() -> i32 {
     spawn_forwarder(done, tx.clone());
     spawn_op_forwarder(op_rx, tx.clone());
     spawn_reader(tx.clone(), Arc::clone(&ops.live));
+    // The walker threads answer on this, so it outlives the move into Watch::start below.
+    let walkers = tx.clone();
     // Armed before the first request, so no listing is ever answered with nothing watching it.
     let mut watch = Watch::start(tx);
     loop {
-        // Idle (nothing queued and no walk running) this is exactly the old blocking recv, see docs/protocol.md "dirsize".
-        let event = if st.dirsize_queue.is_empty() && st.search.is_none() {
+        // The folder-size walk runs on its own thread now, so only a search still makes the loop
+        // spin; with neither running this is the plain blocking recv, see docs/protocol.md "dirsize".
+        let event = if st.search.is_none() {
             match rx.recv() {
                 Ok(e) => e,
                 Err(_) => break,
@@ -120,6 +126,7 @@ pub fn run() -> i32 {
                 }
             }
             Event::Thumb(d) => report_done(&mut out, &mut st, d),
+            Event::DirSize(d) => report_dirsize(&mut out, &mut st, d),
             // The one line no client asked for, and only ever for the directory being listed now.
             Event::Changed(wd) => {
                 if watch.is_current(wd) {
@@ -135,7 +142,13 @@ pub fn run() -> i32 {
             }
             Event::Closed => break,
         }
+        // After the event and not before it: a list that just landed has already cleared the queue,
+        // and a walk that just reported has already lowered the running flag.
+        pump_dirsize(&mut st, &walkers);
     }
+    // Nothing waits on a walker, but a raised flag ends the one in flight inside an entry rather
+    // than at the end of whatever tree it is in.
+    st.dirsize_stop.store(true, Ordering::Relaxed);
     drain(&mut out, &mut st, &mut ops, &rx, &pool, &cache);
     0
 }
@@ -282,9 +295,7 @@ fn handle_line(
             queue_dirsizes(out, st, &rows);
         }
         // No rows form: a stale row from a scrolled-past viewport would delay the rows the new one wants, see docs/protocol.md "dirsizecancel".
-        Request::DirSizeCancel => {
-            st.dirsize_queue.clear();
-        }
+        Request::DirSizeCancel => cancel_dirsizes(st),
         Request::Transfer { op, paths, rows, dest, menu_id, shelf } => {
             if !shelf.is_empty() {
                 crate::backend::shelfdrop::start(out, ops, &shelf, &dest)
@@ -360,21 +371,26 @@ fn handle_line(
     Control::Continue
 }
 
+// Ends the walk in flight as well as the queue behind it. The flag is replaced rather than lowered,
+// because the thread that was told to stop holds the old one: lowering it would un-tell that thread
+// and let a walk the client has navigated away from go on answering.
+pub fn cancel_dirsizes(st: &mut State) {
+    st.dirsize_stop.store(true, Ordering::Relaxed);
+    st.dirsize_stop = Arc::new(AtomicBool::new(false));
+    st.dirsize_queue.clear();
+}
+
 // A new row order invalidates every outstanding index, so the queue goes and no result can be reported against the new listing.
 pub fn forget_rows(st: &mut State, pool: &Pool) {
     st.outstanding = st.outstanding.saturating_sub(pool.cancel_all().len());
     st.asked.clear();
-    // A list or a sort changes which row an index names, the same reason thumbnails clear their map.
-    st.dirsizes.clear();
-    st.dirsize_queue.clear();
+    // st.dirsizes survives: it is keyed by path, so a sort renames no entry in it and a return to a
+    // directory already measured is answered from it rather than walked again.
+    cancel_dirsizes(st);
 }
 
-// dirsize first: its rows are on screen now, while a search walk is work the client asked for and can wait a tick.
+// Only the search walk ticks here now; the folder-size walk has a thread and reports as an event.
 fn tick_walkers(out: &mut BufWriter<io::Stdout>, st: &mut State, pool: &Pool) {
-    if !st.dirsize_queue.is_empty() {
-        walk_one_dirsize(out, st);
-        return;
-    }
     // A finished walk hands back its rows in ranked order, which renames every outstanding index.
     if step_search(out, st) {
         forget_rows(st, pool);

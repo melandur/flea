@@ -77,6 +77,8 @@ QtObject {
     // driveSize and trashCount beside it already read. The other way round drew hints from a state
     // file that never named them.
     readonly property bool keyHints: root.state.keyHints === true
+    // The Size column's recursive walk. Absent means on, which is what it did before it had a switch.
+    readonly property bool folderSizes: root.state.folderSizes !== false
 
     // The listing's view, "view" in src/uischema.rs, which ui/Pane.qml draws for the first frame so
     // the view the window was left on is the view the next launch opens on. A word this build cannot
