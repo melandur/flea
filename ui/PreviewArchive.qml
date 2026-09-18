@@ -14,6 +14,18 @@ Item {
 
     readonly property real lineHeight: Math.round(Theme.font.caption * Theme.lineBoxRatio)
     readonly property int shown: Math.max(0, Math.floor(height / lineHeight) - 1)
+    // Which member the frame starts at, the expanded overlay's Up and Down: one row a press through
+    // the names the wire carried, which is src/backend/archivelist.rs ARCHIVE_NAME_CAP of them and
+    // never the whole index, so the "+ N more" line below goes on stating what no scroll can reach.
+    property int offset: 0
+    readonly property int names: root.meta && root.meta.names ? root.meta.names.length : 0
+
+    function scrollBy(steps) {
+        root.offset = Math.max(0, Math.min(Math.max(0, root.names - root.shown), root.offset + steps))
+    }
+
+    // A new archive is a new index, so the frame starts at its first member however the last was left.
+    onMetaChanged: root.offset = 0
 
     Column {
         anchors.fill: parent
@@ -21,7 +33,7 @@ Item {
         spacing: 0
 
         Repeater {
-            model: Facts.archiveEntries(root.meta, root.shown)
+            model: Facts.archiveEntries(root.meta, root.offset + root.shown).slice(root.offset)
 
             delegate: Row {
                 required property var modelData
@@ -51,8 +63,8 @@ Item {
 
         Text {
             height: root.lineHeight
-            visible: Facts.archiveMore(root.meta, root.shown) > 0
-            text: "+ " + Facts.archiveMore(root.meta, root.shown) + " more"
+            visible: Facts.archiveMore(root.meta, root.offset + root.shown) > 0
+            text: "+ " + Facts.archiveMore(root.meta, root.offset + root.shown) + " more"
             color: Theme.color.muted
             opacity: 0.6
             font.family: Theme.font.family

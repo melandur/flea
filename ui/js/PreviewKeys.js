@@ -24,8 +24,11 @@ function pdfAction(action, viewer) {
     } else if (action === "open" || action === "preview") {
         var control = controls[viewer.pdfControlIndex]
         if (control && control.enabled && control.visible) control.activated()
-    } else if (action === "seekBack" || action === "parent") viewer.turnPage(-1)
-    else if (action === "seekForward" || action === "pageForward") viewer.turnPage(1)
+    // The inline column's own horizontal pair reaches here under both spellings: previewBack and
+    // previewForward are what the map binds now, and parent and pageForward are the browsing pair
+    // the column answers with a page turn too.
+    } else if (action === "previewBack" || action === "parent") viewer.turnPage(-1)
+    else if (action === "previewForward" || action === "pageForward") viewer.turnPage(1)
     else if (action === "zoomOut") viewer.zoomBy(-1)
     else if (action === "zoomIn") viewer.zoomBy(1)
     else if (action === "expand") viewer.toggleExpand()
@@ -39,41 +42,70 @@ function open(root) {
         root.preview.open(root.join(root.path, row.n), row.i, row.s, root.kindNames[row.k] || "")
 }
 
-// Preview open: j/k move the cursor and the preview follows; escape always closes, and so does a
-// second space, on every kind including media (GM, 2026-09-11: "pressing space a second time should
-// close the preview, just like Finder does"). That reverses Task 22, which had space toggle
-// play/pause on a media preview; the strip's own play control still does that with the pointer.
+// The preview's whole keyboard, one contract for every kind it can draw: the operator's ruling of
+// 2026-09-18, "we want that all preview files behave the same way". Two states, and the state is
+// the only thing that changes what an arrow means.
+//
+//   inset      Up/Down move the listing cursor and the preview follows it, Left leaves the preview,
+//              Right and Space make it fill the window.
+//   expanded   Up/Down scroll the surface, Left and Right move the content itself: a PDF's page and
+//              a media file's playhead. Space brings the inset surface back, where Left closes.
+//
+// Escape closes outright from either state, because a preview must never need a particular key to
+// leave it. What this reverses is two rulings, and both are written down rather than re-litigated:
+// Space closed the preview from 2026-09-11 ("pressing space a second time should close the
+// preview, just like Finder does"), and Left seeked in media and turned a PDF's page while it
+// closed every plain kind, so the one key meant two things depending on the row under the cursor.
+// Left still closes the preview the operator is looking at; it is only the expanded surface that
+// takes it for the content, which is the state the operator asked for it in.
+//
+// A surface with nothing to move in an axis answers nothing rather than borrowing the other
+// meaning: a fitted image cannot pan, wrapped text has no horizontal overflow, and a media file has
+// no vertical one. ui/Preview.qml's scrollPage and turnPage are the primitives, and each of them
+// self-guards on the kind, which is why there is no kind test around either call here.
+//
 // Any key reveals the media strip, even one that does nothing else, matching "move the mouse or
-// press anything" from the same ruling.
+// press anything" from Task 22's ruling.
 function act(action, root) {
     root.preview.revealStrip()
+    var expanded = root.preview.expanded === true
     switch (action) {
-    case "cursorDown": Filter.moveCursor(root, 1); follow(root); return
-    case "cursorUp": Filter.moveCursor(root, -1); follow(root); return
-    case "preview": root.preview.close(); return
-    // Space closes every kind now, so playback has its own key; it self-guards, because p reaches
-    // this only in the media context and a still image has nothing to play.
+    // Inset, the cursor is the listing's and the preview follows it; expanded, it is the surface's.
+    case "cursorDown":
+        if (expanded) { root.preview.scrollPage(1); return }
+        Filter.moveCursor(root, 1); follow(root); return
+    case "cursorUp":
+        if (expanded) { root.preview.scrollPage(-1); return }
+        Filter.moveCursor(root, -1); follow(root); return
+    // Space is the one key on both ends of the expansion, so it can never leave the operator with
+    // a filled window and no key to undo it.
+    case "preview": root.preview.toggleExpand(); return
+    case "previewBack":
+        if (!expanded) { root.preview.close(); return }
+        if (root.preview.isMedia) root.preview.seek(-SEEK_MS)
+        else root.preview.turnPage(-1)
+        return
+    case "previewForward":
+        if (!expanded) { root.preview.toggleExpand(); return }
+        if (root.preview.isMedia) root.preview.seek(SEEK_MS)
+        else root.preview.turnPage(1)
+        return
+    case "escape": root.preview.close(); return
+    // Space no longer plays, so playback has its own key; it self-guards, because p reaches this
+    // only in the media context and a still image has nothing to play.
     case "playPause":
         if (root.preview.isMedia) root.preview.togglePlay()
         return
-    case "escape": root.preview.close(); return
-    case "seekBack":
-        if (root.preview.isPdf) root.preview.turnPage(-1)
-        else root.preview.seek(-SEEK_MS)
-        return
-    case "seekForward":
-        if (root.preview.isPdf) root.preview.turnPage(1)
-        else root.preview.seek(SEEK_MS)
-        return
-    // h keeps its own "parent" name from keys.toml; turnPage self-guards, so a media preview
-    // ignores both of these rather than seeking on a key the strip never advertised.
-    case "parent": root.preview.turnPage(-1); return
-    case "pageForward": root.preview.turnPage(1); return
-    case "zoomOut": root.preview.zoomBy(-1); return
-    case "zoomIn": root.preview.zoomBy(1); return
-    case "expand": root.preview.toggleExpand(); return
     // MediaMute rule 5: the flag is the preview's to flip, and it silences without pausing.
     case "mute": root.preview.toggleMute(); return
+    // The PDF's chrome strip is the one surface with controls of its own, so Tab walks them and
+    // Enter presses the one it is on; ui/PdfViewer.qml routes its own keys through here, which is
+    // what makes a PDF answer the four arrows the way every other kind does.
+    case "focusNext":
+    case "focusPrevious":
+    case "open":
+        if (root.preview.isPdf && root.preview.pdfItem) pdfAction(action, root.preview.pdfItem)
+        return
     }
 }
 

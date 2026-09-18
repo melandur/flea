@@ -11,8 +11,15 @@ Item {
 
     property string path: ""
     property bool active: false
-    // Expand fills the window; the overlay that hosts this reads the flag and drops its own inset.
+    // Expand fills the window, and the overlay that hosts this owns the state: ui/Preview.qml binds
+    // this flag to its own and answers expandRequested below, so the mark here and Space over any
+    // other kind flip the one flag. The inline preview column passes no pane and no binding, which
+    // is why the property is writable rather than read-only.
     property bool expanded: false
+    // The pane whose preview this is, wired by ui/Preview.qml. With one, the keys this surface holds
+    // go through ui/js/PreviewKeys.js act, the same contract every other kind answers; without one
+    // this is the inline column's own viewer and pdfAction is the whole of its keyboard.
+    property var pane: null
     property int pdfControlIndex: -1
     readonly property var pdfControls: [previous, next, zoomOut, zoomIn, expand, close]
     // Containers Tier A: a keyboard walk says where it is by brightness, so the control it is on keeps the foreground and the rest of the strip dims.
@@ -24,7 +31,9 @@ Item {
         PreviewKeys.pdfAction("focusNext", root)
     Keys.onPressed: function(event) {
         var action = Keymap.lookup(event.key, event.text, event.modifiers, "pdf")
-        if (action === "escape" || action === "focusPreview") root.closed()
+        if (action === "focusPreview") root.closed()
+        else if (root.pane) PreviewKeys.act(action, root.pane)
+        else if (action === "escape") root.closed()
         else PreviewKeys.pdfAction(action, root)
         event.accepted = true
     }
@@ -42,6 +51,8 @@ Item {
     property real zoom: root.minZoom
 
     signal closed()
+    // Asked of the host rather than written here, so the overlay's flag stays the single answer.
+    signal expandRequested(bool on)
 
     // A new document is a new subject, so it opens fitted however the last one was left.
     onPathChanged: { root.zoom = root.minZoom; root.pdfControlIndex = -1 }
@@ -56,11 +67,11 @@ Item {
         root.zoom = Math.max(root.minZoom, Math.min(root.maxZoom, root.zoom + steps * root.zoomStep))
     }
 
-    function toggleExpand() { root.expanded = !root.expanded }
+    function toggleExpand() { root.expandRequested(!root.expanded) }
     function expandFrom(page, zoom) {
         pdf.page = Math.max(0, pdf.pageCount > 0 ? Math.min(pdf.pageCount - 1, page) : page)
         root.zoom = Math.max(root.minZoom, Math.min(root.maxZoom, zoom))
-        root.expanded = true
+        root.expandRequested(true)
     }
 
     // A test drives these by coordinate, the same seam ChromeBar.buttonFor already opens.

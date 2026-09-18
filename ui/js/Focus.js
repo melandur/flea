@@ -29,7 +29,7 @@ function shareBrowserHere(root) {
 // The one lookup Pane.qml's Keys.onPressed calls. "addNetwork" is a rail-only action (the
 // dialog is reached from the rail's own "+" mark), so "a" does nothing in the list;
 // filtering it here, not in Keymap.js, keeps the generated file a pure keys.toml mirror.
-// seekBack/seekForward get the same treatment, scoped to an open MEDIA preview instead of the rail.
+// The preview's own keys need no such scoping: the map binds them in the preview contexts alone.
 function lookup(event, root) {
     var context = root.preview.active ? (root.preview.isPdf ? "pdf" : root.preview.isMedia ? "media" : "preview")
                   : shareBrowserHere(root) ? "menu" : root.focusView === RAIL ? "rail" : "listing"
@@ -46,17 +46,16 @@ function lookup(event, root) {
     // List and Grid filter held rows; search owns the header while its results are active.
     if (action === "filter")
         return (root.viewMode !== "columns" && root.searchMode.length === 0) ? action : ""
-    // Left and Right seek inside a media preview and turn the page in a PDF one, which is the only
-    // place the map binds either action now that the browsing pair is parent and browse-in; the grid
-    // takes the bare arrows above, before the map is consulted.
-    if (action === "seekBack" || action === "seekForward")
-        return root.preview.active && (root.preview.isMedia || root.preview.isPdf) ? action : ""
-    // Minus, plus and e mean nothing outside a PDF. l is h's forward: page, else enter or preview.
+    // Left and Right inside a preview are previewBack and previewForward, one pair for every kind,
+    // and ui/js/PreviewKeys.js act is what reads the expanded state to decide what they move; the
+    // grid takes the bare arrows above, before the map is consulted.
+    // A zoom means nothing outside a PDF, and no key spells one at all now: the PDF's strip is the
+    // only route, so this gate is what would scope a key the table gave one back.
     if (action === "zoomOut" || action === "zoomIn" || action === "expand")
         return (root.preview.active && root.preview.isPdf) ? action : ""
+    // Right browses in, and on a file row that is the preview. An open preview never reaches this,
+    // because Right resolves to previewForward in all three of its contexts first.
     if (action === "pageForward") {
-        if (root.preview.active)
-            return root.preview.isPdf ? action : ""
         if (shareBrowserHere(root) || root.focusView === RAIL)
             return "open"
         var row = root.rowFor(root.cursorIndex)

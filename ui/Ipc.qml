@@ -401,8 +401,7 @@ QtObject {
         function previewStrip(): string { return JSON.stringify({ visible: root.pane.preview.stripVisible, muted: root.pane.preview.muted, mute: root.fleaWindow.centreOf(root.pane.preview.muteMark) }) }
         // A 0.25 zoom step and an expand flag are not legible off a screenshot, so the seam is the
         // only honest answer for either; "" means no PDF is loaded, which is not zoom 1 or false.
-        function previewPdfPage(): int { var p = root.pane.preview.pdfItem; return p ? p.page : -1 }
-        function previewPdfZoom(): string { var p = root.pane.preview.pdfItem; return p ? String(p.zoom) : "" }
+        function previewPdfPage(): int { var p = root.pane.preview.pdfItem; return p ? p.page : -1 } function previewPdfZoom(): string { var p = root.pane.preview.pdfItem; return p ? String(p.zoom) : "" }
         function previewPdfFocus(): int { var p = root.pane.preview.pdfItem; return p ? p.pdfControlIndex : -1 }
         function pdfState(overlay: bool): string {
             var p = overlay ? root.pane.preview.pdfItem : root.pane.previewColumnItem
@@ -414,7 +413,8 @@ QtObject {
                 controls: p.pdfControls.map(function (control) { return { name: control.accessName, enabled: control.enabled,
                     visible: control.visible, centre: root.fleaWindow.centreOf(control) } }) })
         }
-        function previewExpanded(): string { var p = root.pane.preview.pdfItem; return p ? String(p.expanded) : "" }
+        // The overlay's expansion and the scroll it moved; ui/Preview.qml scrollPosition says what each kind answers with.
+        function previewExpanded(): string { return String(root.pane.preview.expanded) } function previewScroll(): string { return String(root.pane.preview.scrollPosition()) }
         function previewSelectionState(): string {
             var column = root.pane.previewColumnItem
             return JSON.stringify({view: root.pane.viewMode, width: root.pane.listSlot.width,

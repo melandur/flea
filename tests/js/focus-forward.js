@@ -54,6 +54,7 @@ function pdfPreview() {
         active: true,
         isMedia: false,
         isPdf: true,
+        expanded: true,
         page: 0,
         revealStrip: function () {},
         turnPage: function (delta) { this.page += delta }
@@ -99,17 +100,19 @@ function run(check) {
 
     var pdf = pane(null)
     pdf.preview = pdfOpen()
-    check("right pages an open PDF forward", Focus.lookup(right, pdf), "seekForward")
+    check("right is the preview's own forward over an open PDF", Focus.lookup(right, pdf), "previewForward")
     check("PDF lookup does not inspect the hidden listing", pdf.rowsRead.length, 0)
 
+    // Expanded, that forward is the page itself; inset it fills the window, which previewkeys.js
+    // covers for all six kinds. The reader here starts expanded because the page is what is checked.
     var reader = pdfPreview()
-    PreviewKeys.act("seekForward", { preview: reader })
-    PreviewKeys.act("seekForward", { preview: reader })
-    PreviewKeys.act("seekBack", { preview: reader })
-    check("right advances the PDF and left retreats it", reader.page, 1)
+    PreviewKeys.act("previewForward", { preview: reader })
+    PreviewKeys.act("previewForward", { preview: reader })
+    PreviewKeys.act("previewBack", { preview: reader })
+    check("right advances the expanded PDF and left retreats it", reader.page, 1)
 
     var media = pane(null)
     media.preview = mediaOpen()
-    check("right seeks over media rather than browsing in", Focus.lookup(right, media), "seekForward")
+    check("right is the same forward over media rather than browsing in", Focus.lookup(right, media), "previewForward")
     check("media lookup does not inspect the hidden listing", media.rowsRead.length, 0)
 }

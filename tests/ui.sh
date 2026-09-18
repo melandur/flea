@@ -4072,10 +4072,23 @@ PYEOF
     [[ "$(ipc previewOpen)" == "true" ]] || fail "preview: l on sample.txt did not open a preview"
     [[ "$(ipc previewKind)" == "text" ]] || fail "preview: sample.txt classified as $(ipc previewKind), not text"
     shot preview-text
-    # Task 22 repurposes Space for play/pause only on a MEDIA preview; text keeps the old binding.
+    # The 2026-09-18 ruling, "all preview files behave the same way": Space fills the window and
+    # Space again brings the inset surface back, on every kind, and Left is what leaves the inset
+    # one. So the close this block used to assert on the second Space is now two keys, and the
+    # expansion between them is what a text preview gained.
     key -k space >/dev/null
     settle
-    [[ "$(ipc previewOpen)" == "false" ]] || fail "preview: space did not close the text preview, the media-only rebinding leaked into text"
+    [[ "$(ipc previewExpanded)" == "true" ]] || fail "preview: space did not fill the window with the text preview"
+    key -k Down >/dev/null
+    settle
+    (( $(ipc previewScroll) > 0 )) || fail "preview: down did not scroll the expanded text body"
+    key -k space >/dev/null
+    settle
+    [[ "$(ipc previewExpanded)" == "false" && "$(ipc previewOpen)" == "true" ]] \
+        || fail "preview: the second space did not bring the inset text preview back"
+    key -k Left >/dev/null
+    settle
+    [[ "$(ipc previewOpen)" == "false" ]] || fail "preview: left did not leave the inset text preview"
 
     open_row notes.md
     # Markdown renders verbatim like any other text, so the kind is text and there is no second path.
@@ -4089,9 +4102,14 @@ PYEOF
     wait_preview_state playing
     shot preview-audio
 
-    # Left/Right seek 5 s (PreviewKeys.js's SEEK_MS), read before the pause/resume dance below spends
-    # its own several IPC round trips (190 to 565 ms each, see the clip_seconds comment above): an
-    # eight-second clip still has room left once this runs, so both directions are unclamped.
+    # Left/Right seek 5 s (PreviewKeys.js's SEEK_MS) in the EXPANDED state, which is where the pair
+    # moves the content on every kind since 2026-09-18; inset, Left leaves the preview and Right
+    # fills the window. Read before the pause/resume dance below spends its own several IPC round
+    # trips (190 to 565 ms each, see the clip_seconds comment above): an eight-second clip still has
+    # room left once this runs, so both directions are unclamped.
+    key -k space >/dev/null
+    settle
+    [[ "$(ipc previewExpanded)" == "true" ]] || fail "preview: space did not fill the window with the audio preview"
     local pos_before pos_after
     pos_before=$(ipc previewPosition)
     key -k Right >/dev/null
@@ -4122,10 +4140,15 @@ PYEOF
     key p >/dev/null
     wait_preview_state playing
 
-    # And the second space closes a playing media preview, the way it closes every other kind.
+    # And the second space brings the inset surface back over a playing media preview, the way it
+    # does on every other kind, after which Left leaves it: the pair of keys the ruling names.
     key -k space >/dev/null
     settle
-    [[ "$(ipc previewOpen)" == "false" ]] || fail "preview: space did not close the playing audio preview"
+    [[ "$(ipc previewExpanded)" == "false" && "$(ipc previewOpen)" == "true" ]] \
+        || fail "preview: space did not bring the inset audio preview back"
+    key -k Left >/dev/null
+    settle
+    [[ "$(ipc previewOpen)" == "false" ]] || fail "preview: left did not leave the playing audio preview"
 
     open_row_fast clip.mp4
     [[ "$(ipc previewKind)" == "video" ]] || fail "preview: clip.mp4 classified as $(ipc previewKind), not video"
@@ -8984,11 +9007,14 @@ case_previewviews() {
         for _attempt in $(seq 1 40); do [[ "$(ipc previewState)" == "pdf" ]] && break; sleep 0.1; done
         [[ "$(ipc previewKind)" == "pdf" && "$(ipc previewState)" == "pdf" && "$(ipc previewPdfPage)" == "0" ]] \
             || fail "$mode: Space on manual.pdf: kind $(ipc previewKind), state $(ipc previewState), page $(ipc previewPdfPage)"
+        # Inset, Right fills the window; expanded, it turns the page. Two Rights are therefore the
+        # expansion and one turn, which is the 2026-09-18 contract for every kind at once.
         key -k Right >/dev/null
         settle
+        [[ "$(ipc previewExpanded)" == "true" ]] || fail "$mode: right did not fill the window with manual.pdf"
         key -k Right >/dev/null
         settle
-        [[ "$(ipc previewPdfPage)" == "1" ]] || fail "$mode: two Rights left manual.pdf on page $(ipc previewPdfPage), not the last page 1"
+        [[ "$(ipc previewPdfPage)" == "1" ]] || fail "$mode: the expanded Right left manual.pdf on page $(ipc previewPdfPage), not page 1"
         key -k Escape >/dev/null
         settle
         switch_view list

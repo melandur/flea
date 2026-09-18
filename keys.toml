@@ -83,8 +83,9 @@ key = "Up"
 action = "cursorUp"
 
 # The horizontal pair, in the list, the columns and both dual panes: Left goes up a level and Right
-# browses in. A preview takes them back through the preview-context rows at the end of this file,
-# where they seek in media and turn the page in a PDF, and the grid claims them as its own sideways
+# browses in, which on a file row is the preview itself, ui/js/Focus.js lookup's own pageForward
+# branch. A preview takes the pair back through the preview-context rows at the end of this file,
+# where Left leaves it and Right fills the window, and the grid claims them as its own sideways
 # move in ui/js/Focus.js before the map is consulted at all.
 [[code]]
 key = "Left"
@@ -116,8 +117,9 @@ key = "Tab"
 action = "focusNext"
 
 # Space already owns "open preview" in the browsing state ui/js/Focus.js act handles, and
-# ui/js/PreviewKeys.js act reuses the same action name to mean "close" once a preview is open, on
-# every kind including media, so there is no free context left for a third meaning; v toggles selection.
+# ui/js/PreviewKeys.js act reuses the same action name inside an open preview, where it makes the
+# surface fill the window and then brings it back to the inset one, on every kind including media;
+# Left is what leaves an unexpanded preview, and Escape leaves either. v toggles selection.
 [[code]]
 key = "Space"
 action = "preview"
@@ -633,38 +635,34 @@ label = "parent"
 frontend = "all"
 context = "menu"
 
-# Left leaves the preview the way Escape does, in the plain kinds only. ui/js/Focus.js discarded
-# seekBack on every kind but media and a PDF, so on an image, a text file or an archive listing the
-# key did nothing whatever; it closes there now. A media preview and a PDF keep it, because Left is
-# the only key either has left for seeking back and turning a page back once h belongs to the
-# presets that spell the arrows as letters.
+# The preview's own horizontal pair, one contract for every kind it can draw: the operator's ruling
+# of 2026-09-18, "we want that all preview files behave the same way". Before it, Left closed an
+# image, a text file and an archive listing while a PDF turned a page with it and a media file
+# seeked, so the one key meant two different things depending on what the row happened to be, and
+# the PDF surface answered its own keys besides. The map now says only which way the arrow points,
+# because what it does depends on whether the surface is expanded, and ui/js/PreviewKeys.js is the
+# one place that decides: unexpanded, Left leaves the preview and Right makes it fill the window;
+# expanded, the pair moves the content itself, a PDF's page and a media file's playhead. Up and Down
+# keep the cursor actions in the table above for the same reason: unexpanded they move the listing
+# cursor and the preview follows, expanded they scroll the surface. Escape leaves from either state,
+# because a preview must never need a particular key to leave it.
 [[preset]]
 name = "all"
 mods = "none"
 key = "Left"
 keys = "left"
-action = "escape"
-label = "close"
+action = "previewBack"
+label = "leave the preview, or back in it"
 frontend = "all"
-context = "preview"
-
-[[preset]]
-name = "all"
-mods = "none"
-key = "Left"
-keys = "left"
-action = "seekBack"
-label = "seekBack"
-frontend = "all"
-context = "pdf,media"
+context = "preview,pdf,media"
 
 [[preset]]
 name = "all"
 mods = "none"
 key = "Right"
 keys = "right"
-action = "seekForward"
-label = "seekForward"
+action = "previewForward"
+label = "fill the window, or forward in it"
 frontend = "all"
 context = "preview,pdf,media"
 

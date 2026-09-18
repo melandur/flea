@@ -107,7 +107,11 @@ bundled palettes from [Strata](https://github.com/lgse/strata), with following y
 the default and what a fresh install does. See [`vendor/`](vendor/README.md) for what is imported
 and under which licence.
 
-**Space** opens Quick Look from any view. Page through a PDF, play media or inspect an archive.
+**Space** opens Quick Look from any view, and so does **→**. Every kind behaves the same way in
+it: **↑** and **↓** move to the next file with the preview following, **Space** fills the window and
+**Space** again brings the inset surface back, and **←** leaves. Once it fills the window the arrows
+move the content instead: a PDF's pages, a media file's playhead, a text file's or an archive
+listing's own scroll. Page through a PDF, play media or inspect an archive.
 
 <p align="center">
   <img src="docs/images/pdf.png" alt="PDF preview with page navigation">
@@ -172,7 +176,7 @@ Press **?** for the full keymap, or **,** to change settings.
 |---|---|
 | Move / parent / browse in | `↓` `↑` / `←` / `→` |
 | Open with the default app | `Enter` |
-| Quick Look / leave it | `Space` / `Esc`, `←` or `Space` |
+| Quick Look / fill the window / leave it | `Space` or `→` / `Space` / `←` or `Esc` |
 | Copy / cut / paste | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` |
 | Copy the file's path | `Ctrl+B` |
 | Rename / trash / undo | `F2` / `Delete` / `Ctrl+Z` |

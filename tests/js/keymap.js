@@ -111,13 +111,21 @@ function run(check) {
     // The context menu steps on the arrows, and Right walks into a submenu where Left walks out.
     key("Right", "", none, "menuRight", "menu")
     key("Left", "", none, "parent", "menu")
-    // Left leaves a preview of the plain kinds, where it named an action only the seeking kinds
-    // answered and so did nothing at all; the two that seek keep it, having no other key for it.
-    key("Left", "", none, "escape", "preview")
-    key("Left", "", none, "seekBack", "pdf")
-    key("Left", "", none, "seekBack", "media")
-    key("Right", "", none, "seekForward", "preview")
-    key("Right", "", none, "seekForward", "pdf")
+    // The 2026-09-18 ruling, "all preview files behave the same way": one action per direction in
+    // all three preview contexts, and ui/js/PreviewKeys.js act is the only thing that reads the
+    // expanded state to decide what it moves. The old table gave Left three meanings across the
+    // kinds, which is what a row per kind buys and what this asserts is gone.
+    key("Left", "", none, "previewBack", "preview")
+    key("Left", "", none, "previewBack", "pdf")
+    key("Left", "", none, "previewBack", "media")
+    key("Right", "", none, "previewForward", "preview")
+    key("Right", "", none, "previewForward", "pdf")
+    key("Right", "", none, "previewForward", "media")
+    // And the two names that pair of rows used to carry are bound nowhere at all now: the whole
+    // effective table is read for them rather than a context list being guessed at.
+    check("no key spells a seek any more", Keymap.bindingRows("default", "gui")
+          .filter(function (row) { return row.action === "seekBack" || row.action === "seekForward" })
+          .length, 0)
     // MediaMute: m is the menu in the listing and the mute in a media preview, its two meanings.
     key("M", "m", none, "mute", "media")
     // The PDF's zoom and expand went with the bare letters; the strip's own controls are the route.

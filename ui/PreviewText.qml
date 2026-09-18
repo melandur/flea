@@ -16,6 +16,14 @@ Item {
 
     readonly property Item bodyItem: body
     function shownText() { return body.text }
+    // The expanded overlay's Up and Down, one row of the listing's own height a press, which is the
+    // step ui/PdfViewer.qml scrolls a page by; a body shorter than the frame cannot move at all.
+    function scrollBy(steps) {
+        textFlick.contentY = Math.max(0, Math.min(Math.max(0, textFlick.contentHeight - textFlick.height),
+            textFlick.contentY + steps * Theme.rowHeight))
+    }
+    // For ui/Ipc.qml and the expanded surface both: where the body has been scrolled to.
+    readonly property real scrollY: textFlick.contentY
     readonly property string status: {
         if (root.tooLarge) return "This file is too large to preview."
         if (root.readFailed) return "This file could not be read."

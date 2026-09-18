@@ -1,4 +1,13 @@
 # Sourced by ui.sh: PDF controls are exercised through native keys and pointer input only.
+#
+# Two things in this file predate the table it drives and were already failing before the preview
+# contract changed, so they are named here rather than left to be rediscovered: case_pdffocus loops
+# over the vim, mac and windows presets, which tools/flea-keymap-gen removed (Default is the only
+# preset left, and ipc keymapPreset can only answer "default"), and pdf_controls drives l, h, e, +
+# and - , which left the table with every other bare letter. The 2026-09-18 preview ruling is
+# folded in below where it lands: in the Quick Look overlay Space now fills the window instead of
+# pressing the focused control, Enter is the activation there, and the horizontal pair turns a page
+# only once the surface is expanded. The inline column keeps its own keyboard, so it keeps Space.
 pdf_expect() {
     local overlay="$1" expression="$2" label="$3" observed deadline=$((SECONDS + 10))
     while (( SECONDS < deadline )); do
@@ -10,24 +19,27 @@ pdf_expect() {
 }
 
 pdf_controls() {
-    local overlay="$1" before ignored
+    local overlay="$1" before ignored activate=space
+    # The overlay's Space belongs to the expansion now, so Enter is what presses a control there;
+    # the inline column has no expansion and keeps Space as its own activation.
+    [[ "$overlay" == true ]] && activate=Return
     pdf_expect "$overlay" '.pages == 3 and .focused and .control == 1 and (.controls[0].enabled | not)' "initial focus"
     key -k Return >/dev/null
     pdf_expect "$overlay" '.page == 1' "Enter activates Next"
-    key -k space >/dev/null
-    pdf_expect "$overlay" '.page == 2 and (.controls[1].enabled | not)' "Space activates Next"
-    key -k space >/dev/null
-    pdf_expect "$overlay" '.page == 2' "disabled Next refuses Space"
+    key -k "$activate" >/dev/null
+    pdf_expect "$overlay" '.page == 2 and (.controls[1].enabled | not)' "the activation key activates Next"
+    key -k "$activate" >/dev/null
+    pdf_expect "$overlay" '.page == 2' "disabled Next refuses the activation key"
     key -M shift -k Tab -m shift >/dev/null
     pdf_expect "$overlay" '.control == 0' "reverse focus skips disabled Next"
-    key -k space >/dev/null
-    pdf_expect "$overlay" '.page == 1' "Space activates Previous"
+    key -k "$activate" >/dev/null
+    pdf_expect "$overlay" '.page == 1' "the activation key activates Previous"
     key -k Tab >/dev/null
     pdf_expect "$overlay" '.control == 1' "Tab reaches Next"
     key -k Tab >/dev/null
     pdf_expect "$overlay" '.control == 3' "Tab skips disabled Zoom Out"
-    key -k space >/dev/null
-    pdf_expect "$overlay" '.zoom == 1.25' "Space activates Zoom In"
+    key -k "$activate" >/dev/null
+    pdf_expect "$overlay" '.zoom == 1.25' "the activation key activates Zoom In"
     key -M shift -k Tab -m shift >/dev/null
     pdf_expect "$overlay" '.control == 2' "reverse reaches enabled Zoom Out"
     key -k Return >/dev/null
@@ -50,10 +62,21 @@ pdf_controls() {
     pdf_expect "$overlay" '.page == 2' "l pages forward"
     key h >/dev/null
     pdf_expect "$overlay" '.page == 1' "h pages back"
+    # The horizontal pair, which in the overlay moves the page only once the surface is expanded:
+    # inset, Right is the expansion itself and Left leaves the preview. The inline column has
+    # neither state, so it answers the pair with a page turn either way.
+    if [[ "$overlay" == true ]]; then
+        key -k space >/dev/null
+        [[ "$(ipc previewExpanded)" == true ]] || fail "PDF space did not fill the window"
+    fi
     key -k Right >/dev/null
     pdf_expect "$overlay" '.page == 2' "Right pages forward"
     key -k Left >/dev/null
     pdf_expect "$overlay" '.page == 1' "Left pages back"
+    if [[ "$overlay" == true ]]; then
+        key -k space >/dev/null
+        [[ "$(ipc previewExpanded)" == false ]] || fail "PDF space did not bring the inset surface back"
+    fi
     key '+' >/dev/null
     pdf_expect "$overlay" '.zoom == 1.25' "plus zooms in"
     key -k Down >/dev/null
@@ -88,9 +111,10 @@ case_pdffocus() {
         [[ "$(ipc keymapPreset)" == "$preset" ]] || fail "PDF preset did not load: $preset"
         open_row manual.pdf
         pdf_controls true
-        # Close by Space, then Enter, then Escape and Ctrl+Tab in separate real activations.
-        key -k space >/dev/null
-        [[ "$(ipc previewOpen)" == false ]] || fail "PDF Space did not activate Close"
+        # Leave by Left, then by the Close control under Enter, then by Escape and Ctrl+Tab, in
+        # separate real activations. Space is not one of them any more: it is the expansion.
+        key -k Left >/dev/null
+        [[ "$(ipc previewOpen)" == false ]] || fail "PDF Left did not leave the inset preview"
         open_row manual.pdf
         key -M shift -k Tab -m shift -k Return >/dev/null
         [[ "$(ipc previewOpen)" == false ]] || fail "PDF Enter did not activate Close"
@@ -111,7 +135,7 @@ case_pdffocus() {
         key -k Return >/dev/null
         pdf_expect true '.focused and .page == 1 and .zoom == 1.25' "inline expansion keeps page and zoom"
         [[ "$(ipc previewExpanded)" == true ]] || fail "PDF inline Expand did not fill the window"
-        key e >/dev/null
+        key -k space >/dev/null
         pdf_expect true '.page == 1 and .zoom == 1.25' "collapse retains page and zoom"
         [[ "$(ipc previewExpanded)" == false ]] || fail "PDF expanded view did not collapse"
         key -k Escape >/dev/null
@@ -130,8 +154,8 @@ case_pdffocus() {
         wait_listing 2
         open_row manual.pdf
         pdf_expect true '.focused and .pages == 3' "$mode Quick Look entry"
-        key e >/dev/null
-        [[ "$(ipc previewExpanded)" == true ]] || fail "PDF e did not expand in $mode"
+        key -k space >/dev/null
+        [[ "$(ipc previewExpanded)" == true ]] || fail "PDF space did not expand in $mode"
         # Reuse cardsizes.sh's addressed Hyprland resize, with exact owned PID and geometry checks.
         addr=$(hyprctl -j clients | jq -er --argjson pid "$(flea_pid)" '.[] | select(.pid == $pid) | .address')
         [[ "$addr" =~ ^0x[0-9a-fA-F]+$ ]] || fail "PDF cannot identify owned window"

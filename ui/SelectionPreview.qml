@@ -31,8 +31,11 @@ Flea.PreviewColumn {
             var strip = root.mediaStripItem()
             if (strip) strip.toggled()
             else if (root.row && !root.row.d) root.pane.preview.open(root.path, root.row.i, root.row.s, root.kindName)
-        } else if (action === "seekBack" || action === "seekForward") {
-            var direction = action === "seekBack" ? -1 : 1
+        // The column is not the overlay, so its horizontal pair keeps moving the content it holds:
+        // there is no inset to leave and no expansion to enter, and Escape is what gives the keys
+        // back to the listing. ui/js/PreviewKeys.js act is the overlay's own reading of the pair.
+        } else if (action === "previewBack" || action === "previewForward") {
+            var direction = action === "previewBack" ? -1 : 1
             if (root.rowState === Facts.PDF) root.turnPage(direction)
             else {
                 var transport = root.mediaStripItem()

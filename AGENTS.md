@@ -1163,6 +1163,32 @@ this coverage needed no new entry there.
   hand-edited state file cannot empty the menu.
 - `ui/js/PreviewKeys.js` is what the preview overlay does with a key, and the 5 s seek step only it
   reads, split out of `Focus.js` at its cap the second time it reached one.
+
+**Every kind the preview draws answers the same keyboard, and the state is the only thing that
+changes what an arrow means.** This is the operator's ruling of 2026-09-18, "we want that all
+preview files behave the same way", and it replaces a table that bound Left three different ways at
+once: `escape` on an image, a text file and an archive listing, `seekBack` on media, and a page turn
+on a PDF, which answered its own keys inside `ui/PdfViewer.qml` besides. `keys.toml` now binds one
+action per direction across `preview,pdf,media` — `previewBack` and `previewForward` — and
+`ui/js/PreviewKeys.js` `act` is the single place that reads `ui/Preview.qml`'s `expanded` to decide
+what they move. Inset: Up and Down move the listing cursor with the preview following, Left leaves,
+Right and Space fill the window. Expanded: Up and Down scroll the surface, Left and Right move the
+content, a PDF's page and a media file's playhead, and Space brings the inset surface back. Escape
+closes from either state. **Space no longer closes the preview**, which reverses the 2026-09-11
+ruling ("pressing space a second time should close the preview, just like Finder does"): Left is
+what leaves it now, and Space is the one key on both ends of the expansion, so a filled window can
+never be reached by a key that cannot undo it. **`expanded` is the overlay's flag and not the PDF's**:
+`ui/PdfViewer.qml` binds its own to it and asks for changes through `expandRequested`, so the
+maximize mark, the inline column's `expandFrom` and Space over an image all flip the one property,
+and `ui/Ipc.qml` `previewExpanded` answers for every kind rather than only for a loaded document.
+A surface with nothing to move in an axis answers nothing: a fitted image cannot pan, wrapped text
+has no horizontal overflow, and `ui/Ipc.qml` `previewScroll` reads -1 for those rather than the 0 a
+scrollable surface at its own top answers. **The PDF viewer holds the keyboard while one is open**,
+because its chrome strip has controls for Tab to walk, so `ui/Preview.qml` `load` gives the listing
+the keyboard back for every other kind: without that, moving the cursor off a PDF inside the overlay
+destroyed the focused item and the window stopped answering every key for the rest of its life,
+measured here on 2026-09-18. `ui/PreviewArchivePane.qml` is the archive surface's own file, split out
+when this work took `ui/Preview.qml` to its 400-line hard cap.
 - `ui/js/RailKeys.js` is what the rail does with a key, split out of `Focus.js` at its cap the third
   time it reached one; `Focus.handleKey` calls it directly, as it already called `PreviewKeys`.
 - `ui/js/Menu.js` is what either menu holds and where its frame sits: the submenu test, the

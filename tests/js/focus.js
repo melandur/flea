@@ -131,15 +131,16 @@ function run(check) {
     check("e is discarded over a media preview", Focus.lookup(e, pane(mediaOpen())), "")
     check("minus is discarded over a media preview", Focus.lookup(minus, pane(mediaOpen())), "")
 
-    // Left and Right serve two previews and the grid's own sideways step, and while browsing they are the navigation itself: up a level, and into the row under the cursor.
-    // Left leaves a plain preview, where it used to be discarded for naming an action only the two
-    // seeking kinds answer; Escape has always closed and goes on closing beside it.
-    check("left closes a plain preview", Focus.lookup(left, pane(plainOpen())), "escape")
+    // Left and Right serve the preview and the grid's own sideways step, and while browsing they are
+    // the navigation itself: up a level, and into the row under the cursor.
+    // The 2026-09-18 ruling, "all preview files behave the same way": the pair resolves to one
+    // action per direction in every preview context, and what it moves is ui/js/PreviewKeys.js act's
+    // reading of the expanded state, not a second binding per kind. Escape keeps closing beside it.
+    check("left is the preview's own back on a plain kind", Focus.lookup(left, pane(plainOpen())), "previewBack")
     check("escape closes a plain preview too", Focus.lookup(key(Qt.Key_Escape, "", none), pane(plainOpen())), "escape")
-    check("right is still silent on a plain preview", Focus.lookup(right, pane(plainOpen())), "")
-    check("left turns a PDF page", Focus.lookup(left, pane(pdfOpen())), "seekBack")
-    check("right turns a PDF page", Focus.lookup(right, pane(pdfOpen())), "seekForward")
-    check("left still seeks media", Focus.lookup(left, pane(mediaOpen())), "seekBack")
+    check("right is the preview's own forward on a plain kind", Focus.lookup(right, pane(plainOpen())), "previewForward")
+    check("a PDF answers the same pair", Focus.lookup(left, pane(pdfOpen())) + "/" + Focus.lookup(right, pane(pdfOpen())), "previewBack/previewForward")
+    check("and so does media", Focus.lookup(left, pane(mediaOpen())) + "/" + Focus.lookup(right, pane(mediaOpen())), "previewBack/previewForward")
     check("left goes up a level in the list", Focus.lookup(left, pane(closed())), "parent")
     check("left still steps a grid tile", Focus.lookup(left, pane(closed(), "grid")), "cursorLeft")
     check("right still steps a grid tile", Focus.lookup(right, pane(closed(), "grid")), "cursorRight")
@@ -238,7 +239,7 @@ function run(check) {
         Keymap.setPreset(preset)
         check(preset + " Grid Left moves between tiles", Focus.lookup(left, pane(closed(), "grid")), "cursorLeft")
         check(preset + " Grid Right moves between tiles", Focus.lookup(right, pane(closed(), "grid")), "cursorRight")
-        check(preset + " Grid PDF Right keeps page navigation", Focus.lookup(right, pane(pdfOpen(), "grid")), "seekForward")
+        check(preset + " Grid PDF Right keeps the preview's own forward", Focus.lookup(right, pane(pdfOpen(), "grid")), "previewForward")
     }
     Keymap.setPreset("default")
     var dialled = listPane(true)

@@ -1,7 +1,6 @@
 import QtQuick
 import qs.Commons
 import "." as Flea
-import "js/Facts.js" as Facts
 import "js/Kinds.js" as Kinds
 import "js/Motion.js" as Motion
 
@@ -44,7 +43,10 @@ Item {
     function mediaLoaded() { return mediaLoader.item !== null }
     function textShown() { return textPane.shownText() }
     function archiveNames() { return root.archiveMeta && root.archiveMeta.names ? root.archiveMeta.names.map(function (e) { return e.n }).join("|") : "" }
-    readonly property bool pdfExpanded: root.isPdf && pdfLoader.item !== null && pdfLoader.item.expanded
+    // Expanded is the overlay's own state and not the PDF's, the 2026-09-18 ruling that every kind
+    // behaves the same way: before it, the filled window existed for a PDF alone and no key reached
+    // even that. The PDF's flag is bound to this one below, so its maximize mark still draws pressed.
+    property bool expanded: false
     // The PDF surface, null with no document loaded: ui/Ipc.qml answers "" for that, so an unmeasured state never reads as a value.
     readonly property var pdfItem: pdfLoader.item
     // What the strip actually draws: shell.qml's IPC reads this rather than re-deriving the visible: expression.
@@ -105,7 +107,25 @@ Item {
 
     function zoomBy(steps) { if (root.isPdf && pdfLoader.item) pdfLoader.item.zoomBy(steps) }
 
-    function toggleExpand() { if (root.isPdf && pdfLoader.item) pdfLoader.item.toggleExpand() }
+    function toggleExpand() { root.expanded = !root.expanded }
+
+    // The expanded surface's Up and Down: each kind scrolls whatever it has, and a fitted image has
+    // no overflow at all while a media file's own axis is the playhead Left and Right already move.
+    function scrollPage(delta) {
+        if (root.isPdf && pdfLoader.item) pdfLoader.item.scrollPage(delta)
+        else if (root.kind === "text") textPane.scrollBy(delta)
+        else if (root.isArchive) archivePane.scrollBy(delta)
+    }
+
+    // What the expanded surface's Up and Down moved, for ui/Ipc.qml: the scrolled pixels of a PDF
+    // page and of a text body, the first drawn member of an archive listing, and -1 for a kind with
+    // nothing to scroll, which is not the 0 a surface resting at its own top answers.
+    function scrollPosition() {
+        if (root.isPdf) return pdfLoader.item ? pdfLoader.item.pdfScrollY : -1
+        if (root.kind === "text") return textPane.scrollY
+        if (root.isArchive) return archivePane.offset
+        return -1
+    }
 
     // Space opens on the cursor row; this is immediate, follow() below is the held-key j/k path.
     function open(newPath, newIcon, newSize, newKind) {
@@ -126,6 +146,7 @@ Item {
         followSettle.stop()
         stripHideTimer.stop()
         root.active = false
+        root.expanded = false
         root.kind = ""
         mediaLoader.source = ""
         pdfLoader.source = ""
@@ -151,6 +172,12 @@ Item {
         root.askArchive()
         root.askMedia()
         root.revealStrip()
+        // The PDF surface holds the keyboard while one is open, pdfLoader.onLoaded below, because its
+        // chrome strip has controls for Tab to walk. So when the cursor moves off a PDF onto another
+        // kind, that item is destroyed and the keys have nowhere to go: measured on 2026-09-18, the
+        // window stopped answering every key for the rest of its life. The listing takes the
+        // keyboard back, and the loader claims it again on the next PDF, the same seam close() uses.
+        if (!root.isPdf && root.pane) root.pane.listArea.forceActiveFocus()
     }
 
     // One row, only while an archive is the thing open: the same no-sweep rule the column follows.
@@ -237,7 +264,7 @@ Item {
         anchors.verticalCenterOffset: root.active ? 0 : Motion.translateUpPx
         opacity: root.active ? 1 : 0
         // Expand drops the Quick Look inset, which is the whole of the canvas's "expand fills the window".
-        readonly property real inset: root.pdfExpanded ? 1 : Theme.preview.fraction
+        readonly property real inset: root.expanded ? 1 : Theme.preview.fraction
         width: parent.width * surface.inset
         height: parent.height * surface.inset
         color: Theme.color.surface
@@ -292,6 +319,11 @@ Item {
             anchors.fill: parent
             onLoaded: {
                 item.path = Qt.binding(function () { return root.path })
+                item.expanded = Qt.binding(function () { return root.expanded })
+                // The pane is what ui/js/PreviewKeys.js act needs, and the viewer holds the
+                // keyboard while a PDF is open: with it the viewer routes its keys through the same
+                // contract every other kind answers, instead of a second one of its own.
+                item.pane = Qt.binding(function () { return root.pane })
                 item.active = true
                 item.forceActiveFocus()
             }
@@ -300,41 +332,18 @@ Item {
         Connections {
             target: pdfLoader.item
             function onClosed() { root.close() }
+            // The maximize mark and the inline column's expandFrom both ask rather than write, so
+            // the overlay's flag stays the one answer and the binding above is never broken.
+            function onExpandRequested(on) { root.expanded = on }
         }
 
-        // The canvas's Archive tile at Quick Look size: the name, the count the index gave, then the entries.
-        Column {
+        Flea.PreviewArchivePane {
             id: archivePane
             anchors.fill: parent
             anchors.margins: Theme.spacing.rowPaddingX
-            spacing: Theme.spacing.gap
             visible: root.isArchive && root.archiveMeta !== null && !root.archiveFailed
-
-            // corner: a filename is arbitrary text, so PlainText, the same rule every name on this surface follows.
-            Text {
-                width: parent.width
-                text: root.path.substring(root.path.lastIndexOf("/") + 1)
-                color: Theme.color.foreground
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.body
-                textFormat: Text.PlainText
-                elide: Text.ElideMiddle
-            }
-
-            Text {
-                width: parent.width
-                text: Facts.archiveLine(root.archiveMeta)
-                color: Theme.color.muted
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.caption
-                textFormat: Text.PlainText
-            }
-
-            Flea.PreviewArchive {
-                width: parent.width
-                height: parent.height - y
-                meta: root.archiveMeta
-            }
+            path: root.path
+            meta: root.archiveMeta
         }
 
         // Declined, or an archive whose index could not be read: a mark over the sentence, never a bare surface.
