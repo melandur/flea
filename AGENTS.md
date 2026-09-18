@@ -1163,6 +1163,39 @@ this coverage needed no new entry there.
   hand-edited state file cannot empty the menu.
 - `ui/js/PreviewKeys.js` is what the preview overlay does with a key, and the 5 s seek step only it
   reads, split out of `Focus.js` at its cap the second time it reached one.
+- `ui/js/SettingsOpen.js` is Settings > File types: the table's shape, its match, and the rows the
+  section draws. `src/openrules.rs` is the same contract in Rust and the one an open actually goes
+  through, so the two are deliberately tested on the same cases.
+
+**Which application an ENDING opens in is the operator's own table, and it is the one thing the
+desktop database cannot hold.** The ruling is of 2026-09-18: `.nii`, `.nii.gz`, `.mha` and `.mha.gz`
+open in ITK-SNAP, and a `.nii.gz` may open somewhere a `.nii` does not. Nothing keyed on the file
+type can say that: `gio open` sniffs, and a sniffer reads `brain.nii.gz` as the gzip stream it is,
+so the Open with dialog's own "always" box would have had to claim `application/gzip` — every
+archive on the box — to place one volume. So the table keys on the name's ending instead.
+`ui.json` holds it as `open.rules`, a list of `{"ends": ".nii.gz", "app": "itksnap.desktop"}`;
+`src/openrules.rs` owns the shape, the fold and the match, `src/uistate.rs` measures a stored table
+against its `fits`, and `src/open.rs` asks its `chosen` before it hands anything to the desktop.
+**The longest ending wins**, so a rule for `.nii.gz` answers before one for `.gz` however the two
+were entered, the match is case-folded because a scanner writes `VOLUME.NII.GZ`, and a name that is
+only the ending is a dotfile rather than that ending's file. **One bad rule refuses the whole key**,
+the rule every list key in that file follows, which is why the panel writes the table whole.
+**A chosen application that is no longer installed is not a file that cannot be opened**:
+`src/open.rs` says so on stderr and asks the desktop anyway.
+**`ui/js/Nav.js` `openCursor` reads the table before its archive branch, and that order is the
+whole feature.** `Kinds.quickLookKind` classifies `brain.nii.gz` as an archive, and the 2026-09-05
+ruling sends an archive to Flea's own view and launches nothing, so an operator who had claimed
+`.nii.gz` still got the archive view on Enter: the one route that never reaches `src/open.rs` and so
+never saw their rule. A claimed ending goes to the opener, and only then does the archive branch run.
+The rule is checked with the section's own JavaScript, `ui/js/SettingsOpen.js` `chosen`, so the
+listing and the backend cannot come to disagree about what "claimed" means.
+**The card is `ui/OpenRuleDialog.qml` and it asks for the catalogue itself**, through
+`menu_actions`' `installed` op, which is the one op there that needs no captured selection: a rule is
+about an ending, so there is no row under a cursor to name handlers for. The panel holds the answer
+while it is open, because every rule row draws the application's own `Name=` from it, and drops it on
+close so a newly installed application is in the list next time. A File types rule is drawn by
+`ui/SettingsFavourite.qml`, the same component a favourite and a shelf pin use, with the drag grip
+hidden: a favourite's order is the operator's and a rule's is its ending's length.
 
 **Every kind the preview draws answers the same keyboard, and the state is the only thing that
 changes what an arrow means.** This is the operator's ruling of 2026-09-18, "we want that all

@@ -145,6 +145,7 @@ fn fits(rule: &Rule, value: &Json) -> bool {
             None => false,
         },
         Rule::Ids => every_string(value, is_action_id),
+        Rule::OpenRules => crate::openrules::fits(value),
         Rule::Count(low, high) => match value.as_f64() {
             Some(n) => n.fract() == 0.0 && n >= *low && n <= *high,
             None => false,

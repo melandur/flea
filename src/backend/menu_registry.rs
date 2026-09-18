@@ -344,8 +344,10 @@ fn in_group(path: &Path, group: &str) -> bool {
 
 // OpenWith.html's ALL APPLICATIONS group, alphabetical: every entry that declares itself an
 // application, is not hidden, and names a command. OnlyShowIn, NotShowIn and TryExec are not read,
-// so an entry another desktop scopes to itself is listed here.
-fn installed(registry: &Registry, cancel: &Cancellation) -> Result<Vec<Application>, String> {
+// so an entry another desktop scopes to itself is listed here. Settings > File types asks for this
+// half alone, through the "installed" op, because a rule is about an ending and not about a file:
+// there is no captured row there to name handlers for.
+pub(crate) fn installed(registry: &Registry, cancel: &Cancellation) -> Result<Vec<Application>, String> {
     let mut apps: Vec<Application> = Vec::new();
     for root in data_roots() {
         let dir = root.join("applications");

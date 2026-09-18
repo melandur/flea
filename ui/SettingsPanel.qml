@@ -5,6 +5,7 @@ import "." as Flea
 import "js/Grid.js" as Grid
 import "js/Keymap.js" as Keymap
 import "js/Settings.js" as Settings
+import "js/SettingsOpen.js" as OpenSection
 
 // The settings panel the Settings board draws: one floating surface, a fixed rail of sections and a pane that scrolls inside the work-area clamp. A plain overlay and not a QQC Popup, the call ui/ContextMenu.qml already made, because the one Controls import cost 10 ms of warm startup.
 Item {
@@ -18,6 +19,9 @@ Item {
     property int selectedFavourite: -1
     property int favouriteMoveTarget: -1
     property bool favouriteActionPending: false
+    // Settings > File types: the catalogue the card walked, kept here so a rule row can draw the
+    // application's own name instead of its id. The card owns the asking; this is only the answer.
+    property var installedApps: []
     // "rail" or "pane", which side Tab last gave the cursor to.
     property string side: "pane"
 
@@ -53,7 +57,8 @@ Item {
         baseSize: Theme.baseSize,
         monitorScale: Theme.monitorScale,
         cornerRadius: Style.cornerRadius,
-        presetKeys: Keymap.PRESET_KEYS
+        presetKeys: Keymap.PRESET_KEYS,
+        installedApps: root.installedApps
     })
     readonly property var rows: Settings.rows(root.section, root.settingsState)
 
@@ -80,6 +85,10 @@ Item {
     function close() {
         if (!root.opened)
             return
+        openRule.close()
+        // Dropped on the way out, so a newly installed application is in the card's list the next
+        // time it opens rather than only after a restart.
+        root.installedApps = []
         root.opened = false
         if (root.focusHolder)
             root.focusHolder.forceActiveFocus()
@@ -89,6 +98,7 @@ Item {
         root.section = id
         root.cursor = Settings.firstRow(root.rows)
         pane.contentY = 0
+        if (id === "open") openRule.ask()
     }
 
     // Enter and Space both land here. A choice steps rather than opening a menu of its own, because
@@ -97,6 +107,12 @@ Item {
         var row = root.rows[index]
         if (!row || !Settings.focusable(row))
             return
+        // A rule row opens the card on itself, where the ending can be retyped and the application
+        // re-picked; the mark at its other end is what removes it.
+        if (row.kind === "openrule") {
+            openRule.open(row.label, row.app, keys)
+            return
+        }
         if (row.kind === "favourite") {
             // A pin opens the folder it names, the way the sidebar opens a favourite.
             if (row.pinPath !== undefined) { root.openPin(row.pinPath); return }
@@ -107,6 +123,7 @@ Item {
         // The only headings the cursor can reach: the one carrying its group's master, and the one carrying Places' own Add.
         if (row.kind === "group") {
             if (row.action === "addFavourite") root.addFavourite()
+            else if (row.action === "addOpenRule") openRule.open("", "", keys)
             else if (row.action === "pinFolder") root.pinFolder()
             // The shelf's master is one stored boolean rather than a set of menu ids.
             else if (row.id === "shelf.enabled") ViewState.changeSetting(row.id, row.state !== "all")
@@ -174,6 +191,21 @@ Item {
     }
 
     // The folder the panel was opened over, which is the pane behind it: SettingsRest rule 3 puts this on the Favorites heading, where it governs the whole list.
+    // The card's answer and the rule row's own mark. The whole table is written either way, because
+    // src/uistate.rs refuses a list holding one bad rule and a row-at-a-time write could leave the
+    // file holding none of them; ui/js/SettingsOpen.js owns both shapes.
+    function saveOpenRule(ends, app) {
+        var next = OpenSection.withRule(OpenSection.rules(ViewState.state), ends, app)
+        if (next !== null) ViewState.changeLeaf("open", { rules: next })
+    }
+
+    function removeOpenRule(index) {
+        var row = root.rows[index]
+        if (!row || row.kind !== "openrule") return
+        ViewState.changeLeaf("open", { rules: OpenSection.without(OpenSection.rules(ViewState.state), row.ruleIndex) })
+        root.cursor = Settings.stepRow(root.rows, Math.max(0, index - 1), -1)
+    }
+
     function addFavourite() {
         if (!root.focusHolder)
             return
@@ -513,6 +545,11 @@ Item {
                 root.removeFavourite(root.cursor)
                 return
             }
+            if (root.side === "pane" && row && row.kind === "openrule"
+                    && (event.text === "x" || event.key === Qt.Key_Delete)) {
+                root.removeOpenRule(root.cursor)
+                return
+            }
             if (event.key === Qt.Key_Down || event.text === "j") {
                 root.moveCursor(1)
                 return
@@ -543,5 +580,16 @@ Item {
             // Every other key stops here: an open panel that let one through would move the cursor
             // in the listing behind it, which is the hidden-view keyboard defect AGENTS.md records.
         }
+    }
+
+    // After the keyboard's own Item, so the card draws over the pane and takes the keys while it is
+    // up; it hands them back to that Item on close, the same way the panel hands them to the pane.
+    Flea.OpenRuleDialog {
+        id: openRule
+        anchors.fill: parent
+        backend: root.focusHolder ? root.focusHolder.backend : null
+        installed: root.installedApps
+        onCatalogue: function (apps) { root.installedApps = apps }
+        onSaved: function (ends, app) { root.saveOpenRule(ends, app) }
     }
 }

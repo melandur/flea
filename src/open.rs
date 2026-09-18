@@ -1,5 +1,7 @@
 use crate::backend::mime;
+use crate::openrules;
 use crate::thp;
+use crate::uistore;
 use crate::userfile::data_file;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -29,6 +31,16 @@ pub fn open(path: &str) -> i32 {
     }
     // The setting is inherited across exec, so this is the last point that can hand it back.
     thp::enable();
+    // Settings > File types first, because it is the only thing on this box that knows an ending
+    // from a type: `gio open` sniffs, and a sniffer reads brain.nii.gz as the gzip stream it is. A
+    // chosen application that is no longer installed says so and the desktop is asked anyway, so a
+    // stale rule cannot make a file unopenable.
+    if let Some(app) = chosen_app(&target) {
+        if launch(&app, &target).is_some() {
+            return 0;
+        }
+        eprintln!("flea: {app} could not be launched, so this file went to the desktop's own handler instead");
+    }
     // corner: waited for, not detached, and on an archive that wait is a cold handler start; see AGENTS.md "Opening a file".
     let finished = Command::new("gio")
         .arg("open")
@@ -69,6 +81,14 @@ fn empty(target: &Path) -> bool {
     std::fs::metadata(target).map(|meta| meta.len() == 0).unwrap_or(false)
 }
 
+// The application Settings > File types names for this file's ending, or None when the table says
+// nothing about it, which is every file on a box whose operator has added no rule.
+fn chosen_app(target: &Path) -> Option<String> {
+    let name = target.file_name()?.to_str()?;
+    let state = uistore::Store::user().ok()?.read();
+    openrules::chosen(&state, name)
+}
+
 // The desktop entry the name's own type names, launched the way menu_registry::launch launches a
 // chosen one. Every step answers Option rather than an error: the caller already holds the sentence
 // to print, and a fallback that could not be built says the same thing as one that was refused.
@@ -77,7 +97,17 @@ fn open_by_name(target: &Path) -> Option<()> {
     let db = mime::Db::load();
     // No glob for this name either: nothing is known about the file, and there is nothing to launch.
     let kind = db.lookup(name)?;
-    let entry = data_file(&format!("applications/{}", default_handler(kind)?))?;
+    launch(&default_handler(kind)?, target)
+}
+
+// One desktop id, launched through the registry the desktop itself reads. The id is held to
+// openrules::is_app's shape before it becomes a path component, because both callers reach here
+// with a string out of a file: one out of ui.json and one out of `gio mime`.
+fn launch(id: &str, target: &Path) -> Option<()> {
+    if !openrules::is_app(id) {
+        return None;
+    }
+    let entry = data_file(&format!("applications/{id}"))?;
     // THP was handed back before the first spawn and is inherited here, so this child needs no hook.
     let launched = Command::new("gio")
         .arg("launch")

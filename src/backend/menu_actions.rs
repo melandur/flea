@@ -198,6 +198,12 @@ impl Snapshot {
         } else if op == "close" {
             if self.id == id { *self = Self::default(); }
             Ok(String::new())
+        } else if op == "installed" {
+            // Settings > File types' own request: the whole catalogue and no captured selection,
+            // because a rule names an ending rather than a file. It reaches this service rather than
+            // one of its own because the walk, the icon lookup and the reply shape are all already here.
+            menu_registry::installed(registry, cancel)
+                .map(|apps| format!(r#""installed":[{}]"#, application_entries(&apps)))
         } else {
             self.perform(id, &op, line, registry, cancel)
         };

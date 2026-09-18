@@ -27,7 +27,8 @@ Item {
     readonly property bool firstGroup: root.isGroup && root.firstRow
     readonly property bool isHint: root.kind === "hint"
     readonly property bool isFooter: root.isHint && root.row.footer === true
-    readonly property bool isFavourite: root.kind === "favourite"
+    // A favourite, a shelf pin and a File types rule are one row shape, drawn by one component; the grip hides for the rule, whose order is its ending's length and not the operator's.
+    readonly property bool isFavourite: root.kind === "favourite" || root.kind === "openrule"
     readonly property Item favouriteItem: favourite
     readonly property bool isHero: root.kind === "hero"
     readonly property bool isKeyPreview: root.kind === "keyPreview"

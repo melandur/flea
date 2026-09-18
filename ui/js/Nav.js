@@ -3,6 +3,7 @@
 .import "DirSizes.js" as DirSizes
 .import "Filter.js" as Filter
 .import "Kinds.js" as Kinds
+.import "SettingsOpen.js" as OpenRules
 .import "Thumbs.js" as Thumbs
 
 // Where the pane has been and how it gets back, taking ui/Pane.qml's root the way Search.js and
@@ -174,7 +175,7 @@ function applyPendingSelect(pane) {
 
 // Enter on the cursor row: a directory navigates, an archive opens Flea's own view, anything else
 // goes to the opener. The in-flight guard is what stops a second Enter queueing a second listing.
-function openCursor(pane, opener) {
+function openCursor(pane, opener, state) {
     if (pane.listInFlight) {
         pane.message("A directory is already loading.", false)
         return
@@ -191,6 +192,14 @@ function openCursor(pane, opener) {
     var path = pane.join(pane.path, row.n)
     if (row.d) {
         pane.open(path)
+        return
+    }
+    // Settings > File types first, and before the archive branch on purpose: a .nii.gz is a gzip
+    // stream to every classifier on the box, so an operator who has said that ending opens in a
+    // volume viewer would otherwise still get Flea's own archive view on Enter, which is the one
+    // route that never reaches src/open.rs and so never sees their rule at all.
+    if (OpenRules.chosen(state, row.n).length > 0) {
+        opener.open(path)
         return
     }
     // Handing an archive on opens another file manager, and this is ui/Preview.qml's own classifier.

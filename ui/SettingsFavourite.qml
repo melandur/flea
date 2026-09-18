@@ -1,7 +1,9 @@
 import QtQuick
 import "." as Flea
 
-// Favourite records keep their exact label/path; only the drag handle initiates reordering.
+// Favourite records keep their exact label/path; only the drag handle initiates reordering. A
+// Settings > File types rule is the same row with no handle: its place in the list is its ending's
+// own length, which is what decides the match, so there is no order for a drag to set.
 Item {
     id: root
     property var row: ({})
@@ -75,7 +77,8 @@ Item {
         anchors.right: remove.left
         anchors.rightMargin: 0
         anchors.verticalCenter: parent.verticalCenter
-        width: Theme.hitMin
+        visible: root.row.ruleIndex === undefined
+        width: grip.visible ? Theme.hitMin : 0
         height: Theme.hitMin
         name: "list"
         color: Theme.color.muted

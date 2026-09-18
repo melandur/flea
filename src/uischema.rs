@@ -40,7 +40,8 @@ pub const DEFAULTS: &str = r#"{
   "display": { "textSize": { "mode": "system" }, "hyprlandIcons": false,
                 "fileTypeColors": false, "theme": "omarchy" },
   "menu": { "hidden": ["delete", "openTerminal", "placeMenu", "runScript",
-            "moveto", "copyto", "properties", "permissions", "copypath"] }
+            "moveto", "copyto", "properties", "permissions", "copypath"] },
+  "open": { "rules": [] }
 }"#;
 
 // The list row's optional columns in the order ui/js/Columns.js lays them out; name is never optional.
@@ -65,6 +66,8 @@ pub enum Rule {
     Pair,
     // menu.hidden is deliberately open: a closed list would make this Flea drop an id a newer one hid.
     Ids,
+    // open.rules is the operator's ending-to-application table; src/openrules.rs owns its shape.
+    OpenRules,
     Count(f64, f64),
     TextSize,
     // "omarchy", or one catalog id: lowercase, digits and hyphens, which is every id
@@ -142,6 +145,11 @@ pub const DISPLAY: &[(&str, Rule)] = &[
 // basic actions derives from it by masterState in ui/js/Settings.js, and cannot disagree with it.
 pub const MENU: &[(&str, Rule)] = &[("hidden", Rule::Ids)];
 
+// Settings > File types. The desktop database keys on a sniffed type, which cannot tell an .nii
+// from an .nii.gz, so this is the one table that keys on the ending instead; src/openrules.rs holds
+// the shape and the match, and an empty list is a Flea that opens everything the way it always did.
+pub const OPEN: &[(&str, Rule)] = &[("rules", Rule::OpenRules)];
+
 pub const SCHEMA: &[(&str, Rule)] = &[
     ("view", Rule::Word(&["list", "columns", "grid", "dual"])),
     ("density", Rule::Word(&["compact", "normal", "comfortable"])),
@@ -179,6 +187,7 @@ pub const SCHEMA: &[(&str, Rule)] = &[
     ("keys", Rule::Word(&["default"])),
     ("display", Rule::Group(DISPLAY)),
     ("menu", Rule::Group(MENU)),
+    ("open", Rule::Group(OPEN)),
 ];
 
 // A catalog id, or "omarchy" for following the desktop. The catalog is ui/js/Themes.js's, so this
@@ -260,9 +269,11 @@ mod tests {
                 "folderSizes", "groupByKind", "hidden", "wrapAtEnds", "keyHints", "startIn", "startFolder",
                 "lastPath", "newTab", "trashAutoEmpty", "trashSweptOn", "places", "shelf",
                 "preview", "keys",
-                "display", "menu"
+                "display", "menu", "open"
             ]
         );
+        // Settings > File types ships empty: a fresh Flea opens everything the way the desktop says.
+        assert_eq!(d.get("open").and_then(|open| open.get("rules")).and_then(Json::as_array).map(<[Json]>::len), Some(0));
         assert_eq!(d.get("view").and_then(Json::as_str), Some("list"));
         assert_eq!(d.get("density").and_then(Json::as_str), Some("normal"));
         assert_eq!(d.get("addressBar").and_then(Json::as_str), Some("breadcrumb"));

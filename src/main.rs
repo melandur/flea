@@ -11,6 +11,7 @@ mod jsonstring;
 mod launcher;
 mod oflags;
 mod open;
+mod openrules;
 mod paths;
 mod terminal;
 mod tui;

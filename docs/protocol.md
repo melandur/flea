@@ -94,6 +94,11 @@ captured paths, drops missing paths, captures replacement identities, and issues
 Unrelated paths cannot widen that confirmation. The client shows this new confirmation with
 Cancel initially focused; no prior destructive activation authorizes the replacement token.
 
+`{"c":"menuaction","op":"installed","id":7}` answers with `installed`, the whole catalogue of
+launchable desktop entries, and captures nothing: it is the one op here that needs no prior
+`snapshot`, because Settings > File types picks an application for an ENDING and has no row under a
+cursor to name handlers for. It reads no selection and expires none.
+
 `{"c":"menuaction","op":"delete","id":4,"token":12}` consumes that exact token and reserves
 the ordinary mutation slot. A failed preflight returns `stale:true` and requires a fresh review;
 it does not delete any item. A completed attempt returns `deleted`, `failed`, `cancelled`,

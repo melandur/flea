@@ -5,6 +5,7 @@
 .import "SettingsShelf.js" as Shelf
 .import "SettingsDisplay.js" as Display
 .import "SettingsTheme.js" as ThemeSection
+.import "SettingsOpen.js" as OpenSection
 
 // Sections follow the current Desktop boards; their state uses the shared ui.json updater.
 var SECTIONS = [
@@ -12,6 +13,9 @@ var SECTIONS = [
     { id: "places", label: "Places", glyph: "star" },
     { id: "shelf", label: "Shelf", glyph: "shelf" },
     { id: "preview", label: "Preview", glyph: "preview" },
+    // 0.3.2: which application an ENDING opens in, which the desktop's own type-keyed default
+    // cannot express: see ui/js/SettingsOpen.js for why .nii and .nii.gz need two answers.
+    { id: "open", label: "File types", glyph: "app-window" },
     { id: "keys", label: "Keys", glyph: "keyboard" },
     { id: "display", label: "Display", glyph: "maximize" },
     // 0.3.1: Strata's 95 vendored palettes, which are a catalog rather than a row, so they get a
@@ -151,7 +155,8 @@ function focusable(row) {
         return row.master === true || row.action !== undefined
     if (row.kind === "ruler")
         return row.on === true
-    return row.kind === "check" || row.kind === "choice" || row.kind === "action" || row.kind === "favourite"
+    return row.kind === "check" || row.kind === "choice" || row.kind === "action"
+        || row.kind === "favourite" || row.kind === "openrule"
 }
 
 // state: { textSize, hidden, keyHints, preset, baseSize, monitorScale, cornerRadius, presetKeys }
@@ -166,6 +171,8 @@ function rows(section, state) {
         return viewRows(state)
     if (section === "preview")
         return previewRows(state)
+    if (section === "open")
+        return OpenSection.rows(state.data || {}, state.installedApps || [])
     if (section === "about")
         return aboutRows(state.about || {})
     if (section === "display")

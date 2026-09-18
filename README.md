@@ -107,6 +107,13 @@ bundled palettes from [Strata](https://github.com/lgse/strata), with following y
 the default and what a fresh install does. See [`vendor/`](vendor/README.md) for what is imported
 and under which licence.
 
+Settings → **File types** says which application an **ending** opens in, which the desktop's own
+default cannot: a sniffer reads `brain.nii` and `brain.nii.gz` as one NIfTI volume and one gzip
+stream, so nothing keyed on the file type can send the pair to the same viewer without claiming
+every other `.gz` on the box with it. A rule is one ending and one installed application, the
+longest ending wins, and everything with no rule opens exactly the way it did before. Enter obeys
+the rule too, including on an ending Flea would otherwise have shown in its own archive view.
+
 **Space** opens Quick Look from any view, and so does **→**. Every kind behaves the same way in
 it: **↑** and **↓** move to the next file with the preview following, **Space** fills the window and
 **Space** again brings the inset surface back, and **←** leaves. Once it fills the window the arrows
