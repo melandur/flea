@@ -345,6 +345,56 @@ check "and its refusal is one sentence naming $open_handoff" "1" \
   "$(echo "$out" | grep -c "$open_handoff open refused")"
 check "with no errno in it" "0" "$(echo "$out" | grep -c 'os error')"
 
+# A file with no bytes makes the sniffer abstain, so the desktop database has nothing registered for
+# it and the launcher refuses a file the listing has already typed by name. gio open sniffs the type
+# itself and takes no override, so the rule has to become a second launch here; see "When the sniffer
+# abstains". This stub is all three subcommands --open can now reach, and it refuses the first.
+mkdir -p "$D/emptybin" "$D/data/applications"
+: > "$D/empty.txt"
+: > "$D/empty"
+launched="$D/launched.log"
+{
+  printf '#!/bin/sh\n'
+  printf 'case "$1" in\n'
+  # Sample input: gio open /home/flea-sandbox/flea-open-test-123/empty.txt
+  printf '  open) exit 3 ;;\n'
+  # Sample input: gio mime text/plain. Its first line is the only one --open reads, and the quotes
+  # around the type are the U+201C pair GIO prints under LC_ALL=C.
+  printf '  mime) printf "Default application for \\342\\200\\234%%s\\342\\200\\235: fleastub.desktop\\n" "$2" ;;\n'
+  # Sample input: gio launch /.../data/applications/fleastub.desktop /.../empty.txt
+  printf '  launch) printf "LAUNCH %%s | %%s\\n" "$2" "$3" >> %q ;;\n' "$launched"
+  printf '  *) exit 9 ;;\n'
+  printf 'esac\n'
+} > "$D/emptybin/$open_handoff"
+chmod +x "$D/emptybin/$open_handoff"
+# Resolved off the XDG data ladder by id, so the entry has to be a real file there rather than a name.
+printf '[Desktop Entry]\nType=Application\nName=Flea Fixture\nExec=/bin/true %%f\n' \
+  > "$D/data/applications/fleastub.desktop"
+
+: > "$launched"
+out=$(env XDG_DATA_HOME="$D/data" PATH="$D/emptybin:/usr/bin:/bin" $BIN --open "$D/empty.txt" 2>&1)
+rc=$?
+check "an empty file whose name carries a type is opened, not refused" "0" "$rc"
+check "and it reached the entry that type's default names" "1" \
+  "$(grep -c "^LAUNCH $D/data/applications/fleastub.desktop | $D/empty.txt$" "$launched")"
+check "and a handoff that worked stays silent" "0" "$(echo "$out" | grep -c .)"
+
+# The name is what decides, not the emptiness: with no glob for it nothing is known about the file,
+# and the contract's own sentence is the answer rather than a guess at a handler.
+: > "$launched"
+out=$(env XDG_DATA_HOME="$D/data" PATH="$D/emptybin:/usr/bin:/bin" $BIN --open "$D/empty" 2>&1)
+rc=$?
+check "an empty file whose name carries no type keeps the refusal" "2" "$rc"
+check "and nothing was launched for it" "0" "$(grep -c . "$launched")"
+check "and its sentence is still the launcher's own" "1" "$(echo "$out" | grep -c "$open_handoff open refused")"
+
+# The half that must not regress: a file with bytes in it was never an abstention, so a refusal on it
+# is a refusal, and the common open still spawns exactly one process.
+: > "$launched"
+env XDG_DATA_HOME="$D/data" PATH="$D/emptybin:/usr/bin:/bin" $BIN --open "$D/file.txt" >/dev/null 2>&1
+check "a file with bytes in it never reaches the second route" "2" "$?"
+check "and nothing was launched for it either" "0" "$(grep -c . "$launched")"
+
 out=$($BIN --open 2>&1 </dev/null)
 check "--open with no path is a usage error" "1" "$(echo "$out" | grep -c -- '--open')"
 

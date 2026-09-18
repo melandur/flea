@@ -150,6 +150,9 @@ FocusScope {
     property var thumbState: Thumbs.empty()
     // Same cap as thumbState, same reason; a directory row's size is only ever asked for by a viewport.
     property var dirSizeState: DirSizes.empty()
+    // Whether a watch burst could have moved a folder size; ui/js/Nav.js open reads it to decide
+    // whether dirSizeState survives the re-read. See AGENTS.md "An attrib-only burst".
+    property bool sizesStale: false
     // Input to rows is stamped inside the UI, because a harness that polls IPC across the interval times itself; see AGENTS.md "Testing".
     property real inputAt: 0
     property real rowsAt: 0

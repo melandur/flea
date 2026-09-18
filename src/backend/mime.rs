@@ -104,6 +104,39 @@ impl Db {
     }
 }
 
+// The two names a sniffer emits when it declined to answer rather than when it recognised something:
+// GIO answers application/x-zerosize for a file with no bytes, and xdg-mime answers inode/x-empty for
+// that same file. Neither string is in /usr/share/mime/aliases, globs2 or subclasses, so Aliases::canonical
+// will never pair them and no glob will ever produce one; inode/x-empty has no .xml in the database at all.
+// See AGENTS.md "When the sniffer abstains".
+pub fn abstained(mime: &str) -> bool {
+    mime == "application/x-zerosize" || mime == "inode/x-empty"
+}
+
+// The type to answer with for one sniffed file. A sniffer that recognised something is believed, because
+// content beats the name: a .txt holding PNG bytes is a PNG. Only an abstention falls back to the name's
+// own glob, and only then is globs2 read, so the common path pays nothing for this.
+pub fn resolved(sniffed: &str, name: &str) -> String {
+    if !abstained(sniffed) {
+        return sniffed.to_string();
+    }
+    resolved_with(&Db::load(), sniffed, name)
+}
+
+// The rule itself, split from the load so a test can put a fixture database under it rather than this
+// box's own, which update-mime-database rebuilds from /usr/share/mime/packages.
+pub fn resolved_with(db: &Db, sniffed: &str, name: &str) -> String {
+    if !abstained(sniffed) {
+        return sniffed.to_string();
+    }
+    match db.lookup(name) {
+        Some(mime) => mime.to_string(),
+        // An empty file whose name carries no glob either: nothing is known about it, and saying so
+        // is what keeps the Open with guard able to refuse it.
+        None => sniffed.to_string(),
+    }
+}
+
 fn insert_heaviest(map: &mut HashMap<String, (u32, String)>, key: String, weight: u32, mime: &str) {
     match map.get(&key) {
         Some((existing, _)) if *existing >= weight => {}
@@ -223,6 +256,38 @@ mod tests {
     fn a_missing_database_is_empty_not_a_panic() {
         let d = Db::from_str("");
         assert_eq!(d.lookup("holiday.jpg"), None);
+    }
+
+    // The strings are the two sniffers' own sentinels and not database rows, so they are asserted
+    // literally: no aliases file pairs them and no glob produces them. See AGENTS.md "When the sniffer abstains".
+    #[test]
+    fn only_the_two_sentinels_count_as_an_abstention() {
+        assert!(abstained("application/x-zerosize"), "GIO's answer for a file with no bytes");
+        assert!(abstained("inode/x-empty"), "xdg-mime's answer for the same file");
+        assert!(!abstained("text/plain"));
+        assert!(!abstained("inode/directory"), "a directory is a real answer, not an abstention");
+        assert!(!abstained("application/octet-stream"), "unrecognised bytes are still bytes");
+    }
+
+    // Content beats the name whenever there was content to read, which is the half that must not regress:
+    // a .txt holding PNG bytes is a PNG, and only an abstention may reach for the glob.
+    #[test]
+    fn a_sniffer_that_answered_is_believed() {
+        let d = db();
+        assert_eq!(resolved_with(&d, "image/png", "notes.txt"), "image/png");
+        assert_eq!(resolved_with(&d, "text/plain", "notes.txt"), "text/plain");
+        assert_eq!(resolved_with(&d, "inode/directory", "notes.txt"), "inode/directory");
+    }
+
+    #[test]
+    fn an_abstention_falls_back_to_the_name() {
+        let d = db();
+        assert_eq!(resolved_with(&d, "application/x-zerosize", "empty.txt"), "text/plain");
+        assert_eq!(resolved_with(&d, "inode/x-empty", "empty.txt"), "text/plain", "both sentinels take the same route");
+        assert_eq!(resolved_with(&d, "application/x-zerosize", "holiday.jpg"), "image/jpeg", "the name decides, not the emptiness");
+        // Nothing is known about this one, and the sentinel is kept so Open with's guard can still refuse it.
+        assert_eq!(resolved_with(&d, "application/x-zerosize", "empty"), "application/x-zerosize");
+        assert_eq!(resolved_with(&d, "application/x-zerosize", ".txt"), "application/x-zerosize", "a hidden file offers no suffix");
     }
 
     // The only test here that reads this box's own database, and it asserts that a real globs2 parses into answers, never which answer.

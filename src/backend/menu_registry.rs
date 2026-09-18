@@ -1,4 +1,5 @@
 // Application discovery uses the same GIO registry that launches the selected desktop entry.
+use super::mime;
 use super::trashmanifest::Cancellation;
 use std::ffi::OsStr;
 use std::io::Read;
@@ -210,9 +211,15 @@ pub(crate) fn content_type(registry: &Registry, path: &Path, cancel: &Cancellati
     // user opens, and typing the link instead reports inode/symlink, which nothing can open.
     let info = registry.query(&["info".as_ref(), "--attributes=standard::content-type".as_ref(), path.as_os_str()], cancel)?;
     // Sample GIO info attribute: "  standard::content-type: text/plain".
-    info.lines().find_map(|line| line.trim().strip_prefix("standard::content-type: "))
+    let sniffed = info.lines().find_map(|line| line.trim().strip_prefix("standard::content-type: "))
         .filter(|m| !m.is_empty()).map(str::to_string)
-        .ok_or_else(|| "GIO did not report the selected item's content type.".into())
+        .ok_or_else(|| "GIO did not report the selected item's content type.".to_string())?;
+    // A file with no bytes makes GIO abstain, and Open with would then draw an empty registry for a file
+    // the preview has already typed by name. The link's own name is what is read, matching the sentence
+    // above: the file being opened is the target, but the name the operator sees is the link's.
+    // See AGENTS.md "When the sniffer abstains".
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    Ok(mime::resolved(&sniffed, &name))
 }
 
 // The desktop's own default handler, written the one way the desktop reads it back.

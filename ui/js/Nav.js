@@ -89,7 +89,12 @@ function openWithoutHistory(pane, newPath) {
     pane.rows = []
     pane.kindNames = []
     pane.thumbState = Thumbs.empty()
-    pane.dirSizeState = DirSizes.empty()
+    // Kept only for a re-read of the same directory owed to an attrib-only watch burst: that cannot
+    // have added, removed or moved a row, so the index this map is keyed by still names the same
+    // file. Everything else starts empty, an index being the weakest key there is. See AGENTS.md.
+    if (pane.sizesStale || newPath !== pane.path)
+        pane.dirSizeState = DirSizes.empty()
+    pane.sizesStale = false
     pane.cursorIndex = 0
     pane.trashArmedAt = 0
     // The row the editor sat on belongs to the listing being replaced, so the rename goes with it:

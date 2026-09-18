@@ -15,17 +15,23 @@ function watched(pane) {
 
 // Flea's own delete. The rows that were marked are gone, so there is usually no name to return to:
 // the anchor is the cursor row that was deleted and apply()'s own fallback then lands on
-// whatever took its place, which is Finder's rule. It selects that row as well, so the next delete
-// follows without reaching for the mouse; reported 2026-09-11, "deleting one refreshes the entire
-// file list and loses my selection, so I have to start over". A delete that failed leaves the row
-// standing, and then the name matches and the cursor goes back exactly where it was.
+// whatever took its place, which is Finder's rule. A delete that failed leaves the row standing,
+// and then the name matches and the cursor goes back exactly where it was.
+//
+// It used to MARK that row as well, reported 2026-09-11 as "deleting one refreshes the entire file
+// list and loses my selection, so I have to start over". The cursor move above is what actually
+// answered that report: ui/js/Ops.js targetIndices falls back to [cursorIndex] when nothing is
+// marked, so a run of deletes follows the cursor down with no mark involved at all. The mark was
+// redundant and it was visible, because a row that is marked and is NOT the cursor draws the plain
+// selection fill rather than the cursor's accent one: after a delete it read as a grey band left
+// behind on an unrelated folder, which is how it was reported the second time, 2026-09-18.
 function afterDelete(pane, landed) {
     // A block leaves as a block, so the cursor belongs on the row the block left rather than on the
     // row below wherever it sat inside it; a delete that failed keeps the row it was already on.
     if (landed && pane.trashedFirst >= 0)
         pane.cursorIndex = pane.trashedFirst
     pane.trashedFirst = -1
-    return anchoredRefresh(pane, true)
+    return anchoredRefresh(pane, false)
 }
 
 function anchoredRefresh(pane, select) {
@@ -77,9 +83,11 @@ function apply(pane, anchor) {
     return null
 }
 
-// A watch's anchor only moves the cursor, because the operator's own selection belongs to them and a
-// change another program made must not rewrite it. A delete's anchor selects, because the rows that
-// were selected no longer exist and a cursor with nothing marked is a keyboard that has to start over.
+// Neither anchor marks anything any more, and both reasons are the same one: a mark belongs to the
+// operator. A watch must not rewrite it because another program's change is not the operator's
+// doing, and a delete need not, because ui/js/Ops.js targetIndices already falls back to the cursor
+// row. select is kept as a parameter rather than removed: it is the seam the two callers are told
+// apart by, and a future caller that does own the mark has somewhere to say so.
 function landOn(pane, index, anchor) {
     if (anchor.select)
         pane.selectOnly(index)

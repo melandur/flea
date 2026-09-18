@@ -970,9 +970,9 @@ or `move`, which is what lets the status bar say what it just put back.
 
 ### changed
 
-`{"t":"changed","path":"<string>"}`
+`{"t":"changed","path":"<string>","sizes":<bool>}`
 
-Example: `{"t":"changed","path":"/home/gm/Downloads"}`
+Example: `{"t":"changed","path":"/home/gm/Downloads","sizes":true}`
 
 **The one line no request asks for.** Every other response answers a request; this one says the
 directory the current listing came from is no longer what `list` answered with, because another
@@ -981,6 +981,15 @@ changes with it: the rows, the count and the sort order are exactly what they we
 that wants the new directory sends `list` again. `path` is the watched directory, so a client that
 has navigated since the notification was written can tell it is not about the folder it is on now,
 and drop it.
+
+`sizes` says whether the inotify burst behind this line could have moved a recursive folder size.
+It is **false** for a burst carrying nothing but `IN_ATTRIB`, which is a chmod, a chown or a
+timestamp touch: none of those change what a walk adds up. It is **true** for everything else, and
+for a burst mixing the two. The backend acts on it as well as reporting it, dropping its own
+`dirsize` answers for this directory only when it is true, so a client that ignores the field is
+merely wasteful rather than wrong; a client that keeps its measurements across a `false` may do so
+safely, because such a burst cannot have added, removed or moved a row either. A build predating
+the field omits it, and a client should read an absent field as `true`.
 
 A `list` starts watching its path **before it reads the directory**, not after, because a change
 landing while the read runs is missing from the rows that `list` is about to answer with and is

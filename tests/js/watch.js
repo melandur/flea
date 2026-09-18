@@ -172,7 +172,10 @@ function run(check) {
 
     // Reported 2026-09-11: "deleting one refreshes the entire file list and loses my selection, so I
     // have to start over". The rows that were marked are gone, so the anchor is the deleted cursor
-    // row and applyAnchor's own fallback lands on whatever took its place, selected.
+    // row and applyAnchor's own fallback lands on whatever took its place. The CURSOR is what
+    // answers that report, because ui/js/Ops.js targetIndices falls back to [cursorIndex] when
+    // nothing is marked; the mark this used to leave beside it was reported in its own right on
+    // 2026-09-18 as a grey band on an unrelated folder, and every check below now asserts it gone.
     var deleted2 = watched(0, [{ n: "a" }, { n: "b" }, { n: "c" }], 1)
     var deleteAnchor = Anchor.afterDelete(deleted2)
     check("a delete re-reads the same directory", deleted2.sent.join(","), "dirsizecancel,list /home/gm,fsinfo")
@@ -181,31 +184,33 @@ function run(check) {
     deleted2.total = 2
     check("the row that took its place takes the cursor",
           Anchor.apply(deleted2, deleteAnchor) + "|" + deleted2.cursorSetTo, "null|1")
-    check("and it is selected, so the next delete needs no mouse", deleted2.selectedAt, 1)
+    check("and nothing is marked, so no grey band is left behind", deleted2.selectedAt, -1)
 
     // The last row deleted has nothing below it, so the cursor lands on the new last row.
     var lastGone = watched(0, [{ n: "a" }, { n: "b" }, { n: "c" }], 2)
     var lastAnchor = Anchor.afterDelete(lastGone)
     lastGone.rows = [{ n: "a" }, { n: "b" }]
     lastGone.total = 2
-    check("deleting the last row selects the new last row",
-          Anchor.apply(lastGone, lastAnchor) + "|" + lastGone.selectedAt, "null|1")
+    check("deleting the last row puts the cursor on the new last row, and marks nothing",
+          Anchor.apply(lastGone, lastAnchor) + "|" + lastGone.cursorSetTo + "|" + lastGone.selectedAt,
+          "null|1|-1")
 
-    // A delete that failed leaves the row standing, and then the name matches and the cursor and the
-    // selection both go back exactly where they were.
+    // A delete that failed leaves the row standing, and then the name matches and the cursor goes
+    // back exactly where it was, still with nothing marked.
     var refused = watched(0, [{ n: "a" }, { n: "b" }, { n: "c" }], 1)
     var refusedAnchor = Anchor.afterDelete(refused)
     refused.rows = [{ n: "a" }, { n: "b" }, { n: "c" }]
     refused.total = 3
     check("a delete nothing removed puts the cursor back on the same file",
-          Anchor.apply(refused, refusedAnchor) + "|" + refused.selectedAt, "null|1")
+          Anchor.apply(refused, refusedAnchor) + "|" + refused.cursorSetTo + "|" + refused.selectedAt,
+          "null|1|-1")
 
-    // Emptying a directory leaves nothing to select, and selecting row -1 would be a mark on nothing.
+    // Emptying a directory leaves nothing to land on at all, cursor or mark.
     var emptied2 = watched(0, [{ n: "a" }], 0)
     var emptyAnchor = Anchor.afterDelete(emptied2)
     emptied2.rows = []
     emptied2.total = 0
-    check("deleting the only row selects nothing rather than a row that is not there",
+    check("deleting the only row marks nothing rather than a row that is not there",
           Anchor.apply(emptied2, emptyAnchor) + "|" + emptied2.selectedAt, "null|-1")
 
     // The watch's own anchor must not have grown a selection with it: a change another program made

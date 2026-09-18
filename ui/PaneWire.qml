@@ -238,13 +238,15 @@ Item {
             pane.listArea.restartSettle()
         }
 
-        // Sample input: {"t":"changed","path":"/home/gm/Downloads"}
+        // Sample input: {"t":"changed","path":"/home/gm/Downloads","sizes":true}
         // Unsolicited, and the only line here that is: the listed directory changed under the pane.
-        function onChanged(path) {
+        function onChanged(path, sizes) {
             // A notification for a directory the pane has already left says nothing about this one.
             if (path !== pane.path)
                 return
             root.retrySelectionText = ""
+            // A chmod cannot move a size, so the re-read keeps them; AGENTS.md "An attrib-only burst".
+            if (sizes) pane.sizesStale = true
             root.stale = true
             if (!watchSettle.running)
                 watchSettle.start()

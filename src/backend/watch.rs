@@ -17,6 +17,10 @@ const IN_CREATE: u32 = 0x0000_0100;
 const IN_DELETE: u32 = 0x0000_0200;
 // Not IN_DELETE_SELF: the watch's own removal is reported whatever the mask holds, measured.
 const IN_MOVE_SELF: u32 = 0x0000_0800;
+// Everything in MASK except IN_ATTRIB. A chmod, a chown or a timestamp touch cannot change what a
+// recursive walk would add up, so a burst carrying nothing else leaves every folder size standing;
+// see run.rs's Event::Changed arm and AGENTS.md "An attrib-only burst keeps the folder sizes".
+const STRUCTURAL: u32 = IN_CLOSE_WRITE | IN_MOVED_FROM | IN_MOVED_TO | IN_CREATE | IN_DELETE | IN_MOVE_SELF;
 const MASK: u32 = IN_ATTRIB
     | IN_CLOSE_WRITE
     | IN_MOVED_FROM
@@ -138,8 +142,8 @@ fn pump(fd: c_int, tx: Sender<Event>) {
         if n == 0 {
             return;
         }
-        for wd in descriptors(&buf[..n as usize]) {
-            if tx.send(Event::Changed(wd)).is_err() {
+        for (wd, structural) in descriptors(&buf[..n as usize]) {
+            if tx.send(Event::Changed(wd, structural)).is_err() {
                 return;
             }
         }
@@ -147,15 +151,21 @@ fn pump(fd: c_int, tx: Sender<Event>) {
     }
 }
 
-// Which watches this burst touched, each once; nothing past the descriptor is ever read.
-fn descriptors(buf: &[u8]) -> Vec<i32> {
-    let mut out: Vec<i32> = Vec::new();
+// Which watches this burst touched, each once, and whether anything it carried for that watch could
+// have changed a size. The mask is read now; it was discarded before, which is what made one chmod
+// on a sibling cost every folder size in the directory, see AGENTS.md "An attrib-only burst".
+fn descriptors(buf: &[u8]) -> Vec<(i32, bool)> {
+    let mut out: Vec<(i32, bool)> = Vec::new();
     let mut at = 0;
     while at + EVENT_HEADER <= buf.len() {
         let wd = i32::from_ne_bytes([buf[at], buf[at + 1], buf[at + 2], buf[at + 3]]);
+        let mask = u32::from_ne_bytes([buf[at + 4], buf[at + 5], buf[at + 6], buf[at + 7]]);
         let len = u32::from_ne_bytes([buf[at + 12], buf[at + 13], buf[at + 14], buf[at + 15]]) as usize;
-        if !out.contains(&wd) {
-            out.push(wd);
+        let structural = mask & STRUCTURAL != 0;
+        match out.iter_mut().find(|(seen, _)| *seen == wd) {
+            // One burst is one line, so the strongest event in it decides for the whole burst.
+            Some(entry) => entry.1 |= structural,
+            None => out.push((wd, structural)),
         }
         // The condition above is the bound that keeps this indexing inside the slice.
         at += EVENT_HEADER + len;
@@ -164,8 +174,10 @@ fn descriptors(buf: &[u8]) -> Vec<i32> {
 }
 
 // The one unsolicited line: the listed directory is no longer what the listing answered with.
-pub fn changed_line(path: &Path) -> String {
-    format!(r#"{{"t":"changed","path":"{}"}}"#, escape(&path.to_string_lossy()))
+// `sizes` says whether the burst behind it could have moved a recursive size: false is a chmod, a
+// chown or a touch, and the client keeps the sizes it already has across the re-read it does anyway.
+pub fn changed_line(path: &Path, sizes: bool) -> String {
+    format!(r#"{{"t":"changed","path":"{}","sizes":{}}}"#, escape(&path.to_string_lossy()), sizes)
 }
 
 #[cfg(test)]
@@ -174,9 +186,13 @@ mod tests {
 
     // Sample input: two events on watch 3, one carrying a 16 byte name and one carrying none.
     fn event(wd: i32, name: &[u8]) -> Vec<u8> {
+        masked_event(wd, IN_CREATE, name)
+    }
+
+    fn masked_event(wd: i32, mask: u32, name: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
         out.extend_from_slice(&wd.to_ne_bytes());
-        out.extend_from_slice(&IN_CREATE.to_ne_bytes());
+        out.extend_from_slice(&mask.to_ne_bytes());
         out.extend_from_slice(&0u32.to_ne_bytes());
         out.extend_from_slice(&(name.len() as u32).to_ne_bytes());
         out.extend_from_slice(name);
@@ -185,7 +201,7 @@ mod tests {
 
     #[test]
     fn one_event_names_its_watch() {
-        assert_eq!(descriptors(&event(3, b"a.txt\0\0\0")), vec![3]);
+        assert_eq!(descriptors(&event(3, b"a.txt\0\0\0")), vec![(3, true)]);
     }
 
     #[test]
@@ -193,7 +209,38 @@ mod tests {
         let mut buf = event(3, b"a.txt\0\0\0");
         buf.extend(event(3, b""));
         buf.extend(event(4, b"b.txt\0\0\0"));
-        assert_eq!(descriptors(&buf), vec![3, 4]);
+        assert_eq!(descriptors(&buf), vec![(3, true), (4, true)]);
+    }
+
+    // The arm this whole flag exists for: a chmod cannot change what a recursive walk adds up, so
+    // an attrib-only burst says so and run.rs keeps every folder size it has measured.
+    #[test]
+    fn an_attrib_only_burst_is_not_structural() {
+        let buf = masked_event(3, IN_ATTRIB, b"Windows\0");
+        assert_eq!(descriptors(&buf), vec![(3, false)]);
+        // IN_ISDIR rides along on a directory's own attrib event and must not read as structural.
+        let dir = masked_event(3, IN_ATTRIB | 0x4000_0000, b"Windows\0");
+        assert_eq!(descriptors(&dir), vec![(3, false)]);
+    }
+
+    // One burst is one line, so the strongest event in it decides: a create beside a chmod still
+    // drops the sizes, and the order the two arrive in cannot change the answer.
+    #[test]
+    fn one_structural_event_makes_the_whole_burst_structural() {
+        let mut attrib_first = masked_event(3, IN_ATTRIB, b"Windows\0");
+        attrib_first.extend(event(3, b"new.txt\0"));
+        assert_eq!(descriptors(&attrib_first), vec![(3, true)]);
+        let mut create_first = event(3, b"new.txt\0");
+        create_first.extend(masked_event(3, IN_ATTRIB, b"Windows\0"));
+        assert_eq!(descriptors(&create_first), vec![(3, true)]);
+    }
+
+    // Two watches in one burst keep their own answers rather than sharing the louder one.
+    #[test]
+    fn each_watch_answers_for_itself() {
+        let mut buf = masked_event(3, IN_ATTRIB, b"Windows\0");
+        buf.extend(event(4, b"new.txt\0"));
+        assert_eq!(descriptors(&buf), vec![(3, false), (4, true)]);
     }
 
     // Not a shape inotify produces: it pins the bound, so a length running past the slice cannot panic.
@@ -202,12 +249,12 @@ mod tests {
         let mut buf = event(3, b"a.txt\0\0\0");
         buf.extend(event(4, b"this name did not fit"));
         buf.truncate(buf.len() - 4);
-        assert_eq!(descriptors(&buf), vec![3, 4]);
+        assert_eq!(descriptors(&buf), vec![(3, true), (4, true)]);
     }
 
     #[test]
     fn a_short_buffer_names_nothing() {
-        assert_eq!(descriptors(&[0u8; 8]), Vec::<i32>::new());
+        assert_eq!(descriptors(&[0u8; 8]), Vec::<(i32, bool)>::new());
     }
 
     #[test]
@@ -296,8 +343,13 @@ mod tests {
     #[test]
     fn the_changed_line_names_its_directory() {
         assert_eq!(
-            changed_line(Path::new("/tmp/a \"b\"")),
-            r#"{"t":"changed","path":"/tmp/a \"b\""}"#
+            changed_line(Path::new("/tmp/a \"b\""), true),
+            r#"{"t":"changed","path":"/tmp/a \"b\"","sizes":true}"#
+        );
+        // The attrib-only form, which ui/PaneWire.qml reads to keep the sizes across its re-read.
+        assert_eq!(
+            changed_line(Path::new("/tmp/x"), false),
+            r#"{"t":"changed","path":"/tmp/x","sizes":false}"#
         );
     }
 }

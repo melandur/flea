@@ -64,7 +64,10 @@ function route(root, message) {
     } else if (message.t === "fsinfo") {
         root.fsInfo(message.fs, message.free, message.path || "")
     } else if (message.t === "changed") {
-        root.changed(message.path || "")
+        // sizes is false for an attrib-only burst, which cannot have moved a recursive size; a
+        // build that predates the field says nothing, and an absent field reads as the old
+        // always-drop behaviour rather than as a promise this line cannot make.
+        root.changed(message.path || "", message.sizes !== false)
     } else if (message.t === "peeked") {
         root.peeked(message.path, message.hidden === true, message.n, message.rows || [], message.failed === true, message.mode || 0)
     } else if (message.t === "formats") {

@@ -1,6 +1,8 @@
+use crate::backend::mime;
 use crate::thp;
+use crate::userfile::data_file;
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 // The exit statuses ui/Opener.qml reads. 0 is a successful handoff and needs no name.
@@ -42,6 +44,13 @@ pub fn open(path: &str) -> i32 {
         Ok(status) if status.success() => 0,
         // A launcher that refused, which a spawn nobody waited on used to report as a clean handoff.
         Ok(_) => {
+            // A file with no bytes is exactly what GIO abstains on, so this refusal is the database
+            // holding no handler for "empty document" rather than the file being unopenable; see
+            // AGENTS.md "When the sniffer abstains". Nothing else reaches the second launch, so an
+            // ordinary open still spawns exactly one process.
+            if empty(&target) && open_by_name(&target).is_some() {
+                return 0;
+            }
             eprintln!("flea: gio open refused that file, so no application on this system took it");
             FAILED
         }
@@ -50,4 +59,61 @@ pub fn open(path: &str) -> i32 {
             FAILED
         }
     }
+}
+
+// The one condition the two sniffer sentinels stand for, asked of the file rather than of a string:
+// `gio open` sniffs the type itself and takes no override, so unlike Open with, the rule cannot be a
+// different type here and has to become a second launch instead. A file that vanished between the
+// canonicalize above and here is not empty, it is gone, and the caller's sentence covers it.
+fn empty(target: &Path) -> bool {
+    std::fs::metadata(target).map(|meta| meta.len() == 0).unwrap_or(false)
+}
+
+// The desktop entry the name's own type names, launched the way menu_registry::launch launches a
+// chosen one. Every step answers Option rather than an error: the caller already holds the sentence
+// to print, and a fallback that could not be built says the same thing as one that was refused.
+fn open_by_name(target: &Path) -> Option<()> {
+    let name = target.file_name()?.to_str()?;
+    let db = mime::Db::load();
+    // No glob for this name either: nothing is known about the file, and there is nothing to launch.
+    let kind = db.lookup(name)?;
+    let entry = data_file(&format!("applications/{}", default_handler(kind)?))?;
+    // THP was handed back before the first spawn and is inherited here, so this child needs no hook.
+    let launched = Command::new("gio")
+        .arg("launch")
+        .arg(&entry)
+        .arg(target)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0)
+        .status()
+        .ok()?;
+    launched.success().then_some(())
+}
+
+// Sample GIO mime output, first line: "Default application for \u{201c}text/plain\u{201d}: micro.desktop".
+// LC_ALL=C because that prefix is what is matched; the registry rows under it are not read here.
+fn default_handler(kind: &str) -> Option<String> {
+    let out = Command::new("gio")
+        .arg("mime")
+        .arg(kind)
+        .env("LC_ALL", "C")
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let id = String::from_utf8(out.stdout)
+        .ok()?
+        .lines()
+        .find(|line| line.starts_with("Default application"))?
+        .rsplit(':')
+        .next()?
+        .trim()
+        .to_string();
+    // The id becomes a path component above, so it is held to the shape menu_registry::resolve holds one to.
+    (id.ends_with(".desktop") && !id.contains('/') && !id.contains('\0')).then_some(id)
 }

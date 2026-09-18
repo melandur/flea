@@ -210,6 +210,63 @@ read twice. The second read is anchored the same way and moves nothing the user 
 it would mean deciding that a `changed` arriving during a listing belongs to that listing, which is
 exactly the guess that would drop a real outside change, so it is paid rather than guessed at.
 
+### An attrib-only burst keeps the folder sizes
+
+**Reported 2026-09-18: "updates sizes every two seconds when in /home/melandur/".** Measured with
+the backend's own protocol teed to a file, twenty seconds with the window open on `$HOME`: nine
+`changed` lines, nine `list` requests, nine `dirsize` requests and **117 `dirsized` replies**. The
+Size column was being re-walked from scratch every two seconds for as long as the window stood.
+
+**It was not a spurious watch.** `inotifywait` over `$HOME` with Flea's own mask saw nothing at all
+in twenty-five seconds with no Flea running, which ruled the watch itself out and was wrong to be
+read as ruling the events out: the culprit only fires while that box's VM container is up. A probe
+in `pump` writing `(wd, mask, name)` to a file named it in one run, six events, all identical:
+
+    FLEAWATCH wd=1 mask=0x40000004 name="Windows"
+
+`0x40000004` is `IN_ISDIR | IN_ATTRIB`, and `~/Windows` is a VM shared directory whose container
+re-chmods it every three seconds. `stat` confirms it: an mtime two days old beside a ctime from
+this second.
+
+**The defect was in `descriptors`, which read the watch descriptor and threw the mask away.** Every
+event therefore meant the same thing, so a chmod on one sibling cost `forget_dirsizes_under` the
+whole directory. It now returns `(wd, structural)`, where structural is any of `IN_CLOSE_WRITE`,
+`IN_MOVED_FROM`, `IN_MOVED_TO`, `IN_CREATE`, `IN_DELETE` or `IN_MOVE_SELF`; one burst is one line,
+so the strongest event in it decides for the whole burst, and two watches in one burst answer
+separately. `Event::Changed` carries it, `run.rs` drops its cached sizes only when it is true, and
+the `changed` line reports it as `sizes` (docs/protocol.md), because the client blanks its own
+column independently of anything the backend caches.
+
+**`ui/js/Nav.js open` keeps `dirSizeState` for exactly this case**, gated on `pane.keepDirSizes`,
+which `ui/PaneWire.qml reread` sets from the bursts it saw. That map is keyed by ROW INDEX, which
+is the weakest key there is and normally reason enough to clear it; what licenses keeping it here
+is that an attrib-only burst cannot add, remove or move a row, so every index still names the same
+file. A structural burst in the same debounce window wins and clears them, because a stale size is
+worse than a re-walk. The re-list still happens either way: a chmod changes the mode column, and
+that is drawn from the listing.
+
+**After, the same twenty seconds on the same directory:** seven `changed` lines, all `sizes:false`,
+eight `list` requests, **one `dirsize` request and 13 `dirsized` replies**. Measured, not reasoned.
+
+### A delete moves the cursor and marks nothing
+
+**Reported 2026-09-11** as "deleting one refreshes the entire file list and loses my selection, so I
+have to start over", and `Anchor.afterDelete` answered it two ways at once: it moved the cursor onto
+whatever took the deleted row's place, AND it marked that row. **Reported again 2026-09-18**, as a
+grey marker appearing on an unrelated folder after a delete. Both reports are about the same line.
+
+A row that is marked and is not the cursor draws `Style.selectionFill`, the plain grey one, where
+the cursor draws `Style.selectedAccentFill`. So the mark was visible as a grey band wherever the
+cursor was not, which after a delete followed by any cursor movement is a folder the operator never
+touched. **The mark was also redundant**: `ui/js/Ops.js targetIndices` falls back to
+`[pane.cursorIndex]` when nothing is marked, so a run of deletes follows the cursor down the
+listing with no mark involved, which is what actually answered the 2026-09-11 report. `afterDelete`
+now passes `select: false`, the same as the watch's own anchor, and `tests/js/watch.js` asserts
+`selectedAt` is -1 on every one of its delete cases rather than 1.
+
+`landOn` keeps the `select` parameter even though both callers now pass false: it is the seam the
+two are told apart by, and a caller that does own the mark has somewhere to say so.
+
 ## Why the listing is an arena
 
 `Listing` (`listing.rs`) holds one `String` with every entry's name written back to
@@ -967,7 +1024,8 @@ this coverage needed no new entry there.
 - `paths.rs` resolves the UI directory and whether a display is available.
 - `gui.rs` execs `qs` against the resolved UI directory.
 - `thp.rs` the one `prctl(PR_SET_THP_DISABLE)` declaration, `disable()` and `enable()`.
-- `open.rs` hands one file to `gio open` and waits for it, see "Opening a file".
+- `open.rs` hands one file to `gio open` and waits for it, and on a refusal over a file with no
+  bytes launches the entry its name's own type names, see "Opening a file" and "When the sniffer abstains".
 - `terminal.rs` hands one directory to `xdg-terminal-exec --dir=` and does not wait, see "Opening a file".
 - `defaults.rs` claims or releases the OS-level default: the desktop-entry install check,
   the `inode/directory` MIME default via `xdg-mime`, and reporting each half, see "Modes".
@@ -993,7 +1051,8 @@ this coverage needed no new entry there.
 - `backend/metasort.rs` the size and date orders: sorts an index over the metadata pass, then
   gathers the spans behind it, see "Two-phase listing".
 - `backend/owner.rs` resolves a uid to its login name from `/etc/passwd` alone, for the meta reply.
-- `backend/mime.rs` resolves a file name to a MIME type from the shared globs2 database.
+- `backend/mime.rs` resolves a file name to a MIME type from the shared globs2 database, and holds
+  the rule for a sniffer that declined to answer, see "When the sniffer abstains".
 - `backend/icons.rs` resolves a MIME type to a freedesktop icon name from generic-icons.
 - `backend/md5.rs` computes the thumbnail cache's filename digest, see "Thumbnail cache".
 - `backend/thumbspec.rs` parses the `.thumbnailer` files on the search path into a table of
@@ -3742,7 +3801,10 @@ distinct because `std::fs::canonicalize` has already proved the file is there be
 all: a path that does not resolve gets `that file could not be opened, check that it still exists`, a
 `gio open` that exits nonzero gets `gio open refused that file, so no application on this system took
 it`, and a `gio` that could not be run at all gets `nothing on this system could be asked to open that
-file`, so the set tells a refused open from an unimplemented one and neither one blames the path. A directory is refused rather than handed on because
+file`, so the set tells a refused open from an unimplemented one and neither one blames the path. One
+refusal is tried a second way before it becomes that sentence: a file with no bytes is what the
+sniffer abstains on, and `open_by_name` launches the entry the name's own type names, see "When the
+sniffer abstains". The statuses and the sentences are unchanged by it. A directory is refused rather than handed on because
 the desktop default for `inode/directory` is a file manager either way, `org.gnome.Nautilus.desktop`
 on an unclaimed box and `com.thisisgm.flea.desktop` once `--default` has claimed it, so opening one
 through the opener from inside a file manager opens a file manager; the caller navigates instead.
@@ -3809,7 +3871,16 @@ produced the same process tree (`kitty -- nvim <path>` reparented to pid 1, with
 `nvim --embed` beneath it), both exited `0` in 8 to 10 ms, both made exactly one
 `org.freedesktop.DBus.StartServiceByName` call and both named `org.gtk.vfs.Daemon` in it, and neither
 produced a single line of bus traffic or one journal entry naming Nautilus. **They are the same on a
-text file, so `gio open` stays** and no desktop-entry parsing enters `src/open.rs`.
+text file, so `gio open` stays** as the route for every file `gio open` will take.
+
+**That ruling was later narrowed by one case, and the measurement above is why the narrowing was
+cheap.** A file with no bytes is one `gio open` refuses outright, so there is no arm to prefer and
+nothing to weigh: `src/open.rs` resolves the handler and runs `gio launch <desktop-file> <path>`
+there, and the numbers on this page are the evidence that doing so costs nothing where the two arms
+did overlap. The declined half is still declined for every file with bytes in it, and no desktop
+entry is *parsed* in `src/open.rs` even now: an id is resolved to a path on the XDG ladder and handed
+to `gio`, and the `Type=`, `NoDisplay=` and `Exec=` reading stays in `menu_registry::launchable`.
+See "When the sniffer abstains".
 
 **Issue 41: `xdg-open` does not honour `Terminal=true`, which is why the handoff is `gio open`.**
 `xdg-mime query default text/plain` is `nvim.desktop` here, whose `Exec` is `nvim %F` and whose
@@ -4060,6 +4131,59 @@ names have twins carrying the same MIME type.
 - `tools/flea-bench`: the directory-exists check it runs before a warm pass reads the
   directory and warms the cache, so a cold run must skip that check entirely; that is
   what `COLD=1` is for.
+
+### When the sniffer abstains
+
+A file with no bytes has no content to read, and the two type databases say so in two different
+strings: GIO's `standard::content-type` answers `application/x-zerosize` and `xdg-mime query
+filetype` answers `inode/x-empty` for the same file. **Neither string is a database row.** Grepped
+on this box, the two names appear 0 times in `/usr/share/mime/aliases` (355 lines), 0 times in
+`globs2` and 0 times in `subclasses`, so `Aliases::canonical` will never pair them and no glob will
+ever produce one; `application/x-zerosize.xml` is shipped, carrying the comment *Empty document*,
+and `inode/x-empty.xml` does not exist at all. They are sentinels each sniffer emits on its own to
+say it declined to answer, which is not the same thing as an answer nothing handles:
+`application/octet-stream` is a real reading of real bytes and is left alone.
+
+An abstention is the one case where the name is better evidence than the content, and
+`mime::resolved` is that rule: a sniffer that answered is believed, because content beats the name
+and a `.txt` holding PNG bytes is a PNG, and only `mime::abstained` reaches for `Db::lookup`. The
+early return is also why `globs2` is read on the abstain path alone and the common path pays nothing
+for this.
+
+**The bug it fixes was one window disagreeing with itself.** `scan.rs` has always typed a row by
+name, so a freshly created `empty.txt` listed as *Plain text document* and previewed as text, while
+`gio open` on that same row exited 2 with `Failed to find default application for content type
+‘application/x-zerosize’` and the pane wrote the refusal sentence to the status line. Open with was
+the same split from the other side: `content_type` asked GIO, got the sentinel, and drew an empty
+registry under the eyebrow *Registered for Empty document*. Driven against the backend after the
+rule, `empty.txt` answers `text/plain`, *Plain text document* and the same handler list `full.txt`
+answers with, its default marked.
+
+**`gio open` cannot take the rule as a string, so `--open` carries it as a second launch.** `gio
+open` sniffs the type itself and has no override flag, which is the whole reason `open.rs` is the
+one place this is a mechanism rather than one line: on a refusal, and only when `empty()` says the
+file has no bytes, `open_by_name` resolves the name through `Db`, reads the default entry's id off
+`gio mime`'s first line under `LC_ALL=C`, finds that id on the XDG data ladder through
+`userfile::data_file`, and hands it to `gio launch`. **The exit contract does not change**: `0`, `2`
+and `3` still mean what "Opening a file" says they mean, the three sentences are still the three
+sentences, and a file with bytes in it never reaches the second route, so an ordinary open still
+spawns exactly one process. The id is held to the shape `menu_registry::resolve` holds one to, no
+`/` and no NUL and a `.desktop` suffix, because unlike there it becomes a path component.
+
+**A name with no glob keeps the sentinel, deliberately.** An extensionless `empty` resolves to
+nothing, so `resolved` answers `application/x-zerosize` unchanged: `--open` refuses it with the
+launcher's own sentence rather than guessing a handler, and Open with's *always* tickbox refuses to
+write a default for it. That guard used to be `mime.starts_with("inode/")` alone, on the reasoning
+that a directory or an unresolvable link is not a file type to bind an editor to. The reasoning
+always covered the sentinel too and the string test did not catch it, so ticking *always* on an
+empty file wrote a permanent default for every zero-byte file on the box whatever its extension;
+`menu_actions.rs` now refuses on `mime::abstained` for the same stated reason.
+
+`tests/modes.sh` pins the `--open` half with a `gio` stub that refuses `open` and answers `mime` and
+`launch`: an empty `.txt` reaches the entry its name's type names, an extensionless empty file keeps
+the refusal and launches nothing, and a file with bytes in it never reaches the second route.
+`backend/mime.rs`'s own tests put a fixture database under `resolved_with` for both halves of the
+rule, which is why the load is split from it.
 
 ### Icons in the row
 

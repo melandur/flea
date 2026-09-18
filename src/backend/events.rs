@@ -22,7 +22,9 @@ pub enum Event {
     Op(OpMsg),
     // The watch descriptor that saw it, so a burst belonging to the directory the client has already
     // left is dropped rather than answered for the new one; see src/backend/watch.rs.
-    Changed(i32),
+    // The watch descriptor, and whether the burst could have moved a recursive size: an attrib-only
+    // burst cannot, so the folder-size cache survives it. See backend/watch.rs STRUCTURAL.
+    Changed(i32, bool),
     ReadError(FleaError),
     Closed,
 }

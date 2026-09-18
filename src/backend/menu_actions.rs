@@ -1,6 +1,7 @@
 // Menu snapshots own selected identities; registry work runs only after an explicit menu action.
 use crate::backend::opsreq::OpMsg;
 use super::menu_registry::{self, Registry};
+use super::mime;
 use super::trashmanifest::Cancellation;
 use crate::json::{escape, field_bool, field_str, field_usize};
 use std::fs::{Metadata, OpenOptions};
@@ -295,8 +296,11 @@ impl Snapshot {
                 if field_bool(line, "always") {
                     let mime = menu_registry::content_type(registry, &item.path, cancel)?;
                     // A directory and an unresolvable link both type as inode/*, and making an editor
-                    // the desktop's default folder handler is not what ticking this box asks for.
-                    if mime.starts_with("inode/") {
+                    // the desktop's default folder handler is not what ticking this box asks for. An
+                    // abstention that survived content_type's fallback is the same refusal for the same
+                    // reason: the name carried no glob either, so binding a handler here would bind it to
+                    // every empty file on the box whatever its extension. See AGENTS.md "When the sniffer abstains".
+                    if mime.starts_with("inode/") || mime::abstained(&mime) {
                         return Err(format!("Opened it, but {} has no file type to set a default for.", item.path.display()));
                     }
                     if let Err(error) = menu_registry::set_default(registry, &mime, &app.id, cancel) {

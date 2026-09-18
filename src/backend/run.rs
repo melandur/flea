@@ -129,14 +129,22 @@ pub fn run() -> i32 {
             Event::Thumb(d) => report_done(&mut out, &mut st, d),
             Event::DirSize(d) => report_dirsize(&mut out, &mut st, d),
             // The one line no client asked for, and only ever for the directory being listed now.
-            Event::Changed(wd) => {
+            Event::Changed(wd, sizes) => {
                 if watch.is_current(wd) {
                     // The rows of this directory may have changed size, and no measurement here
                     // would know: dropping them is what makes the Size column follow a copy or a
                     // delete instead of showing what was true when the folder was first opened.
-                    let base = st.base.clone();
-                    forget_dirsizes_under(&mut st, &base);
-                    say(&mut out, &changed_line(&st.base));
+                    //
+                    // Unless the burst was attrib-only, which cannot move a size at all. That arm
+                    // is not a micro-optimisation: a box where one directory in the listing is
+                    // chmod'd on a timer (a VM shared folder, measured every three seconds on this
+                    // one) otherwise re-walks every folder in the parent for the life of the
+                    // window, and the Size column visibly blanks and refills each time.
+                    if sizes {
+                        let base = st.base.clone();
+                        forget_dirsizes_under(&mut st, &base);
+                    }
+                    say(&mut out, &changed_line(&st.base, sizes));
                 }
             }
             Event::Op(m) => report_op(&mut out, &mut ops, m),
