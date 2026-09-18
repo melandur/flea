@@ -35,6 +35,8 @@ FocusScope {
     property string listingPath: ""
     property int total: 0
     property int cursorIndex: 0
+    // Every move lands here, the grid's arrows included, so the held-Space paint runs from the cursor rather than from each key that moved it; see ui/js/Marks.js.
+    onCursorIndexChanged: Marks.paintCursor(root)
     property string listingState: "loading"
     property string stateMessage: ""
     property int lockedMode: 0
@@ -576,6 +578,8 @@ FocusScope {
 
         // The whole route lives in Focus.handleKey now, see its own comment; this is only the seam.
         Keys.onPressed: function (event) { event.accepted = Focus.handleKey(event, root, root.sidebar) }
+        // A held Space paints the rows the cursor passes, so the release is a seam too.
+        Keys.onReleased: function (event) { Marks.released(event) }
     }
 
     Rectangle {

@@ -1197,6 +1197,19 @@ close so a newly installed application is in the list next time. A File types ru
 `ui/SettingsFavourite.qml`, the same component a favourite and a shelf pin use, with the drag grip
 hidden: a favourite's order is the operator's and a rule's is its ending's length.
 
+**Held, Space paints.** The same day's second ruling, "allow me to keep space pressed": a press per
+row is what the operator had, and a sweep is what they asked for. `ui/js/Marks.js` holds the state
+as one number, `painting`, which the press sets to 1 when it marked the row and -1 when it unmarked
+one, so a held sweep clears a run as readily as it makes one, the way a spreadsheet paints a drag.
+Three things make it work and each was found by it not working: **the auto-repeat is swallowed at
+the press**, in `ui/js/Focus.js` `handleKey`, or the row under a resting cursor flips on and off
+while nothing moves (measured here: a 2.5 s hold now toggles exactly once); **only the painting
+key's own release ends the sweep**, resolved through `Keymap.lookup` rather than against
+`Qt.Key_Space` written down a second time, because the arrows are lifted and pressed again all
+through a sweep and ending on any release painted the first row reached and then nothing; and **the
+paint runs from `ui/Pane.qml`'s `onCursorIndexChanged`**, the one place every move lands, which is
+what gives the grid's own arrows the gesture without `ui/js/Grid.js` knowing it exists.
+
 **Space marks a row and Right opens the preview, the operator's ruling of 2026-09-18.** Right
 already opened a quick look on a file row, through `ui/js/Focus.js` `lookup`'s `pageForward` branch,
 so the preview lost nothing by giving Space up, and selection had no key at all since the bare

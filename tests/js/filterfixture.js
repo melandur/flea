@@ -58,6 +58,7 @@ function pane(query, held) {
     p.showRow = function (view) { p.scrolled = view }
     p.selection = {
         count: function () { return p.selectedIndices().length },
+        has: function (i) { return p.picked[i] === true },
         toggle: function (i) { if (p.picked[i]) delete p.picked[i]; else p.picked[i] = true },
         clear: function () { p.picked = {} },
         all: function (n) { p.picked = {}; for (var i = 0; i < n; i++) p.picked[i] = true },
@@ -65,6 +66,12 @@ function pane(query, held) {
             p.picked = {}
             for (var r = Math.min(i, anchor); r <= Math.max(i, anchor); r++) p.picked[r] = true
         }
+    }
+    // ui/Pane.qml's own: the one writer every marking route goes through, anchor and version included.
+    p.toggleSelect = function () {
+        p.selection.toggle(p.cursorIndex)
+        p.selectionAnchor = p.cursorIndex
+        p.selectionVersion += 1
     }
     p.selectedIndices = function () {
         var out = []

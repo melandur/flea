@@ -130,7 +130,9 @@ action = "focusNext"
 # and selection had no key at all since the bare letters went. The preset rows at the end of this
 # file keep Space for the preview's own contexts, where ui/js/PreviewKeys.js act makes the surface
 # fill the window and then brings it back to the inset one; the two never overlap, because the
-# listing context and the preview contexts are never both what a key is read in.
+# listing context and the preview contexts are never both what a key is read in. Held rather than
+# tapped it paints: ui/js/Marks.js marks every row the cursor reaches until the key comes back up,
+# the operator's second ruling of the same day, and the auto-repeat a held key makes is swallowed.
 [[code]]
 key = "Space"
 action = "toggleSelect"

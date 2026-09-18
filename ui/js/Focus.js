@@ -4,6 +4,7 @@
 .import "Grid.js" as Grid
 .import "Format.js" as Format
 .import "Keymap.js" as Keymap
+.import "Marks.js" as Marks
 .import "Mounts.js" as Mounts
 .import "Ops.js" as Ops
 .import "PreviewKeys.js" as PreviewKeys
@@ -264,6 +265,12 @@ function handleKey(event, root, sidebar) {
     }
     if (root.preview.active) {
         PreviewKeys.act(action, root)
+        return true
+    }
+    // The held Space, before the generic dispatch: its repeat is swallowed, and its first press is
+    // what decides whether the sweep marks or unmarks.
+    if (action === "toggleSelect" && root.focusView === LIST) {
+        if (!event.isAutoRepeat) Marks.paintPress(root)
         return true
     }
     if (shareBrowserHere(root)) {
