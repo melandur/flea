@@ -29,6 +29,13 @@ const BWRAP_FLAGS: &[&str] = &[
     "--ro-bind",
     "/etc",
     "/etc",
+    // --clearenv drops HOME and --tmpfs /tmp leaves nowhere writable, so without the shared cache
+    // fontconfig rebuilds its index inside every child: a PDF thumbnail measured 225 ms jailed
+    // against 58 ms bare, and 58 ms again with this bind. -try, so a box without the directory
+    // still spawns rather than failing every thumbnail.
+    "--ro-bind-try",
+    "/var/cache/fontconfig",
+    "/var/cache/fontconfig",
     "--symlink",
     "usr/lib",
     "/lib",
