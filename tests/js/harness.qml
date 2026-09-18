@@ -8,6 +8,7 @@ import "drag.js" as DragSuite
 import "dst.js" as DstSuite
 import "errors.js" as ErrorsSuite
 import "facts.js" as FactsSuite
+import "filetypes.js" as FileTypesSuite
 import "filter.js" as FilterSuite
 import "filter-cursor.js" as FilterCursorSuite
 import "focus.js" as FocusSuite
@@ -48,6 +49,7 @@ import "scripts.js" as ScriptsSuite
 import "settings.js" as SettingsSuite
 import "settingsmenus.js" as SettingsMenusSuite
 import "settingsshelf.js" as SettingsShelfSuite
+import "themecatalog.js" as ThemeCatalogSuite
 import "themes.js" as ThemesSuite
 import "transfer.js" as TransferSuite
 import "sort.js" as SortSuite
@@ -84,7 +86,7 @@ Item {
             ["archive", ArchiveSuite], ["columns", ColumnsSuite], ["contrast", ContrastSuite],
             ["dirsizes", DirSizesSuite], ["drag", DragSuite], ["dst", DstSuite],
             ["edmonton", DstSuite],
-            ["errors", ErrorsSuite], ["facts", FactsSuite], ["filter", FilterSuite], ["filter-cursor", FilterCursorSuite],
+            ["errors", ErrorsSuite], ["facts", FactsSuite], ["filetypes", FileTypesSuite], ["filter", FilterSuite], ["filter-cursor", FilterCursorSuite],
             ["focus", FocusSuite], ["focus-grid", FocusGridSuite], ["focus-forward", FocusForwardSuite],
             ["focus-lines", FocusLinesSuite], ["focus-wrap", FocusWrapSuite],
             ["format", FormatSuite], ["icons", IconsSuite],
@@ -102,7 +104,7 @@ Item {
             ["selection", SelectionSuite], ["settings", SettingsSuite], ["settingsmenus", SettingsMenusSuite], ["settingsshelf", SettingsShelfSuite],
             ["sort", SortSuite], ["startup", StartupSuite], ["trashdates", TrashDatesSuite], ["permissions", PermissionsSuite], ["status", StatusSuite], ["taildrop", TaildropSuite], ["textsize", TextSizeSuite],
             ["trash", TrashSuite], ["tap", TapSuite], ["marquee", MarqueeSuite], ["tabs", TabsSuite], ["tabs-switch", TabsSwitchSuite], ["shelfmodel", ShelfModelSuite],
-            ["themes", ThemesSuite], ["thumbs", ThumbsSuite], ["transfer", TransferSuite], ["uistate", UiStateSuite],
+            ["themecatalog", ThemeCatalogSuite], ["themes", ThemesSuite], ["thumbs", ThumbsSuite], ["transfer", TransferSuite], ["uistate", UiStateSuite],
             ["watch", WatchSuite]
         ]
         var argv = Qt.application.arguments

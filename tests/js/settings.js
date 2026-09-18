@@ -32,8 +32,17 @@ function find(rows, id) {
 function runRows(check) {
     var display = Settings.rows("display", displayState(TextSize.follow(), 14))
     // The board's Display card: the text-size mode over its effective size, then the compositor's two read-only facts. No monitor-scale control, because Flea does not step or cycle that one.
-    check("the Display section is text size, then Scale, then Appearance",
-          kinds(display), "group|choice|ruler|hint|fact|group|fact|hint|group|check")
+    check("the Display section is text size, then Scale, then Appearance, then Palette",
+          kinds(display), "group|choice|ruler|hint|fact|group|fact|hint|group|check|check|hint|group|fact|hint")
+    // 0.3.1's Appearance row. Off by default, and its id is the leaf src/uischema.rs names, so
+    // the panel's own check writer reaches it with no special case.
+    check("the filetype switch is a plain leaf write",
+          find(display, "display.fileTypeColors").id, "display.fileTypeColors")
+    check("and it ships off", find(display, "display.fileTypeColors").on, false)
+    // Palette is a fact and not a control: the Theme section owns the writer, and two surfaces
+    // writing one setting is how they come to disagree. SettingsGrammar rule 5.
+    check("the palette row names the section that owns it",
+          find(display, "themeSection").value, "Omarchy")
     check("its one control opens on Follow Omarchy", find(display, "textMode").value,
           "Follow Omarchy")
     // The board draws the mode as both names side by side, so the row names them rather than leaving ui/SettingsRow.qml to invent a second list that could disagree with the writer.

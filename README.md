@@ -35,6 +35,7 @@ Large directories stay responsive: the window loads rows and requests thumbnails
 - **Devices.** USB drives, phones and cameras over MTP, PTP and AFC, mounted from the rail.
 - **Desktop integration.** Default file manager, “Show in folder” and Open/Save dialogs.
 - **Your settings.** Omarchy text sizes and configurable menus.
+- **Marks and palettes.** Per-filetype marks and colours, and 95 bundled palettes beside your theme.
 
 An iPhone lists once it has been unlocked and trusted on this machine: AFC needs the pairing record
 that leaves behind, not an unlocked screen every time. Pairing also puts the phone on its tethering
@@ -97,6 +98,14 @@ If you previously pinned another directory handler, restore that handler explici
   <img src="docs/images/grid.png" width="49%" alt="Grid view with image and video thumbnails">
   <img src="docs/images/list.png" width="49%" alt="Columns view with the preview column, file details and the iPhone on the Devices rail">
 </p>
+
+Turn on **File type marks and colours** in Settings → Display and a row's mark and ink come from its
+name rather than from its MIME class, so `.json`, `.toml` and `.md` stop sharing one document mark.
+The marks are Flea's own lucide set; the colours are yazi's table, which is
+[nvim-web-devicons'](https://github.com/nvim-tree/nvim-web-devicons). Settings → **Theme** carries 95
+bundled palettes from [Strata](https://github.com/lgse/strata), with following your Omarchy theme
+the default and what a fresh install does. See [`vendor/`](vendor/README.md) for what is imported
+and under which licence.
 
 **Space** opens Quick Look from any view. Page through a PDF, play media or inspect an archive.
 
@@ -209,4 +218,8 @@ If this saved you an afternoon, you can
 
 ## Licence
 
-[MIT](LICENSE).
+[MIT](LICENSE). Flea also redistributes three third-party works, each under its own licence and
+each recorded in [`vendor/`](vendor/README.md): the filetype colour table (nvim-web-devicons, MIT,
+by way of [yazi](https://github.com/sxyazi/yazi)), the palette catalog
+([Strata](https://github.com/lgse/strata), MIT) and the mark geometry
+([lucide](https://github.com/lucide-icons/lucide), ISC).

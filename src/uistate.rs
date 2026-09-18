@@ -1,7 +1,7 @@
 // The ui.json merges with no disk in them: read a file onto the defaults, apply one caller patch,
 // and carry 0.1.3's view.json across.
 use crate::jsondoc::{self, Json};
-use crate::uischema::{defaults, Rule, COLUMN_KEYS, OPTIONAL_COLUMNS, SCHEMA, TEXT_SIZE_STOPS, SIDEBAR_STOPS};
+use crate::uischema::{defaults, is_theme_id, Rule, COLUMN_KEYS, OPTIONAL_COLUMNS, SCHEMA, TEXT_SIZE_STOPS, SIDEBAR_STOPS};
 
 // Never fails: a file this cannot read is a file whose every key falls back to the shipped default.
 pub fn from_file(text: &str) -> Json {
@@ -153,6 +153,7 @@ fn fits(rule: &Rule, value: &Json) -> bool {
             Json::Str(s) => s == "system",
             _ => value.as_f64().map(|n| TEXT_SIZE_STOPS.contains(&n)).unwrap_or(false),
         },
+        Rule::ThemeId => value.as_str().map(is_theme_id).unwrap_or(false),
         Rule::Group(_) => value.as_object().is_some(),
     }
 }

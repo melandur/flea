@@ -6,8 +6,11 @@ import QtQuick
 import qs.Commons
 import "js/Columns.js" as Columns
 import "js/Contrast.js" as Contrast
+import "js/FileTypes.js" as FileTypes
 import "js/Palette.js" as Palette
 import "js/TextSize.js" as TextSize
+import "js/Themes.js" as Themes
+import "js/Tokens.js" as Tokens
 
 // Flea is its own process, so it plays the role shell.qml plays for the bar: it feeds Color and Style.
 Singleton {
@@ -29,6 +32,37 @@ Singleton {
     // hyprctl has answered, and the panel says so rather than claiming a number it does not have.
     property real monitorScale: 0
 
+    // Settings > Display > Appearance, `display.theme` in src/uischema.rs. "omarchy" follows the
+    // desktop and is the default; any other id names one of ui/js/Themes.js's 95 vendored palettes.
+    // Themes.resolve makes the one decision, so an id a newer build wrote and this catalog does not
+    // carry follows the desktop rather than leaving the window on a palette of fallbacks.
+    readonly property string themeId: Themes.resolve(ViewState.themeId)
+    // Re-running the same apply is what a theme switch is; the file read behind it does not move.
+    onThemeIdChanged: root.applyColors(colorsFile.text())
+
+    // yazi's filetype colours are authored against yazi's own ground, so each is lifted to the 3:1
+    // a graphical object needs on the running background, exactly as accentFrame is. Memoised
+    // because the lift is a binary search plus up to 255 steps and a scroll asks for the same dozen
+    // colours over and over; applyColors empties it, which is the only thing that invalidates it.
+    property var markColors: ({})
+
+    // A row's mark ink: the filetype colour when Settings > Display > Appearance asks for one and
+    // ui/js/FileTypes.js has a rule for the name, otherwise the ink the surface itself chose. Every
+    // board that draws a row mark calls this, so none of them handles a raw vendored hex.
+    function markInk(row, fallback) {
+        if (!row || !ViewState.fileTypeColors)
+            return fallback;
+        var hex = FileTypes.rowColor(row.n, row.p, row.d);
+        if (!hex)
+            return fallback;
+        var hit = root.markColors[hex];
+        if (!hit) {
+            hit = Contrast.ensureRatio(hex, String(root.color.background), 3);
+            root.markColors[hex] = hit;
+        }
+        return hit;
+    }
+
     // A property and not a Motion.js var: a plain library var notifies nothing, so every Behavior
     // reading it would keep whatever it was built with when the compositor's answer arrives.
     property bool reducedMotion: Quickshell.env("FLEA_REDUCED_MOTION") === "1"
@@ -42,11 +76,17 @@ Singleton {
         executable: "#a6e3a1"
     })
 
+    // The catalog palette in force, null while following. The three roles below are the only ones
+    // Flea does not assign itself, and Color keeps its own FileView on the desktop's colors.toml,
+    // so its async re-read lands after applyColors and puts those three back; see AGENTS.md "The
+    // theme catalog". Null while following leaves the live Color bindings exactly as they were.
+    readonly property var catalogColors: Themes.colorsOf(root.themeId)
+
     readonly property QtObject color: QtObject {
-        readonly property color background: Color.background
-        readonly property color foreground: Color.foreground
+        readonly property color background: root.catalogColors ? root.catalogColors.background : Color.background
+        readonly property color foreground: root.catalogColors ? root.catalogColors.foreground : Color.foreground
         property color muted: Qt.darker(Color.foreground, 1.4)
-        readonly property color accent: Color.accent
+        readonly property color accent: root.catalogColors ? root.catalogColors.accent : Color.accent
         property color error: Color.urgent
         property color surface: root.fallbackColor.surface
         property color symlink: root.fallbackColor.symlink
@@ -242,74 +282,32 @@ Singleton {
         return Math.round(Style.space(px) * root.sizeRatio);
     }
 
-    // The metrics contract as the app resolves it, one key=value per line in the Blueprint board's
-    // order; ui/shell.qml serves it as tokens() and tools/flea-metrics-gate diffs it. family is the
-    // resolved face, never the "monospace" alias, so the gate cannot pass on a box without the font.
+    // The metrics contract, in ui/js/Tokens.js since this file reached its hard cap; ui/Ipc.qml
+    // serves it and tools/flea-metrics-gate diffs it.
     function tokens() {
-        var t = {
-            family: Style.font.resolvedFamily,
-            baseSize: root.baseSize,
-            body: root.font.body,
-            bodySmall: root.font.bodySmall,
-            caption: root.font.caption,
-            lineBoxRatio: root.lineBoxRatio,
-            rowPaddingX: root.spacing.rowPaddingX,
-            rowPaddingY: root.spacing.rowPaddingY,
-            gap: root.spacing.gap,
-            hairline: root.spacing.hairline,
-            rowHeight: root.rowHeight,
-            iconSize: root.iconSize,
-            markSize: root.markSize,
-            stateMarkSize: root.stateMarkSize,
-            heroMarkSize: root.heroMarkSize,
-            strokeWidth: root.strokeWidth,
-            railRowHeight: root.railRowHeight,
-            railIconSize: root.railIconSize,
-            chromeHeight: root.chromeHeight,
-            chromeMarkSize: root.chromeMarkSize,
-            columnMode: root.column.mode,
-            columnSize: root.column.size,
-            columnDate: root.column.date,
-            columnPickerDate: root.column.pickerDate,
-            columnKind: root.column.kind,
-            menuWidth: root.menuWidth,
-            cornerRadius: Style.cornerRadius,
-            previewFraction: root.preview.fraction,
-            gridIconSize: root.grid.iconSize,
-            gridMinCellWidth: root.grid.minCellWidth,
-            settingsPanelWidth: root.settings.panelWidth,
-            settingsRailWidth: root.settings.railWidth,
-            settingsPaneWidth: root.settings.paneWidth,
-            settingsIndent: root.settings.indent,
-            settingsRailPaddingY: root.settings.railPaddingY
-        };
-        var lines = [];
-        for (var key in t)
-            lines.push(key + "=" + t[key]);
-        return lines.join("\n");
+        return Tokens.lines(root, Style);
     }
 
     // Color owns the other five; only the three it does not model are assigned here.
     function applyColors(body) {
-        var found = Palette.parse(body);
-        var bg = Palette.pick(found, ["background"], root.fallbackColor.background);
-        var surface = Palette.pick(found, Palette.SURFACE_KEYS, root.fallbackColor.surface);
-        root.color.surface = surface;
+        // A catalog theme replaces the body and nothing else, so a vendored palette can never reach
+        // a code path the desktop's own does not. Themes.following is ASKED rather than read off a
+        // property derived from themeId, and that is load-bearing: onThemeIdChanged can run before
+        // such a binding re-evaluates, which left the window on the desktop's palette while the
+        // switch had already stored a catalog one. Reproduced on the box, 2026-09-18.
+        body = Themes.following(root.themeId) ? body : Themes.paletteBody(root.themeId);
+        root.markColors = ({});
         Color.loadColors(body);
-        // Measured over the 22 stock palettes in tests/js/themes.js: 20 set a muted under the 3:1 a
-        // caption needs, rose-pine's at 1.48, so it is lifted the way the two ladder colours below are.
-        root.color.muted = Contrast.ensureRatio(
-            Palette.pick(found, ["muted"], Qt.darker(Color.foreground, 1.4)), bg, 3);
-        root.color.accentFrame = Contrast.ensureRatio(Color.accent, surface, 3);
-        root.color.symlink = Contrast.ensureRatio(
-            Palette.pick(found, ["cyan", "color6"], root.fallbackColor.symlink), bg, 4.5);
-        root.color.executable = Contrast.ensureRatio(
-            Palette.pick(found, ["green", "color2"], root.fallbackColor.executable), bg, 4.5);
-        // Urgent is the palette's own red: seven of the 23 installed themes leave it under 4.5:1 on their own ground, so it is lifted the way symlink and executable are, and the three whose red carries no chroma at all (solitude, white, vantablack) fall back to the foreground, because a destructive row drawn in the same grey as an unavailable one reads as switched off rather than as dangerous.
-        root.color.error = Color.urgent.hsvSaturation > 0.2 ? Contrast.ensureRatio(Color.urgent, bg, 4.5) : String(Color.foreground);
-        // A body that parsed to nothing left every role on its fallback, so the flag says so rather
-        // than reporting that the read happened: text() returns "" for a file that is not there.
-        root.ready = Palette.isPalette(found);
+        var roles = Palette.roles(body, root.fallbackColor, String(Color.accent), String(Color.urgent),
+                                  Color.urgent.hsvSaturation, String(Color.foreground),
+                                  String(Qt.darker(Color.foreground, 1.4)));
+        root.color.surface = roles.surface;
+        root.color.muted = roles.muted;
+        root.color.accentFrame = roles.accentFrame;
+        root.color.symlink = roles.symlink;
+        root.color.executable = roles.executable;
+        root.color.error = roles.error;
+        root.ready = roles.ready;
     }
 
     // Sample input: [{"id":0,"name":"DP-1","width":2560,"height":1440,"scale":1.00,"focused":true}]

@@ -8,7 +8,7 @@ pub const DEFAULTS: &str = r#"{
   "columns": ["name", "size", "date"],
   "addressBar": "breadcrumb",
   "sort": { "key": "name", "reverse": false },
-  "dual": { "paths": [], "focus": 0 },
+  "dual": { "paths": [], "focus": 0, "from": "list" },
   "foldersFirst": true,
   "folderSizes": true,
   "groupByKind": false,
@@ -37,7 +37,8 @@ pub const DEFAULTS: &str = r#"{
     "ctrlZoom": true
   },
   "keys": "default",
-  "display": { "textSize": { "mode": "system" }, "hyprlandIcons": false },
+  "display": { "textSize": { "mode": "system" }, "hyprlandIcons": false,
+                "fileTypeColors": false, "theme": "omarchy" },
   "menu": { "hidden": ["delete", "openTerminal", "placeMenu", "runScript",
             "moveto", "copyto", "properties", "permissions", "copypath"] }
 }"#;
@@ -66,6 +67,9 @@ pub enum Rule {
     Ids,
     Count(f64, f64),
     TextSize,
+    // "omarchy", or one catalog id: lowercase, digits and hyphens, which is every id
+    // vendor/strata-themes.toml carries and the whole of what tools/flea-themes-gen emits.
+    ThemeId,
     Group(&'static [(&'static str, Rule)]),
 }
 
@@ -73,7 +77,14 @@ pub const COLUMN_KEYS: &[&str] = &["name", "mode", "size", "date", "kind"];
 
 pub const SORT: &[(&str, Rule)] = &[("key", Rule::Word(&["name", "size", "date", "kind"])), ("reverse", Rule::Bool)];
 
-pub const DUAL: &[(&str, Rule)] = &[("paths", Rule::Pair), ("focus", Rule::Count(0.0, 1.0))];
+// "from" is the view the split was entered from, so leaving it again lands back on the columns or
+// the grid instead of always on the list. It cannot itself be "dual": that would be a split whose
+// way out is another split, and the toggle would have nowhere to go.
+pub const DUAL: &[(&str, Rule)] = &[
+    ("paths", Rule::Pair),
+    ("focus", Rule::Count(0.0, 1.0)),
+    ("from", Rule::Word(&["list", "columns", "grid"])),
+];
 
 pub const PLACES: &[(&str, Rule)] = &[
     ("favourites", Rule::Favourites),
@@ -113,7 +124,19 @@ pub const TEXT_SIZE: &[(&str, Rule)] = &[("mode", Rule::TextSize)];
 
 // textSize alone. Window opacity, icon theme and shadows are the compositor's, and Flea mirrors it
 // rather than carrying a second writable copy of a setting Hyprland already owns.
-pub const DISPLAY: &[(&str, Rule)] = &[("textSize", Rule::Group(TEXT_SIZE)), ("hyprlandIcons", Rule::Bool)];
+//
+// fileTypeColors and theme are the two 0.3.1 additions. Both are Appearance rows of the same
+// section, and neither is a colour: one is a switch, the other the id of a palette ui/js/Themes.js
+// carries, or "omarchy" for following the desktop, which is the default and what a fresh file
+// holds. The catalog itself lives in the UI, so the rule here cannot check an id against it; an id
+// this build's catalog does not carry falls back to following Omarchy at the surface that draws it,
+// the same shape `keys` already uses for a preset name a build cannot honour.
+pub const DISPLAY: &[(&str, Rule)] = &[
+    ("textSize", Rule::Group(TEXT_SIZE)),
+    ("hyprlandIcons", Rule::Bool),
+    ("fileTypeColors", Rule::Bool),
+    ("theme", Rule::ThemeId),
+];
 
 // hidden is the whole of the Menus section's state: the master row SettingsMenus draws over the six
 // basic actions derives from it by masterState in ui/js/Settings.js, and cannot disagree with it.
@@ -158,6 +181,19 @@ pub const SCHEMA: &[(&str, Rule)] = &[
     ("menu", Rule::Group(MENU)),
 ];
 
+// A catalog id, or "omarchy" for following the desktop. The catalog is ui/js/Themes.js's, so this
+// cannot ask whether the id names a palette this build carries, only whether it is the SHAPE of
+// one: lowercase, digits and hyphens, never empty and never longer than a vendored id can be. The
+// surface falls back to following Omarchy for an id its catalog does not hold, the same way `keys`
+// falls back to default for a preset name a build cannot honour.
+pub fn is_theme_id(text: &str) -> bool {
+    !text.is_empty()
+        && text.len() <= 64
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
 pub fn defaults() -> Json {
     jsondoc::parse(DEFAULTS).expect("the shipped ui.json defaults are valid JSON")
 }
@@ -199,6 +235,20 @@ fn names(value: &Json, schema: &[(&str, Rule)]) -> Vec<String> {
 mod tests {
     use super::*;
 
+    // display.theme holds an id ui/js/Themes.js may or may not carry, so this cannot ask whether a
+    // palette exists; it asks only for the shape every generated id has, and refuses everything a
+    // hand-edited file could put there that a catalog lookup would then have to defend against.
+    #[test]
+    fn a_theme_id_is_lowercase_digits_and_hyphens_and_nothing_else() {
+        for good in ["omarchy", "catppuccin-mocha", "tokyo-night-dark", "0x96f", "3024"] {
+            assert!(is_theme_id(good), "{} is an id tools/flea-themes-gen emits", good);
+        }
+        // Empty is not "follow": following is spelled "omarchy", and the default holds that word.
+        for bad in ["", "Catppuccin", "rose pine", "../../etc/passwd", "theme;rm", "a".repeat(65).as_str()] {
+            assert!(!is_theme_id(bad), "{:?} must not be stored as a theme id", bad);
+        }
+    }
+
     #[test]
     fn the_defaults_are_the_shipped_shape_key_for_key() {
         let d = defaults();
@@ -229,6 +279,10 @@ mod tests {
         assert_eq!(d.get("newTab").and_then(Json::as_str), Some("current"));
         assert_eq!(d.get("trashAutoEmpty").and_then(Json::as_bool), Some(false));
         assert_eq!(d.get("trashSweptOn").and_then(Json::as_f64), Some(0.0));
+        // 0.3.1's two Appearance rows. Both ship off: Flea follows the desktop's theme and draws
+        // every mark in the theme's ink until the operator asks for the vendored tiers.
+        assert_eq!(d.get("display").and_then(|s| s.get("fileTypeColors")).and_then(Json::as_bool), Some(false));
+        assert_eq!(d.get("display").and_then(|s| s.get("theme")).and_then(Json::as_str), Some("omarchy"));
         let cols: Vec<&str> = d.get("columns").and_then(Json::as_array).expect("columns").iter().filter_map(Json::as_str).collect();
         assert_eq!(cols, ["name", "size", "date"]);
         assert_eq!(d.get("sort").and_then(|s| s.get("key")).and_then(Json::as_str), Some("name"));
@@ -253,7 +307,10 @@ mod tests {
         assert_eq!(d.get("preview").and_then(|p| p.get("thumbSize")).and_then(Json::as_str), Some("medium"));
         assert_eq!(d.get("display").and_then(|p| p.get("textSize")).and_then(|t| t.get("mode")).and_then(Json::as_str), Some("system"));
         let display: Vec<&str> = d.get("display").and_then(Json::as_object).expect("display").iter().map(|(k, _)| k.as_str()).collect();
-        assert_eq!(display, ["textSize", "hyprlandIcons"], "the compositor owns opacity, icons and shadows");
+        // Window opacity and shadows stay absent: the compositor owns those and Flea mirrors it.
+        // The two 0.3.1 rows are Flea's own, because neither has a compositor counterpart at all.
+        assert_eq!(display, ["textSize", "hyprlandIcons", "fileTypeColors", "theme"],
+                   "the compositor still owns opacity and shadows");
         let menu: Vec<&str> = d.get("menu").and_then(Json::as_object).expect("menu").iter().map(|(k, _)| k.as_str()).collect();
         assert_eq!(menu, ["hidden"], "the master row is derived from menu.hidden, not stored beside it");
     }

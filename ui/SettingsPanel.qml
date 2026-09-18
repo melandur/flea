@@ -46,7 +46,7 @@ Item {
         selectedFavourite: root.selectedFavourite,
         about: aboutFacts.facts,
         saveStatus: ViewState.saveStatus,
-        textSize: ViewState.textSize,
+        textSize: ViewState.textSize, themeId: ViewState.themeId,
         hidden: ViewState.menuHidden,
         keyHints: ViewState.keyHints,
         preset: ViewState.keysPreset,

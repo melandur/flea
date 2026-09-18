@@ -87,6 +87,27 @@ QtObject {
     readonly property string view: Settings.contains(["list", "columns", "grid"], root.state.view)
                                    ? root.state.view : "list"
 
+    // The window shape beside that view: "dual" is the one stored word the line above refuses, so
+    // this is what asks whether the window is split rather than which view a pane is drawing.
+    readonly property bool dualMode: root.state.view === "dual"
+    // Which view leaving the split lands on. The stored word is checked and not trusted: a hand edit
+    // or an older state file can hold anything, and "dual" itself would be a way out that is no way out.
+    readonly property string dualFrom: Settings.contains(["list", "columns", "grid"], (root.state.dual || ({})).from)
+                                       ? root.state.dual.from : "list"
+
+    // Ctrl+T both ways. Entering records the view being left, in the same group that already holds
+    // the pair's paths and focus, so the trip back is not always to the list; leaving reads it. The
+    // record is written first: flipping the view repaints the window, and a "from" landing after that
+    // would be the split's own word by the time anything read it.
+    function toggleDual() {
+        if (root.dualMode) {
+            root.changeKey("view", root.dualFrom)
+            return
+        }
+        root.changeLeaf("dual", { from: root.view })
+        root.changeKey("view", "dual")
+    }
+
     // The Keys section's four-value chooser over the one generated key table, falling back to its
     // first value, Default, which is what SettingsKeys.html says a missing or unknown name means.
     readonly property string keysPreset: Settings.contains(Settings.PRESETS, root.state.keys)
@@ -140,6 +161,13 @@ QtObject {
     readonly property string density: root.state.density || "normal"
     readonly property string addressBar: root.state.addressBar || "breadcrumb"
     readonly property bool hyprlandIcons: root.display.hyprlandIcons === true
+    // Settings > Display > Appearance. Off leaves every row mark on the theme's own ink, which is
+    // what Flea drew before 0.3.1; on gives each row the mark and the colour ui/js/FileTypes.js
+    // resolves from its name. ui/Theme.qml does the WCAG lift, so no surface handles a raw hex.
+    readonly property bool fileTypeColors: root.display.fileTypeColors === true
+    // The stored palette choice, unresolved: ui/Theme.qml asks ui/js/Themes.js whether its catalog
+    // carries the id, because the catalog is the UI's and this file is the state file's reader.
+    readonly property string themeId: root.display.theme || "omarchy"
     property string saveStatus: "Saved · applied in this process"
 
     // Settings > View > Opening. ui/js/Startup.js is what turns these into a path; nothing else reads
@@ -175,6 +203,10 @@ QtObject {
     function changeSetting(id, value) {
         // The rail is remembered as a word, so its own Places row writes that word and not a boolean.
         if (id === "places.rail") { root.changeLeaf("places", { rail: value ? "shown" : "hidden" }); return }
+        // A Theme row's id carries the palette it selects, so the check's boolean is discarded:
+        // choosing a row is choosing that theme, and the catalog has no off. ui/js/SettingsTheme.js
+        // builds those ids and ui/Theme.qml resolves the one stored here against its catalog.
+        if (id.indexOf("theme:") === 0) { root.changeLeaf("display", { theme: id.substring(6) }); return }
         var parts = id.split(".")
         if (parts.length === 1) {
             root.changeKey(id, value)

@@ -95,8 +95,8 @@ Item {
         Flea.Glyph {
             anchors.fill: parent
             visible: !root.thumbDrawn
-            name: root.row ? Icons.glyphForRow(root.row.i, root.row.p) : "file"
-            color: root.cursor ? Theme.color.accent : Theme.color.muted
+            name: root.row ? Icons.glyphForRow(root.row.i, root.row.p, ViewState.fileTypeColors ? root.row : null) : "file"
+            color: Theme.markInk(root.row, root.cursor ? Theme.color.accent : Theme.color.muted)
         }
     }
 

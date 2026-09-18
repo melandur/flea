@@ -77,6 +77,12 @@ package() {
   install -Dm644 packaging/com.thisisgm.flea.desktop -t "$pkgdir/usr/share/applications"
   install -Dm644 packaging/com.thisisgm.flea.svg -t "$pkgdir/usr/share/icons/hicolor/scalable/apps"
   install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+  # The package redistributes three third-party works, so their licences ship beside Flea's own:
+  # the filetype colour table in ui/js/FileTypeColors.js (nvim-web-devicons, MIT, via yazi), the
+  # palette catalog in ui/js/Themes.js (Strata, MIT) and the mark geometry in ui/js/Icons.js
+  # (lucide, ISC). See vendor/README.md.
+  install -Dm644 vendor/LICENSE-yazi-icons vendor/LICENSE-strata vendor/LICENSE-lucide \
+    -t "$pkgdir/usr/share/licenses/$pkgname"
 
   # paths.rs looks for /usr/share/flea/ui/shell.qml, so the UI ships as data beside the binary.
   install -Dm644 ui/qmldir ui/*.qml -t "$pkgdir/usr/share/flea/ui"

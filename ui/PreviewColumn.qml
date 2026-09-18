@@ -458,6 +458,6 @@ Item {
             return "symlink"
         if (root.previewState === Facts.MULTI)
             return "file"
-        return root.row ? Icons.glyphForRow(root.row.i, root.row.p) : "file"
+        return root.row ? Icons.glyphForRow(root.row.i, root.row.p, ViewState.fileTypeColors ? root.row : null) : "file"
     }
 }

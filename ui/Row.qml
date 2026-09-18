@@ -137,9 +137,9 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         width: root.markSlot
         height: root.markSlot
-        name: root.row ? Icons.glyphForRow(root.row.i, root.row.p) : Icons.FALLBACK
-        color: root.dualMode ? (root.cursor && root.paneFocused ? Theme.color.accent : Theme.color.muted)
-            : root.lifted ? Theme.color.foreground : root.dim
+        name: root.row ? Icons.glyphForRow(root.row.i, root.row.p, ViewState.fileTypeColors ? root.row : null) : Icons.FALLBACK
+        color: Theme.markInk(root.row, root.dualMode ? (root.cursor && root.paneFocused ? Theme.color.accent : Theme.color.muted)
+            : root.lifted ? Theme.color.foreground : root.dim)
     }
 
     // What the row actually draws, so a test catches the binding being cut and not only the lookup.

@@ -1,5 +1,6 @@
 .pragma library
 
+.import "FileTypes.js" as FileTypes
 .import "Format.js" as Format
 
 // The backend sends a freedesktop icon name per row; this is the only place Flea maps one to a mark.
@@ -38,9 +39,20 @@ function glyphFor(iconName) {
 // A row's mark. The backend resolves a symlink's icon to its target's, so a link to a directory
 // arrives as "folder"; every board draws such a row with the link mark instead, so the mode decides
 // here and the icon name only answers for what the row really is.
-function glyphForRow(iconName, mode) {
+//
+// The third argument is the filetype tier, Settings > Display > Appearance. A board passes the row
+// itself to ask ui/js/FileTypes.js what the NAME says, which is finer than any freedesktop icon
+// name can be: generic-icons answers text-x-generic for .json, .toml, .yaml and .md alike. It
+// passes null when the setting is off, so the gate lives at the one place that can read it and the
+// two answers cannot drift. A symlink still wins over both, for the reason above.
+function glyphForRow(iconName, mode, row) {
     if (Format.isSymlink(mode))
         return "symlink"
+    if (row) {
+        var mark = FileTypes.markFor(row.n, row.d)
+        if (mark)
+            return mark
+    }
     return glyphFor(iconName)
 }
 
@@ -176,7 +188,46 @@ var PATHS = {
     "copy": "M9 8h12v13H9z M4 16V3h13",
     "clipboard": "M9 2h6v4H9z M6 4H3v18h18V4h-3 M8 12h8 M8 16h5",
     // The Keys section's rail mark: the key caps are the same zero-length-line dots the list mark uses.
-    "keyboard": "M2 6h20v12H2z M6 10L6.01 10 M10 10L10.01 10 M14 10L14.01 10 M18 10L18.01 10 M8 14h8"
+    "keyboard": "M2 6h20v12H2z M6 10L6.01 10 M10 10L10.01 10 M14 10L14.01 10 M18 10L18.01 10 M8 14h8",
+
+    // The filetype tier, ui/js/FileTypes.js's own fifteen: lucide-static 1.38.0 again, ISC, the
+    // same source and the same Omarchy cut as the twelve row marks above, so a `.json` row and a
+    // `.txt` row are drawn in one language. Each was gated on the cut's own rule rather than on a
+    // pixel compare, which a deliberate recut cannot pass: lucide's own glyph and the recut string
+    // were rendered at 240x240 and their trimmed extents compared, and all fifteen hold their
+    // source box inside the growth a square cap and a mitered join cost, 5 px of 240 at the worst.
+    // See AGENTS.md "The filetype tier".
+    // The braces' four a2 2 corner arcs square off; the shape is nothing but corners.
+    "braces": "M8 3H5v7l-2 2 2 2v7h3 M16 21h3v-7l2-2-2-2V3h-3",
+    // Lucide's own code-xml: this set's "code" plus the slash that says markup rather than script.
+    "code-xml": "M18 16l4-4-4-4 M6 8l-4 4 4 4 M14.5 4l-5 16",
+    // The two rx=2 bit rects square the way drive's arcs did; the strokes are lucide's own.
+    "binary": "M6 4h4v6H6z M14 14h4v6h-4z M6 20h4 M14 10h4 M6 14h2v6 M14 4h2v6",
+    // The 9x3 ellipse and the A9 3 skirts are genuine curves under cut rule 4, so a database stays
+    // round; the ellipse is the standard two-arc conversion, the same one "search" and "eye" took.
+    "database": "M3 5A9 3 0 1 0 21 5A9 3 0 1 0 3 5Z M3 5v14A9 3 0 0 0 21 19V5 M3 12A9 3 0 0 0 21 12",
+    // Two real circles, so both stay circles.
+    "disc": "M2 12A10 10 0 1 0 22 12A10 10 0 1 0 2 12Z M10 12A2 2 0 1 0 14 12A2 2 0 1 0 10 12Z",
+    // The bow is a real circle and stays; the bit's two a1 1 corners square off.
+    "key": "M2 21l9.6-9.6 M7.5 15.5l2.3 2.3v1.4l-2.1 2.1H6.3L4 19 M10 7.5A5.5 5.5 0 1 0 21 7.5A5.5 5.5 0 1 0 10 7.5Z",
+    // Lucide's open book is one path of a2 2 corners over a spine; squared it is two leaves.
+    "book-open": "M12 5v16 M2 19h6l4 2 4-2h6V3h-6l-4 2-4-2H2z",
+    // The palette's body is a genuine curve the whole way round, so cut rule 4 leaves it alone; the
+    // four r=.5 filled dots become the zero-length-line dots this set already draws on "server".
+    "palette": "M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z M13.5 6.5L13.51 6.5 M17.5 10.5L17.51 10.5 M6.5 12.5L6.51 12.5 M8.5 7.5L8.51 7.5",
+    // Lucide's box, whose six a2 2 corners are the whole difference between it and a drawn cube.
+    "box": "M21 7L12 2 3 7v10l9 5 9-5z M3 7l9 5 9-5 M12 22V12",
+    // The pipe is a real a9 9 curve and stays, exactly as folder-git-2's pipe already does.
+    "git-branch": "M15 6a9 9 0 0 0-9 9V3 M15 6A3 3 0 1 0 21 6A3 3 0 1 0 15 6Z M3 18A3 3 0 1 0 9 18A3 3 0 1 0 3 18Z",
+    // Four lines, no corner to square: lucide's own geometry, its <line> elements written as paths.
+    "hash": "M4 9h16 M4 15h16 M10 3L8 21 M16 3l-2 18",
+    "captions": "M3 5h18v14H3z M7 15h4 M15 15h2 M7 11h2 M13 11h4",
+    // The flap's a2 2 easing squares to the straight fold an envelope actually has.
+    "mail": "M2 4h20v16H2z M22 7l-10 6.3L2 7",
+    "calendar": "M3 3h18v18H3z M3 9h18 M8 2v3 M16 2v3",
+    // The rings are the list mark's own dot technique turned into short rules, which is what
+    // lucide draws them as; the rx=2 body squares like every other body in the set.
+    "notebook": "M4 2h16v20H4z M16 2v20 M2 6h4 M2 10h4 M2 14h4 M2 18h4"
 }
 
 function pathFor(name) {
