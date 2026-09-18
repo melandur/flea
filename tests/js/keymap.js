@@ -32,7 +32,14 @@ function run(check) {
     key("F", "", ctrl, "search")
     key("B", "", ctrl, "copypath")
     key("G", "", ctrl, "sidebar")
-    key("N", "", ctrl | shift, "newFolder")
+    key("T", "", ctrl, "toggleDual")
+    // The 2026-09-18 trio. New Folder moved off Ctrl+Shift+N, so the shifted chord must now
+    // resolve to nothing: a stale binding that still answered would shadow the ctrlshift fallthrough.
+    key("N", "", ctrl, "newFolder")
+    key("N", "", ctrl | shift, "")
+    key("M", "", ctrl, "newFile")
+    key("H", "", ctrl, "toggleHidden")
+    // Ctrl+M and the bare m are different rows, and the unmodified one still opens the menu.
     key("M", "m", none, "menu")
     key("Menu", "", none, "menu")
     key("F10", "", shift, "menu")
@@ -55,9 +62,11 @@ function run(check) {
     key("S", "S", shift, "")
     key("Colon", ":", shift, "")
     key("Plus", "+", shift, "")
-    // Ctrl+T is not here: it lost the terminal and now carries the split, checked in the table above.
+    // Ctrl+T is not here: it lost the terminal and now carries the split, checked in the table
+    // above. Nor are Ctrl+N, Ctrl+M and Ctrl+H, which the 2026-09-18 trio took for New Folder,
+    // New File and the hidden toggle; all three are in that table too.
     var goneChords = [["1", ctrl], ["2", ctrl], ["3", ctrl], ["A", ctrl], ["D", ctrl], ["U", ctrl],
-                      ["E", ctrl], ["L", ctrl], ["N", ctrl], ["W", ctrl],
+                      ["E", ctrl], ["L", ctrl], ["W", ctrl],
                       ["Tab", ctrl], ["Space", ctrl], ["PageUp", ctrl], ["PageDown", ctrl],
                       ["P", alt], ["Down", shift], ["Up", shift], ["Delete", shift],
                       ["Backspace", none], ["Home", none], ["End", none],
@@ -173,5 +182,6 @@ function run(check) {
     check("every effective binding resolves to the action it advertises", effective.every(function (row) {
         return Keymap.lookupFor("default", row.keycode, row.text, row.mask, "listing", "gui") === row.action
     }), true)
-    check("and the table is the size the strip left it, plus the split's own chord", effective.length, 24)
+    check("and the table is the size the strip left it, plus the split's chord and the creation trio",
+          effective.length, 26)
 }

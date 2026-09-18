@@ -3905,6 +3905,16 @@ was on this list for one afternoon and is not on it now: `295e757` routed the ac
 `Focus.act` to `Ops.newFolder`, which sends the backend's `mkdir` (docs/protocol.md), and
 `ui/ContextMenu.qml` carries the same action as its New Folder row.
 
+**New Folder moved to the bare `Ctrl+N` on 2026-09-18, and `Ctrl+M` and `Ctrl+H` joined it**, the
+operator's ruling: Nautilus, Thunar and Nemo all answer `Ctrl+N` too, and `Ctrl+H` is the hidden
+toggle in every one of them. `Ctrl+Shift+N` is gone rather than kept beside it, so the shipped
+table has one spelling per action and `tests/js/keymap.js` asserts the shifted chord resolves to
+nothing. **Neither `newFile` nor `toggleHidden` needed a line of dispatch**: `Focus.handleKey` ends
+at `root.act(action)`, which is `ui/Pane.qml act`, and that already routes `newFile` into
+`menuActions.open` (the same name dialog the menu row opens) and already had a `toggleHidden` case
+in `Focus.act`. What the change did need was the sheet groups: `tools/flea-keymap-gen` fails the
+build for a bound listing action no group in `keys.toml` claims, which is what caught both.
+
 ### Finder's chords, Cmd read as Ctrl, beside the vim keys
 
 Hyprland grabs every `SUPER` chord, so no app ever sees one; Omarchy's own universal clipboard

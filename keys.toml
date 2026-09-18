@@ -46,13 +46,30 @@ action = "sidebar"
 key = "T"
 action = "toggleDual"
 
-# Checked before the plain ctrl rows and falling through when unmatched, so Ctrl+Shift+D still
-# pages. Ctrl+Shift+N is Nautilus's own New Folder and Finder's with Cmd read as Ctrl, and the
-# window reaches the backend's mkdir through Ops.newFolder. Shift+period is delivered as Greater
-# on a US layout and as Period elsewhere, so both rows name the one action.
-[[ctrlshift]]
+# The three creation and visibility chords, operator's ruling of 2026-09-18. New Folder moved off
+# Ctrl+Shift+N, which was Nautilus's own and Finder's with Cmd read as Ctrl, onto the bare Ctrl+N
+# that every one of them also answers; the window still reaches the backend's mkdir through
+# Ops.newFolder. New File is Ctrl+M rather than a second shifted N: it opens the same name dialog
+# the menu row opens, through ui/Pane.qml act, which is why neither needs a case in Focus.act.
+[[ctrl]]
 key = "N"
 action = "newFolder"
+
+[[ctrl]]
+key = "M"
+action = "newFile"
+
+# Ctrl+H is the hidden-files toggle in Nautilus, Thunar and Nemo alike, so it is the one chord a
+# user arriving from any of them already has in their fingers. ui/js/Menu.js keeps drawing the row
+# as well: "Show hidden files" is one of the two actions the settings panel refuses to switch off,
+# because it is the one background row with no keyboard-independent alternative.
+[[ctrl]]
+key = "H"
+action = "toggleHidden"
+
+# Checked before the plain ctrl rows and falling through when unmatched, so Ctrl+Shift+D still
+# pages. Shift+period is delivered as Greater on a US layout and as Period elsewhere, so both rows
+# name the one action.
 
 # Bindings on the key code, for the keys that carry no printable character. The four arrows lead the
 # table: they are the navigation the Default preset has and the only navigation it has, so they are
@@ -138,10 +155,10 @@ action = "keymapSheet"
 # narrows or orders what is already listed. Change writes something, or opens the surface that does.
 [sheetgroups]
 move = ["cursorDown", "cursorUp", "open", "parent", "pageForward", "focusNext", "escape"]
-look = ["preview", "sidebar", "toggleDual", "mute", "keymapSheet"]
+look = ["preview", "sidebar", "toggleDual", "toggleHidden", "mute", "keymapSheet"]
 find = ["search"]
-change = ["copy", "cut", "paste", "copypath", "rename", "trash", "undo", "newFolder", "menu",
-          "settings"]
+change = ["copy", "cut", "paste", "copypath", "rename", "trash", "undo", "newFolder", "newFile",
+          "menu", "settings"]
 
 # The digit range, expanded by the generator into tab1 through tab9.
 [digits]
