@@ -34,8 +34,6 @@ Item {
     // The picker's second difference: SendPicker.html's narrow date column and its compact form.
     property bool compactDate: false
     property bool foregroundMetadata: false
-    // The window's own third: only FleaWindow.html and Search.html end a directory name with a slash.
-    property bool dirSuffix: false
     readonly property real dateWidth: root.dualMode ? Theme.dualColumn.date : root.compactDate ? Theme.column.pickerDate : Theme.column.date
     // The picker's third: it hides the columns its own board does not draw, and the window's own set stays ViewState's.
     property var hiddenCols: ViewState.hiddenCols
@@ -46,11 +44,14 @@ Item {
     // A search row's name is its path relative to the search root, so the name and location split here; see docs/protocol.md "search".
     readonly property bool searching: !root.filtering && root.searchQuery.length > 0 && root.row !== null && root.row.n.length > 0
     readonly property string displayName: root.row ? (root.searching ? Match.base(root.row.n) : root.row.n) : ""
-    // The name, then this surface's directory slash, then a link's target; never both, a link's d is false.
-    readonly property string dirMark: root.dirSuffix && root.row && root.row.d ? "/" : ""
     // FleaWindow.html and ThemeRoles.html both spell it "shell -> /usr/share/omarchy".
     readonly property string linkMark: root.row && root.row.l ? " -> " + root.row.l : ""
-    readonly property string decoratedName: root.displayName + root.dirMark + root.linkMark
+    // The name as the filesystem holds it, then a link's target. No trailing slash on a directory:
+    // the operator's ruling of 2026-09-18, reversing the boards' own decoration. The row already
+    // says it is a directory with its mark, its ink and the way Enter opens it, so the slash was a
+    // fourth telling of that, and it is one the name itself does not carry: a row read as text, or
+    // copied out of a screenshot, named a path that is not the file's.
+    readonly property string decoratedName: root.displayName + root.linkMark
     readonly property string locationText: root.searching ? Match.location(root.row.n) : ""
     readonly property var nameRun: Match.run(root.displayName, root.searchQuery)
     // A long name would otherwise hide the location entirely, and the location is what tells two matches apart.

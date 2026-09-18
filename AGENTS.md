@@ -1197,6 +1197,14 @@ close so a newly installed application is in the list next time. A File types ru
 `ui/SettingsFavourite.qml`, the same component a favourite and a shelf pin use, with the drag grip
 hidden: a favourite's order is the operator's and a rule's is its ending's length.
 
+**A directory's name is drawn as the filesystem holds it, with no trailing slash.** The operator's
+ruling of 2026-09-18, reversing FleaWindow.html's own decoration, which `ui/List.qml` turned on for
+every listing row through `ui/Row.qml`'s `dirSuffix`. Both are gone rather than made a setting: the
+row already says it is a directory with its mark, its ink and the way Enter opens it, so the slash
+was a fourth telling of the same thing, and it was the one telling that changed the text — a name
+read off the row, or copied out of a screenshot, named a path the file does not have. A link's
+`-> target` stays, because that is a fact about the row the name cannot otherwise carry.
+
 **The Items column is the directory's OWN children, and it rides the size walk's answer.** The
 operator asked for it on 2026-09-18, a column that can be switched on like the other four. What it
 counts is one `read_dir` of the directory itself, in `src/backend/dirsize.rs` `children`, not the
