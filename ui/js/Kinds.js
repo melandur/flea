@@ -50,6 +50,41 @@ function isMarkdown(name) {
     return false
 }
 
+// CSV and its cousins carry the spreadsheet icon, which is otherwise binary, so the suffix is what
+// routes them to the text frame, and ui/PreviewText.qml and ui/PreviewLines.qml draw them as a table.
+// isTabular adds the sheets that are drawn the same way.
+var DELIMITED_EXTENSIONS = [".csv", ".tsv", ".tab", ".psv"]
+
+function isDelimited(name) {
+    var lower = String(name).toLowerCase()
+    for (var i = 0; i < DELIMITED_EXTENSIONS.length; i++) {
+        var e = DELIMITED_EXTENSIONS[i]
+        if (lower.length > e.length && lower.indexOf(e, lower.length - e.length) !== -1) {
+            return true
+        }
+    }
+    return false
+}
+
+// A spreadsheet package src/sheet.rs can read: its first sheet is drawn by the same table a CSV gets,
+// through flea --sheet, and every other office type keeps its Unsupported tile.
+var SHEET_EXTENSIONS = [".xlsx", ".xlsm", ".xltx", ".xltm", ".ods", ".ots", ".fods"]
+
+function isSheet(name) {
+    var lower = String(name).toLowerCase()
+    for (var i = 0; i < SHEET_EXTENSIONS.length; i++) {
+        var e = SHEET_EXTENSIONS[i]
+        if (lower.length > e.length && lower.indexOf(e, lower.length - e.length) !== -1) {
+            return true
+        }
+    }
+    return false
+}
+
+function isTabular(name) {
+    return isDelimited(name) || isSheet(name)
+}
+
 function isPdf(name) {
     var lower = String(name).toLowerCase()
     return lower.length > 4 && lower.indexOf(".pdf", lower.length - 4) !== -1
@@ -86,7 +121,7 @@ function isPreviewable(row) {
 // text there, because the overlay draws no gutter, and a markdown file renders verbatim like any text.
 function quickLookKind(icon, name) {
     if (isPdf(name)) return PDF
-    if (isMarkdown(name)) return TEXT
+    if (isMarkdown(name) || isTabular(name)) return TEXT
     var byIcon = kindState(icon)
     return byIcon === CODE ? TEXT : byIcon
 }

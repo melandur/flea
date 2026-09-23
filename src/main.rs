@@ -29,6 +29,10 @@ mod shelfplugin;
 mod shelfthumb;
 mod shelfundo;
 mod shelfzip;
+mod sheet;
+mod sheetods;
+mod sheetxlsx;
+mod sheetxml;
 mod summon;
 mod uistore;
 mod userfile;
@@ -243,6 +247,11 @@ fn main() {
 
     if args.get(1).map(String::as_str) == Some("--favourites") {
         exit(favourites::command(&args));
+    }
+
+    // flea --sheet <path> <rows>: the preview's table asks this for a spreadsheet's first sheet as CSV.
+    if args.get(1).map(String::as_str) == Some("--sheet") {
+        exit(sheet::command(&args));
     }
 
     // flea shelf <verb>: the drop shelf's own state, minted for a plugin that is another process.

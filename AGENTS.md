@@ -1017,7 +1017,8 @@ this coverage needed no new entry there.
   `--youleftmeforstrata` is the undocumented second spelling of `--default off`, `--picker [off]`
   claims or releases the desktop's file chooser alone, `--pick <reply>` opens one chooser window
   for `tools/flea-portal`, `--ui-state [<patch>]` reads or merges the shared view state,
-  `--version` prints the version, `--print-target` resolves `--select`'s pair for the tests, and
+  `--version` prints the version, `--sheet <path> <rows>` prints a spreadsheet's first sheet as
+  CSV for the preview's table, `--print-target` resolves `--select`'s pair for the tests, and
   anything else opens the window, on `--select`'s parent directory when one is given, unless
   explicit `--tui` requests the terminal interface, `--gui` being the explicit spelling of the
   window a bare invocation already means, see "Modes".
@@ -1027,6 +1028,12 @@ this coverage needed no new entry there.
 - `open.rs` hands one file to `gio open` and waits for it, and on a refusal over a file with no
   bytes launches the entry its name's own type names, see "Opening a file" and "When the sniffer abstains".
 - `terminal.rs` hands one directory to `xdg-terminal-exec --dir=` and does not wait, see "Opening a file".
+- `sheet.rs` is `--sheet`: it pulls an `.xlsx` or `.ods` package's parts out through `bsdtar -xOf`,
+  killing it once enough rows have closed or 256 MiB has been inflated, reads a `.fods` directly, and
+  writes CSV. `sheetxlsx.rs` resolves the first tab, shared strings and date styles, `sheetods.rs`
+  reads display text and collapses ODF's repeat padding, and `sheetxml.rs` is the small tokenizer
+  both share. `ui/PreviewTable.qml` runs it and draws the answer with the same reader
+  (`ui/js/Delimited.js`) a `.csv`, `.tsv`, `.tab` or `.psv` gets; `.xls` and `.numbers` stay Unsupported.
 - `defaults.rs` claims or releases the OS-level default: the desktop-entry install check,
   the `inode/directory` MIME default via `xdg-mime`, and reporting each half, see "Modes".
 - `hyprkeys.rs` adds or removes the additive, markered block in Omarchy's

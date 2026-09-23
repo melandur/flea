@@ -1,5 +1,7 @@
 import QtQuick
 import Quickshell.Io
+import "." as Flea
+import "js/Kinds.js" as Kinds
 import "js/TextChunks.js" as TextChunks
 
 // Text previews: FileView reads the whole file, so a row over the gate is refused, not truncated.
@@ -29,23 +31,31 @@ Item {
 
     // The whole body, emptied as the preview closes so the window it leaves holds no file, and the
     // runs of it the list below draws, only the ones on screen ever laid out.
-    readonly property string text: root.active ? file.text() : ""
-    readonly property var runs: TextChunks.split(root.text)
+    // A CSV and its cousins draw as a table instead of as runs, which the rest of this file never
+    // needs to know: the scrolled surface is whichever of the two is on screen. A spreadsheet is a
+    // table too, and is never read here at all: the table asks flea --sheet for its first sheet.
+    readonly property bool tabular: Kinds.isTabular(root.path)
+    readonly property bool sheet: Kinds.isSheet(root.path)
+    readonly property string text: root.active && !root.sheet ? file.text() : ""
+    readonly property var runs: root.tabular ? [] : TextChunks.split(root.text)
+    readonly property Flickable flick: root.tabular ? table.view : textFlick
     // For ui/Ipc.qml: the drawn body's box and its text.
-    readonly property Item bodyItem: textFlick
-    function shownText() { return root.text }
+    readonly property Item bodyItem: root.flick
+    function shownText() { return root.sheet ? String(table.source) : root.text }
     // The expanded overlay's Up and Down, one row of the listing's own height a press, which is the
     // step ui/PdfViewer.qml scrolls a page by; a body shorter than the frame cannot move at all. A
     // list of runs estimates the heights it has not laid out, so its top is originY and not 0.
     function scrollBy(steps) {
-        var bottom = textFlick.originY + Math.max(0, textFlick.contentHeight - textFlick.height)
-        textFlick.contentY = Math.max(textFlick.originY, Math.min(bottom, textFlick.contentY + steps * Theme.rowHeight))
+        var f = root.flick
+        var bottom = f.originY + Math.max(0, f.contentHeight - f.height)
+        f.contentY = Math.max(f.originY, Math.min(bottom, f.contentY + steps * Theme.rowHeight))
     }
     // For ui/Ipc.qml and the expanded surface both: where the body has been scrolled to.
-    readonly property real scrollY: textFlick.contentY - textFlick.originY
+    readonly property real scrollY: root.flick.contentY - root.flick.originY
     readonly property string status: {
         if (root.tooLarge) return "This file is too large to preview."
-        if (root.readFailed) return "This file could not be read."
+        if (root.readFailed || table.failed) return "This file could not be read."
+        if (root.sheet) return table.loading ? "loading" : "ready"
         return file.loaded ? "ready" : "loading"
     }
 
@@ -53,7 +63,7 @@ Item {
 
     FileView {
         id: file
-        path: (root.active && !root.tooLarge) ? root.path : ""
+        path: (root.active && !root.tooLarge && !root.sheet) ? root.path : ""
         printErrors: false
         onLoadFailed: root.readFailed = true
         onPathChanged: root.readFailed = false
@@ -63,7 +73,7 @@ Item {
         id: textFlick
         anchors.fill: parent
         clip: true
-        visible: !root.tooLarge && !root.readFailed
+        visible: !root.tabular && !root.tooLarge && !root.readFailed
         boundsBehavior: Flickable.StopAtBounds
         model: root.runs
         reuseItems: true
@@ -87,9 +97,18 @@ Item {
         }
     }
 
+    Flea.PreviewTable {
+        id: table
+        anchors.fill: parent
+        visible: root.tabular && !root.tooLarge && !root.readFailed && !table.failed
+        body: root.tabular ? root.text : ""
+        sheet: root.active && root.sheet && !root.tooLarge ? root.path : ""
+        name: root.path
+    }
+
     Column {
         anchors.centerIn: parent
-        visible: root.tooLarge || root.readFailed
+        visible: root.tooLarge || root.readFailed || table.failed
         spacing: Theme.spacing.gap
 
         Text {

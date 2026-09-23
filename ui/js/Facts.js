@@ -54,8 +54,9 @@ function state(row, selectionCount, loading, errorText, kindName) {
         return PDF
     }
     // A markdown file shares the office icon with a PDF and a .doc, and the canvas's Text tile is a
-    // .md, so the suffix is the only thing that can route it to the text frame.
-    if (Kinds.isMarkdown(row.n)) {
+    // .md, so the suffix is the only thing that can route it to the text frame; a .csv and an .xlsx
+    // share the spreadsheet icon the same way, and both are drawn as a table there.
+    if (Kinds.isMarkdown(row.n) || Kinds.isTabular(row.n)) {
         return TEXT
     }
     var byIcon = Kinds.kindState(row.i)

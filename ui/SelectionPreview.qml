@@ -1,6 +1,7 @@
 import QtQuick
 import "." as Flea
 import "js/Facts.js" as Facts
+import "js/Kinds.js" as Kinds
 import "js/Thumbs.js" as Thumbs
 import "js/Keymap.js" as Keymap
 import "js/PreviewKeys.js" as PreviewKeys
@@ -96,7 +97,8 @@ Flea.PreviewColumn {
         root.selectedRows = pane.selectedIndices().map(function (index) { return pane.rowFor(index) }).filter(function (row) { return row !== null })
         if (current.d || root.selectionCount > 1) return
         var kind = Facts.state(current, 1, false, "", root.kindName)
-        root.pendingToken = pane.backend.askMeta(root.loadedIndex, kind === Facts.TEXT || kind === Facts.CODE,
+        // A sheet is a zip, so its newlines are not lines, and it is asked for no count.
+        root.pendingToken = pane.backend.askMeta(root.loadedIndex, (kind === Facts.TEXT || kind === Facts.CODE) && !Kinds.isSheet(current.n),
             kind === Facts.VIDEO || kind === Facts.AUDIO, kind === Facts.ARCHIVE)
         if (current.t && pane.thumbState.file[root.loadedIndex] === undefined) {
             var work = { ask: [root.loadedIndex], drop: [] }

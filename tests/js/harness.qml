@@ -3,6 +3,7 @@ import "archive.js" as ArchiveSuite
 import "columns.js" as ColumnsSuite
 import "contrast.js" as ContrastSuite
 import "crumbs.js" as CrumbsSuite
+import "delimited.js" as DelimitedSuite
 import "dirsizes.js" as DirSizesSuite
 import "drag.js" as DragSuite
 import "dst.js" as DstSuite
@@ -98,7 +99,7 @@ Item {
             ["palette", PaletteSuite], ["pathbar", PathBarSuite], ["places", PlacesSuite], ["placemenu", PlaceMenuSuite], ["rail", RailSuite], ["scripts", ScriptsSuite],
             ["phones", PhonesSuite],
             ["picker", PickerSuite],
-            ["previewkeys", PreviewKeysSuite], ["textchunks", TextChunksSuite],
+            ["previewkeys", PreviewKeysSuite], ["textchunks", TextChunksSuite], ["delimited", DelimitedSuite],
             ["protocols", ProtocolsSuite], ["railkeys", RailKeysSuite],
             ["recent", RecentSuite],
             ["renderer", RendererSuite],

@@ -29,7 +29,8 @@ Flea combines a Rust backend with a Quickshell interface that follows your Omarc
 Large directories stay responsive: the window loads rows and requests thumbnails as you need them.
 
 - **Three views.** List, columns and grid, with tabs and natural filename sorting.
-- **Quick Look.** Press Space for images, PDFs, text, media and archive contents.
+- **Quick Look.** Press Space for images, PDFs, text, media and archive contents, and CSV, TSV,
+  Excel and OpenDocument spreadsheets as a table.
 - **File operations.** Copy, move, rename, trash, compress and extract, with an undo journal.
 - **Network and sharing.** SMB, SFTP, FTPS, WebDAV, NFS, Dropbox and Taildrop.
 - **Devices.** USB drives, phones and cameras over MTP, PTP and AFC, mounted from the rail.

@@ -49,6 +49,17 @@ function run(check) {
     check("every markdown suffix, not just .md",
           Facts.state(named("a.markdown", "x-office-document"), 1, false, "") + "|"
           + Facts.state(named("b.mkd", "x-office-document"), 1, false, ""), "text|text")
+    check("a csv and its cousins reach the text frame although they carry the spreadsheet icon",
+          ["a.csv", "b.TSV", "c.tab", "d.psv"].map(function (n) {
+              return Facts.state(named(n, "x-office-spreadsheet"), 1, false, "") + "/" + Kinds.quickLookKind("x-office-spreadsheet", n)
+          }).join("|"), "text/text|text/text|text/text|text/text")
+    check("an xlsx and an ods reach it too, drawn from flea --sheet",
+          ["book.xlsx", "b.XLSM", "c.ods", "d.fods"].map(function (n) {
+              return Facts.state(named(n, "x-office-spreadsheet"), 1, false, "") + "/" + Kinds.quickLookKind("x-office-spreadsheet", n)
+          }).join("|"), "text/text|text/text|text/text|text/text")
+    check("while a legacy .xls and a Numbers file are still declined",
+          Facts.state(named("old.xls", "x-office-spreadsheet"), 1, false, "") + "|" + Kinds.quickLookKind("x-office-spreadsheet", "plan.numbers"),
+          "unsupported|unsupported")
     check("and a name merely containing md is not markdown",
           Facts.state(named("amd.doc", "x-office-document"), 1, false, ""), "unsupported")
 
