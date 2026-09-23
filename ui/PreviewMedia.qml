@@ -9,7 +9,7 @@ Item {
 
     property string path: ""
     property string kind: "audio"
-    property int size: 0
+    property real size: 0
     // What the backend called this row, which the column draws and the overlay is opened from.
     property string kindName: ""
     // The backend probe's sample rate in hertz, 0 until its answer lands or for a file with none.

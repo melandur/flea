@@ -10,7 +10,7 @@ Item {
 
     property string path: ""
     property bool active: false
-    property int size: 0
+    property real size: 0
     // Code gets the muted number gutter; plain text does not.
     property bool numbered: false
 

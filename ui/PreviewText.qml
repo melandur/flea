@@ -8,14 +8,17 @@ Item {
 
     property bool active: false
     property string path: ""
-    property int size: 0
+    property real size: 0
 
-    // FileView reads the whole file into memory, so this is the largest read a preview will start.
-    readonly property int maxBytes: 1048576
-    // Right on the refusal lifts the gate up to this ceiling: laying out plain text blocks the UI
-    // thread, measured at 1.6 s for 4 MiB, 3 s for 16 MiB and 12 s for 64 MiB, so past it no key
-    // loads the file at all.
-    readonly property int forceMaxBytes: 16777216
+    // FileView reads the whole file into memory, so this is the largest read a preview will start:
+    // 500 MiB, the operator's ruling of 2026-09-23. Only the runs on screen are laid out, so the cost
+    // left is the read and the cut, measured at 37 ms for 16 MB, 219 ms and 0.8 GB resident for
+    // 100 MB, and 1 s, a 0.5 s frame and 3 GB resident for 500 MB. It was 1 MiB while one Text laid
+    // out the whole body, which cost 1.6 s for 4 MiB.
+    readonly property int maxBytes: 524288000
+    // Right on a refusal lifts the gate up to this ceiling. At the gate itself it refuses nothing
+    // Right could load, so the prompt stays dormant until the two are set apart again.
+    readonly property int forceMaxBytes: 524288000
     property bool forced: false
     readonly property bool forcible: root.size <= root.forceMaxBytes
     readonly property bool tooLarge: root.size > (root.forced ? root.forceMaxBytes : root.maxBytes)

@@ -4006,7 +4006,8 @@ case_preview() {
     chmod +x "$dir/bin/$open_handoff"
     printf 'hello from flea\n' > "$dir/sample.txt"
     printf '# Notes\n\nSome *text*.\n' > "$dir/notes.md"
-    truncate -s 2M "$dir/big.txt"
+    # Over the text preview's 500 MiB gate, and sparse, so the fixture costs no disk.
+    truncate -s 600M "$dir/big.txt"
     # A 440 Hz tone and not silence, so playback is provable by ear and not just by state. Fifteen
     # seconds, not one: an omarchy-drive ipc round trip costs 190 to 565 ms measured on this box
     # (see the KB's ipc-timing-loops entry), so a one-second clip leaves the poll below one or two

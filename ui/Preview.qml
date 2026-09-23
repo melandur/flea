@@ -19,7 +19,7 @@ Item {
     property string path: ""
     property string iconName: ""
     property string kindName: ""
-    property int size: 0
+    property real size: 0
     property string kind: ""
     readonly property bool isMedia: root.kind === "audio" || root.kind === "video"
     readonly property bool isPdf: root.kind === "pdf"
@@ -69,7 +69,7 @@ Item {
     property string pendingPath: ""
     property string pendingIcon: ""
     property string pendingKind: ""
-    property int pendingSize: 0
+    property real pendingSize: 0
     // follow()'s cooldown: the first step loads at once, and a held j/k costs zero reloads until the cursor rests.
     readonly property int followSettleMs: 120
     readonly property real groundOpacity: 0.5 // the same dim ui/SettingsPanel.qml lays over the listing
