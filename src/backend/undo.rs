@@ -180,7 +180,7 @@ fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)>, FleaErro
             rename_path(to, from)?;
             return Ok(if current == *after { Some((current, ItemIdentity::inspect(from)?)) } else { None });
         }
-        Step::Created { path } => remove(path)?,
+        Step::Created { path } => discard(path)?,
         Step::Copied { to, created, .. } => {
             if ItemIdentity::inspect(to)? != *created {
                 return Err(FleaError { where_: "undo".into(), path: to.to_string_lossy().into(),
@@ -190,7 +190,7 @@ fn reverse(step: &Step) -> Result<Option<(ItemIdentity, ItemIdentity)>, FleaErro
                 return Err(FleaError { where_: "undo".into(), path: newer.to_string_lossy().into(),
                     msg: "something inside the copied folder changed since this operation, so undo left it in place".into() });
             }
-            remove(to)?
+            discard(to)?
         }
         Step::MadeDir { path, identity } => {
             if !identity.same_item(&ItemIdentity::inspect(path)?) {
@@ -240,17 +240,41 @@ fn newer_inside(root: &std::path::Path, copied: (i64, i64)) -> Result<Option<Pat
     Ok(None)
 }
 
-// Only ever a path this operation itself created, so a directory it made is removed with its contents.
-fn remove(path: &PathBuf) -> Result<(), FleaError> {
-    let meta = path
-        .symlink_metadata()
-        .map_err(|e| from_io("undo", &path.to_string_lossy(), &e))?;
-    let r = if meta.is_dir() && !meta.file_type().is_symlink() {
-        std::fs::remove_dir_all(path)
-    } else {
-        std::fs::remove_file(path)
-    };
-    r.map_err(|e| from_io("undo", &path.to_string_lossy(), &e))
+// Only ever a path this operation itself created, and it goes to the Trash rather than away: a copy
+// can be the only one left by the time undo runs, the photos copied off a card that has been wiped
+// since, and nothing here can know that. A filesystem with no trash refuses, and undo leaves the item
+// in place rather than falling back to a delete, the same rule the Trash key follows.
+fn discard(path: &PathBuf) -> Result<(), FleaError> {
+    path.symlink_metadata().map_err(|e| from_io("undo", &path.to_string_lossy(), &e))?;
+    #[cfg(test)]
+    return test_trash::take(path);
+    #[cfg(not(test))]
+    {
+        let (entries, failed) = trash::trash(std::slice::from_ref(path));
+        if failed > 0 || entries.is_empty() {
+            return Err(FleaError { where_: "undo".into(), path: path.to_string_lossy().into(),
+                msg: "it could not be moved to the Trash, so undo left it in place".into() });
+        }
+        Ok(())
+    }
+}
+
+// Tests must never put their fixtures in the operator's real Trash, so under test the Trash is a
+// folder beside the item, inside the test's own sandbox, whichever thread runs the undo.
+#[cfg(test)]
+pub mod test_trash {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    pub const DIR: &str = ".flea-test-trash";
+
+    pub fn take(path: &PathBuf) -> Result<(), FleaError> {
+        let dir = path.parent().unwrap_or(std::path::Path::new("/nonexistent")).join(DIR);
+        std::fs::create_dir_all(&dir).map_err(|e| from_io("undo", &dir.to_string_lossy(), &e))?;
+        let name = format!("{}-{}", NEXT.fetch_add(1, Ordering::Relaxed), path.file_name().unwrap_or_default().to_string_lossy());
+        std::fs::rename(path, dir.join(name)).map_err(|e| from_io("undo", &path.to_string_lossy(), &e))
+    }
 }
 
 // Only ever an empty directory this operation made. A folder the user has filled since is theirs now, so

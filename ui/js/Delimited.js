@@ -13,6 +13,10 @@ var CANDIDATES = [",", ";", "\t", "|"]
 var SAMPLE_RECORDS = 200
 var SAMPLE_CHARS = 65536
 
+// A record longer than this is parsed only this far: fields() walks a character at a time on the GUI
+// thread, and a crafted body can make one record megabytes long. The table elides a cell long before.
+var MAX_RECORD_CHARS = 65536
+
 var FIXED = { ".tsv": "\t", ".tab": "\t", ".psv": "|" }
 
 // The separator a name promises, or "" when the body has to say: a .csv is the only sniffed one.
@@ -73,6 +77,7 @@ function fields(text, start, end, delim) {
     var stop = end
     if (stop > start && text.charAt(stop - 1) === "\n") stop--
     if (stop > start && text.charAt(stop - 1) === "\r") stop--
+    stop = Math.min(stop, start + MAX_RECORD_CHARS)
     for (var i = start; i < stop; i++) {
         var c = text.charAt(i)
         if (quoted) {

@@ -11,6 +11,10 @@ const WORKBOOK: &str = r#"<workbook xmlns:r="rel"><workbookPr/><sheets><sheet na
 const RELS: &str = r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/><Relationship Id="rId3" Target="worksheets/sheet3.xml"/></Relationships>"#;
 const SHEET: &str = r#"<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="C1" t="inlineStr"><is><t>When</t></is></c></row><row r="3"><c r="A3" t="s"><v>1</v></c><c r="B3"><v>0.30000000000000004</v></c><c r="C3" s="1"><v>45923</v></c><c r="D3" t="b"><v>1</v></c><c r="E3" t="str"><f>A1</f><v>x, "y"</v></c><c r="F3" t="e"><v>#DIV/0!</v></c></row></sheetData></worksheet>"#;
 
+fn lim(rows: usize, columns: usize) -> Limits {
+    Limits { columns, ..Limits::rows(rows) }
+}
+
 fn book() -> Book {
     Book { strings: sheetxlsx::shared_strings(STRINGS), date_styles: sheetxlsx::date_styles(STYLES), date1904: false }
 }
@@ -52,14 +56,14 @@ fn the_first_sheet_is_the_first_tab_through_its_relationship_not_sheet1() {
 
 #[test]
 fn cells_land_in_their_own_columns_and_a_skipped_row_stays_a_row() {
-    let rows = sheetxlsx::rows(SHEET, &book(), 100, 256);
+    let rows = sheetxlsx::rows(SHEET, &book(), lim(100, 256));
     assert_eq!(rows[0], ["Name", "", "When"]);
     assert!(rows[1].is_empty(), "row 2 is not in the file and is still row 2");
     assert_eq!(rows[2], ["Zürich & Co", "0.3", "2025-09-23", "TRUE", "x, \"y\"", "#DIV/0!"]);
-    assert_eq!(sheetxlsx::rows(SHEET, &book(), 1, 256).len(), 1, "the limit is rows, not cells");
-    assert_eq!(sheetxlsx::rows(SHEET, &book(), 100, 2)[0], ["Name"], "columns past the cap are not written");
+    assert_eq!(sheetxlsx::rows(SHEET, &book(), lim(1, 256)).len(), 1, "the limit is rows, not cells");
+    assert_eq!(sheetxlsx::rows(SHEET, &book(), lim(100, 2))[0], ["Name"], "columns past the cap are not written");
     let styled = SHEET.replace("</sheetData>", r#"<row r="9"><c r="A9" s="1"/></row><row r="1000" s="2"></row></sheetData>"#);
-    assert_eq!(sheetxlsx::rows(&styled, &book(), 2000, 256).len(), 3, "formatted empty rows at the end are not records");
+    assert_eq!(sheetxlsx::rows(&styled, &book(), lim(2000, 256)).len(), 3, "formatted empty rows at the end are not records");
 }
 
 #[test]
@@ -93,13 +97,13 @@ const CONTENT: &str = r#"<office:document-content><office:body><office:spreadshe
 
 #[test]
 fn an_ods_table_shows_its_display_text_and_expands_repeats_only_where_something_follows() {
-    let rows = sheetods::rows(CONTENT, 100, 256);
+    let rows = sheetods::rows(CONTENT, lim(100, 256));
     assert_eq!(rows.len(), 4, "the padding rows at the end are not rows, got {:?}", rows);
     assert_eq!(rows[0], ["Item", "23/09/26"]);
     assert!(rows[1].is_empty() && rows[2].is_empty(), "the two empty rows before data are kept");
     assert_eq!(rows[3], ["2", "2", "", "a  b\nc\td"]);
-    assert_eq!(sheetods::rows(CONTENT, 2, 256).len(), 2);
-    assert_eq!(sheetods::rows(CONTENT, 100, 3)[3], ["2", "2", ""]);
+    assert_eq!(sheetods::rows(CONTENT, lim(2, 256)).len(), 2);
+    assert_eq!(sheetods::rows(CONTENT, lim(100, 3))[3], ["2", "2", ""]);
 }
 
 #[test]
@@ -140,4 +144,62 @@ fn a_real_xlsx_and_ods_package_read_end_to_end_through_bsdtar() {
     let fods = dir.file("flat.fods", CONTENT);
     assert_eq!(read(&fods, 100).unwrap().len(), 4);
     assert!(read(&dir.file("broken.xlsx", "not a zip"), 10).is_err(), "a file that is not a package is an error, not an empty sheet");
+}
+
+#[test]
+fn one_huge_shared_string_referenced_by_every_cell_is_cut_before_it_is_copied() {
+    // The review's 8.9 KB package: an 8 MiB string behind 2 x 128 cells asked for 4 GiB.
+    let big = "x".repeat(8 << 20);
+    let strings = format!("<sst><si><t>{}</t></si></sst>", big);
+    let cells: String = (0..128).map(|c| format!(r#"<c r="{}1" t="s"><v>0</v></c>"#, col_name(c))).collect();
+    let sheet = format!("<sheetData><row r=\"1\">{0}</row><row r=\"2\">{0}</row></sheetData>", cells.replace("1\"", "\""));
+    let book = Book { strings: sheetxlsx::shared_strings(&strings), date_styles: vec![], date1904: false };
+    let rows = sheetxlsx::rows(&sheet, &book, Limits::rows(100));
+    let bytes: usize = rows.iter().flatten().map(String::len).sum();
+    assert_eq!(rows.len(), 2);
+    assert!(bytes < 2 * 128 * (MAX_CELL_CHARS * 4 + 4), "every cell is cut to the cell budget, got {} bytes", bytes);
+    assert!(rows[0][0].ends_with('\u{2026}'), "and a cut cell says so");
+}
+
+fn col_name(mut c: usize) -> String {
+    let mut s = String::new();
+    loop {
+        s.insert(0, (b'A' + (c % 26) as u8) as char);
+        if c < 26 { return s; }
+        c = c / 26 - 1;
+    }
+}
+
+#[test]
+fn ods_repeats_stop_at_the_byte_budget_however_many_they_promise() {
+    let cell = format!("<table:table-cell table:number-columns-repeated=\"256\"><text:p>{}</text:p></table:table-cell>", "y".repeat(4000));
+    let content = format!("<table:table><table:table-row table:number-rows-repeated=\"1000000\">{}</table:table-row></table:table>", cell);
+    let limits = Limits { bytes: 8 << 20, ..Limits::rows(1_000_000) };
+    let rows = sheetods::rows(&content, limits);
+    let bytes: usize = rows.iter().flatten().map(String::len).sum();
+    assert!(bytes <= 2 * limits.bytes, "a million repeated rows of 1 MB each stop near the budget, got {} bytes in {} rows", bytes, rows.len());
+    assert!(!rows.is_empty());
+}
+
+#[test]
+fn a_close_with_no_bracket_does_not_make_every_chunk_rescan_the_part() {
+    // The review's 254 KB package took 110 s: "</" followed by megabytes with no ">".
+    let mut body = b"<row></row></".to_vec();
+    body.extend(std::iter::repeat(b'a').take(8 << 20));
+    let started = std::time::Instant::now();
+    let (mut scanned, mut count) = (0usize, 0usize);
+    for end in (65536..=body.len()).step_by(65536) {
+        let (c, upto) = closes(&body[..end], scanned, "row");
+        count += c;
+        scanned = upto;
+    }
+    assert_eq!(count, 1);
+    assert!(started.elapsed() < std::time::Duration::from_secs(2), "took {:?}", started.elapsed());
+    assert_eq!(closes(b"</ro", 0, "row"), (0, 0), "a short tail is still kept for the next chunk");
+}
+
+#[test]
+fn clip_cuts_at_a_character_boundary_and_marks_the_cut() {
+    assert_eq!(clip("äöü".to_string(), 2), "äö\u{2026}");
+    assert_eq!(clip("abc".to_string(), 3), "abc");
 }

@@ -61,6 +61,7 @@ pub mod thumbwrite;
 pub mod convert;
 pub mod copyfile;
 pub mod copynode;
+pub mod movesource;
 pub mod ops;
 pub mod opscancel;
 pub mod opsdispatch;

@@ -18,17 +18,27 @@ fn gio(args: &[&str]) -> Option<std::process::Output> {
     Command::new("gio").args(args).output().ok()
 }
 
+// gio prints a trashed path verbatim, so a name holding a newline and a tab forges a line of its own:
+// "--empty\t/home/d/b" was reproduced as an entry, and restoring it ran gio trash --restore --empty.
+// Only a line whose URI is a trash:/// location and whose original is absolute is an entry, the rule
+// trashbrowse.rs already applies, and a URI with a control character in it is not one gio printed.
+fn is_trash_uri(uri: &str) -> bool {
+    uri.len() > TRASH_ROOT.len() && uri.starts_with(TRASH_ROOT) && !uri.chars().any(char::is_control)
+}
+
+const TRASH_ROOT: &str = "trash:///";
+
 // Sample line: trash:///a.txt\t/home/gm/a.txt
 fn parse_list(stdout: &str) -> Vec<Entry> {
     let mut out = Vec::new();
     for line in stdout.lines() {
         let mut parts = line.splitn(2, LIST_SEP);
         let uri = match parts.next() {
-            Some(u) if !u.is_empty() => u,
+            Some(u) if is_trash_uri(u) => u,
             _ => continue,
         };
         if let Some(original) = parts.next() {
-            if !original.is_empty() {
+            if original.starts_with('/') {
                 out.push(Entry { original: PathBuf::from(original), uri: uri.to_string() });
             }
         }
@@ -102,7 +112,11 @@ pub fn restore(entry: &Entry) -> Result<(), FleaError> {
     if entry.uri.is_empty() {
         return Err(err("this item was trashed without a trash entry, so it cannot be restored"));
     }
-    match gio(&["trash", "--restore", &entry.uri]) {
+    // Checked again here and ended with --, so a journaled URI can never be read as one of gio's options.
+    if !is_trash_uri(&entry.uri) {
+        return Err(err("this trash entry is not a trash location, so it is not restored"));
+    }
+    match gio(&["trash", "--restore", "--", &entry.uri]) {
         Some(o) if o.status.success() => Ok(()),
         Some(o) => {
             let msg = String::from_utf8_lossy(&o.stderr);
@@ -128,6 +142,18 @@ mod tests {
         let (entries, failed) = trash_checked(&gone, None).expect("a batch of missing paths is not an error");
         assert!(entries.is_empty(), "nothing was trashed, so nothing is journaled");
         assert_eq!(failed, 2, "both are counted as failures rather than as trashed");
+    }
+
+    // The review's reproduction: a trashed directory named "a\n--empty\t<path>" forged a list line.
+    #[test]
+    fn a_forged_list_line_is_not_an_entry_and_never_reaches_gio_as_an_option() {
+        let out = "trash:///a\n--empty\t/home/d/b\ntrash:///b.2\t/home/d/b\n-x\t/y\ntrash:///\t/z\ntrash:///r\trelative\n";
+        let got = parse_list(out);
+        assert_eq!(got.iter().map(|e| e.uri.as_str()).collect::<Vec<_>>(), ["trash:///b.2"]);
+        let forged = Entry { original: PathBuf::from("/home/d/b"), uri: "--empty".to_string() };
+        assert!(restore(&forged).is_err(), "a journaled URI that is not a trash location is refused before gio runs");
+        let control = Entry { original: PathBuf::from("/x"), uri: "trash:///a\u{1b}b".to_string() };
+        assert!(restore(&control).is_err());
     }
 
     #[test]

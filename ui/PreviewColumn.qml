@@ -426,13 +426,13 @@ Item {
         return true
     }
 
-    // The cache file while there is one, then the image itself once the backend says none is coming.
+    // The cache file while there is one, which only the jailed thumbnailer ever writes.
     function frameSource() {
         if (!root.visible) return ""
         if (root.thumb.length > 0)
             return Format.fileUri(root.thumb)
-        if (root.noThumbComing && root.previewState === Facts.IMAGE && root.path.length > 0)
-            return Format.fileUri(root.path)
+        // Never the file itself: Qt decodes by content in this process, so the image the jailed
+        // thumbnailer refused is the one that must not reach it; the frame says so instead.
         return ""
     }
 

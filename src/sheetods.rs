@@ -1,19 +1,22 @@
 // An OpenDocument spreadsheet's first table as text: what each cell displays, which ODF stores
 // beside the typed value, so a date reads the way LibreOffice shows it. The same content serves a
 // packaged .ods (its content.xml) and a flat .fods, which is that document as one file.
+use crate::sheet::{clip, Limits};
 use crate::sheetxml::{attr, decode, tokens, Tok};
 
 // ODF compresses runs of identical cells and rows into one element with a repeat count, and a
 // saved sheet ends every row with ~1000 empty columns and the table with ~1M empty rows. Empties
 // are therefore held back and only written once something real follows them.
-pub fn rows(content: &str, limit: usize, max_cols: usize) -> Vec<Vec<String>> {
+pub fn rows(content: &str, limits: Limits) -> Vec<Vec<String>> {
+    let (limit, max_cols) = (limits.rows, limits.columns);
+    let mut spent = 0usize;
     let mut out: Vec<Vec<String>> = Vec::new();
     let mut row: Vec<String> = Vec::new();
     let (mut depth, mut row_repeat, mut pending_rows) = (0usize, 1usize, 0usize);
     let (mut in_cell, mut cell_repeat, mut pending_cells) = (false, 1usize, 0usize);
     let (mut text, mut value, mut paragraphs, mut para, mut note) = (String::new(), String::new(), 0usize, 0usize, 0usize);
     for t in tokens(content) {
-        if out.len() >= limit {
+        if out.len() >= limit || spent >= limits.bytes {
             break;
         }
         match t {
@@ -42,7 +45,12 @@ pub fn rows(content: &str, limit: usize, max_cols: usize) -> Vec<Vec<String>> {
                     out.push(Vec::new());
                     pending_rows -= 1;
                 }
+                let width: usize = row.iter().map(|c| c.len() + 1).sum();
                 for _ in 0..row_repeat.min(limit.saturating_sub(out.len())) {
+                    if spent >= limits.bytes {
+                        break;
+                    }
+                    spent += width;
                     out.push(row.clone());
                 }
             }
@@ -60,7 +68,7 @@ pub fn rows(content: &str, limit: usize, max_cols: usize) -> Vec<Vec<String>> {
             }
             Tok::Close("table-cell" | "covered-table-cell") if in_cell => {
                 in_cell = false;
-                let shown = if paragraphs == 0 && text.is_empty() { std::mem::take(&mut value) } else { std::mem::take(&mut text) };
+                let shown = clip(if paragraphs == 0 && text.is_empty() { std::mem::take(&mut value) } else { std::mem::take(&mut text) }, limits.cell_chars);
                 if shown.is_empty() {
                     pending_cells = pending_cells.saturating_add(cell_repeat);
                     continue;
@@ -70,7 +78,11 @@ pub fn rows(content: &str, limit: usize, max_cols: usize) -> Vec<Vec<String>> {
                     pending_cells -= 1;
                 }
                 pending_cells = 0;
+                // A row's own width is the budget too, before its repeats multiply it.
                 for _ in 0..cell_repeat.min(max_cols.saturating_sub(row.len())) {
+                    if row.iter().map(String::len).sum::<usize>() >= limits.bytes {
+                        break;
+                    }
                     row.push(shown.clone());
                 }
             }
@@ -96,6 +108,7 @@ pub fn rows(content: &str, limit: usize, max_cols: usize) -> Vec<Vec<String>> {
             }
             Tok::Open { name: "tab", .. } => text.push('\t'),
             Tok::Open { name: "line-break", .. } => text.push('\n'),
+            _ if text.len() >= limits.bytes => {}
             Tok::Text(s) => text.push_str(&decode(s)),
             Tok::Cdata(s) => text.push_str(s),
             _ => {}

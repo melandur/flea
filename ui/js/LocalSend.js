@@ -11,7 +11,18 @@ function send(pane, service, provider, peer, paths) {
     // to send it with. Blaming the CLI for an empty pick told GM a binary was gone while it sat on PATH.
     if (paths.length === 0) { pane.message("There is nothing to send.", true); return }
     if (!service.send(peer, paths)) { pane.message(missing(provider), true); return }
-    pane.message(sending(peer, paths), false)
+    pane.message(sending(peerName(peer), paths), false)
+}
+
+// A peer's id is "<address> <name>": the address pins the send to the device that was chosen, so a
+// second device announcing the same name cannot take the files, and the name is what a sentence says.
+function peerId(name, address) {
+    return String(address) + " " + String(name)
+}
+
+function peerName(id) {
+    var space = String(id).indexOf(" ")
+    return space < 0 ? String(id) : String(id).substring(space + 1)
 }
 
 function sending(peer, paths) {

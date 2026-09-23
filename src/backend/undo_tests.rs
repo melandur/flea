@@ -95,7 +95,7 @@ fn undoing_a_copied_folder_refuses_once_anything_inside_it_has_changed() {
     }
 }
 
-// The control: a tree nobody touched is still the copy's own, so undo removes it the way it always did.
+// The control: a tree nobody touched is still the copy's own, so undo takes it away, to the Trash.
 #[test]
 fn undoing_a_copied_folder_nobody_touched_still_removes_it() {
     let d = TestDir::new("undotreeclean");
@@ -113,6 +113,10 @@ fn undoing_a_copied_folder_nobody_touched_still_removes_it() {
     j.undo().expect("an untouched copy is still this operation's to remove");
     assert!(!copy.exists(), "the copy is gone and the source is untouched");
     assert!(source.join("nested/document.txt").exists());
+    // Into the Trash and not deleted: by the time undo runs the copy can be the only one left.
+    let trashed: Vec<_> = std::fs::read_dir(d.join(super::test_trash::DIR)).unwrap().flatten().collect();
+    assert_eq!(trashed.len(), 1, "the undone copy is in the trash");
+    assert!(trashed[0].path().join("nested/document.txt").exists(), "with its contents");
 }
 
 // The assumption the guard rests on, asserted rather than trusted: the copy writes the root's own mode

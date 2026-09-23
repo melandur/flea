@@ -1,10 +1,14 @@
 import QtQuick
+import Quickshell
+import Quickshell.Io
 import qs.Commons
 import "." as Flea
 import "js/Format.js" as Format
 
-// The Quick Look's image pane, reached only through Preview.qml's Loader. It draws the file itself:
-// the 256 px cache file the column draws would be an eightfold upscale on a surface this size.
+// The Quick Look's image pane, reached only through Preview.qml's Loader. The 256 px cache file the
+// column draws would be an eightfold upscale on a surface this size, and the file itself is never
+// handed to Qt, which picks a decoder by content in this process: flea --preview-image renders it at
+// the window's size in the thumbnail jail, and this draws that PNG.
 Item {
     id: root
 
@@ -18,12 +22,45 @@ Item {
     // new file ever reads as loading.
     property string shownPath: ""
 
+    // The jailed render: the PNG it answered for renderedFor, or the refusal it exited with.
+    property string rendered: ""
+    property string renderedFor: ""
+    property bool renderFailed: false
+    // Rounded up to a step, so a window resized by a few pixels reuses the render it already has.
+    readonly property int renderSize: Math.min(4096, 512 * Math.ceil(Math.max(1, root.decodeWidth, root.decodeHeight) / 512))
+
+    function render() {
+        if (renderer.running) { renderer.running = false; return }
+        root.renderFailed = false
+        if (root.path.length === 0) { root.rendered = ""; return }
+        renderer.forPath = root.path
+        renderer.answer = ""
+        renderer.command = [Quickshell.env("FLEA_BIN") || "flea", "--preview-image", root.path, String(root.renderSize)]
+        renderer.running = true
+    }
+    onPathChanged: root.render()
+    onRenderSizeChanged: root.render()
+    Component.onCompleted: root.render()
+
+    // A run for a path no longer shown is killed, and its exit starts the one that is.
+    Process {
+        id: renderer
+        property string forPath: ""
+        property string answer: ""
+        stdout: StdioCollector { onStreamFinished: renderer.answer = this.text.trim() }
+        onExited: function (code) {
+            if (renderer.forPath !== root.path) { Qt.callLater(root.render); return }
+            root.renderFailed = code !== 0 || renderer.answer.length === 0
+            if (!root.renderFailed) { root.rendered = renderer.answer; root.renderedFor = renderer.forPath }
+        }
+    }
+
     // The same name the media and PDF panes give their unreadable state, so Preview.qml tests one property.
-    readonly property bool failed: picture.status === Image.Error
+    readonly property bool failed: root.renderFailed || picture.status === Image.Error
     // Every state is terminal: a decode ends Ready or Error, and a vanished file ends Error too.
     readonly property string status: {
         if (root.failed) return "This image could not be read."
-        return picture.status === Image.Ready || root.shownPath === root.path ? "image" : "loading"
+        return (picture.status === Image.Ready && root.renderedFor === root.path) || root.shownPath === root.path ? "image" : "loading"
     }
     readonly property string name: root.path.substring(root.path.lastIndexOf("/") + 1)
 
@@ -37,9 +74,9 @@ Item {
         id: picture
         anchors.fill: parent
         visible: picture.status === Image.Ready || (picture.status === Image.Loading && root.shownPath === root.path)
-        onStatusChanged: if (picture.status === Image.Ready) root.shownPath = root.path
+        onStatusChanged: if (picture.status === Image.Ready) root.shownPath = root.renderedFor
         // Format.fileUri, not a concatenation: a # or a ? in the name would truncate a hand-built URI.
-        source: root.path.length > 0 ? Format.fileUri(root.path) : ""
+        source: root.rendered.length > 0 ? Format.fileUri(root.rendered) : ""
         fillMode: Image.PreserveAspectFit
         asynchronous: true
         retainWhileLoading: true

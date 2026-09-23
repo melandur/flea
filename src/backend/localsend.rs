@@ -74,14 +74,39 @@ fn open_pty() -> Result<(OwnedFd, std::fs::File), String> {
 // No --port: measured on the box, a run on any other port hears nothing at all, because LocalSend
 // announces to the multicast group on 53317 and a CLI bound elsewhere never receives those
 // announcements. A box already running its own LocalSend is told so instead, by refusal() below.
-fn spawn(args: &[String], slave: &std::fs::File) -> Result<Child, String> {
+// localsend-cli has no mode that does not receive: every run Flea starts, even one only asking which
+// devices are near, is also a receiver for its length, and a device paired with this box is accepted
+// without a prompt. Flea is not LocalSend's receiver, so each run it starts gets a private folder of
+// its own to receive into, gone when the run is, and nothing a peer sends can land in ~/Downloads.
+struct Inbox(std::path::PathBuf);
+
+impl Inbox {
+    fn new() -> Result<Inbox, String> {
+        use std::os::unix::fs::DirBuilderExt;
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("flea-localsend-{}-{}", std::process::id(), n));
+        // create, not create_all: a name someone else made first, a symlink included, is refused.
+        std::fs::DirBuilder::new().mode(0o700).create(&dir)
+            .map_err(|e| format!("LocalSend could not make its private folder: {}.", crate::error::io_message(&e)))?;
+        Ok(Inbox(dir))
+    }
+}
+
+impl Drop for Inbox {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn spawn(args: &[String], slave: &std::fs::File, inbox: &Inbox) -> Result<Child, String> {
     let stdin = slave.try_clone().map_err(|e| format!("LocalSend terminal setup failed: {}.", crate::error::io_message(&e)))?;
     let stdout = slave.try_clone().map_err(|e| format!("LocalSend terminal setup failed: {}.", crate::error::io_message(&e)))?;
     let stderr = slave.try_clone().map_err(|e| format!("LocalSend terminal setup failed: {}.", crate::error::io_message(&e)))?;
     let mut command = Command::new(COMMAND);
     // A pty is not a terminal until something says which one: the backend inherits no TERM, and
     // without one the CLI draws its frame and never refreshes the device list inside it.
-    command.args(args).env("TERM", "xterm-256color")
+    command.arg("--destination").arg(&inbox.0).args(args).env("TERM", "xterm-256color")
         .stdin(Stdio::from(stdin)).stdout(Stdio::from(stdout)).stderr(Stdio::from(stderr));
     unsafe {
         // A session of its own, then this pty as its controlling terminal: without one the CLI reads
@@ -155,8 +180,9 @@ fn stop(child: &mut Child) {
 // The devices this box can see right now. A run that carries no files starts in receive mode, so the
 // panel is asked for by its own D and the run ends as soon as the answer is in.
 pub fn peers(limit: Duration) -> Result<Vec<Peer>, String> {
+    let inbox = Inbox::new()?;
     let (master, slave) = open_pty()?;
-    let mut child = spawn(&[], &slave)?;
+    let mut child = spawn(&[], &slave, &inbox)?;
     let keys = master.try_clone()
         .map_err(|e| format!("LocalSend could not hold its own terminal: {}.", crate::error::io_message(&e)))?;
     let seen = read_into(master);
@@ -187,15 +213,25 @@ pub fn peers(limit: Duration) -> Result<Vec<Peer>, String> {
 // slave is the app's own output and a key written there is never read, and the device the CLI found
 // arrives as an incremental screen update, so the stream is read whole rather than frame by frame.
 // The row is reached with the arrows the CLI's own footer names, Enter sends, and the CLI says so.
-pub fn send(name: &str, paths: &[String], limit: Duration) -> Result<(), String> {
+// The front end names a device as "<address> <name>", the pair its own list showed, and only a row
+// matching both is sent to: a second device announcing the same name on the LAN is not that device.
+pub fn target(peer: &str) -> Option<(&str, &str)> {
+    let (address, name) = peer.split_once(' ')?;
+    if address.is_empty() || name.is_empty() { return None }
+    Some((address, name))
+}
+
+pub fn send(peer: &str, paths: &[String], limit: Duration) -> Result<(), String> {
     if paths.is_empty() { return Err("LocalSend was given nothing to send.".into()) }
+    let (address, name) = target(peer).ok_or("LocalSend was not told which device to send to.")?;
     let mut args: Vec<String> = Vec::new();
     for path in paths {
         args.push("-f".into());
         args.push(path.clone());
     }
+    let inbox = Inbox::new()?;
     let (master, slave) = open_pty()?;
-    let mut child = spawn(&args, &slave)?;
+    let mut child = spawn(&args, &slave, &inbox)?;
     let keys = master.try_clone()
         .map_err(|e| format!("LocalSend could not hold its own terminal: {}.", crate::error::io_message(&e)))?;
     let seen = read_into(master);
@@ -207,7 +243,7 @@ pub fn send(name: &str, paths: &[String], limit: Duration) -> Result<(), String>
             stop(&mut child);
             return Err(refusal)
         }
-        if let Some(peer) = parse_peers(&text).into_iter().find(|p| p.name == name) {
+        if let Some(peer) = parse_peers(&text).into_iter().find(|p| p.name == name && p.address == address) {
             index = Some(peer.index);
             break
         }
@@ -284,6 +320,26 @@ pub fn answer(op: &str, peer: &str, paths: &[String], id: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_run_receives_into_a_private_folder_that_goes_with_it() {
+        use std::os::unix::fs::PermissionsExt;
+        let inbox = Inbox::new().expect("a private folder");
+        let dir = inbox.0.clone();
+        assert_eq!(dir.metadata().unwrap().permissions().mode() & 0o777, 0o700);
+        std::fs::write(dir.join("dropped.bin"), b"from a paired peer").unwrap();
+        drop(inbox);
+        assert!(!dir.exists(), "whatever a peer sent during the run is gone with it");
+    }
+
+    #[test]
+    fn a_send_names_its_device_by_address_and_name_together() {
+        assert_eq!(target("192.168.21.23 Clean Lemon"), Some(("192.168.21.23", "Clean Lemon")));
+        assert_eq!(target("Clean Lemon"), Some(("Clean", "Lemon")), "a bare name is read as a pair and matches no real row");
+        assert_eq!(target("NoSpace"), None);
+        assert!(send("NoSpace", &["/x".to_string()], Duration::from_millis(1)).is_err(), "no device named, nothing is started");
+    }
+
 
     // Codex's finding on the first drive that worked: a substring test reads a device named after
     // the event as the event itself, and a CLI that ended is not a CLI that sent.

@@ -1,4 +1,6 @@
 import QtQuick
+import "js/Menu.js" as Menu
+import "js/LocalSend.js" as LocalSendJs
 
 // Directive 71: the menu's LocalSend row is the Taildrop row's twin, so this is ui/Taildrop.qml's
 // shape for the other one: the only thing here that knows about LocalSend, with ui/ContextMenu.qml
@@ -26,6 +28,13 @@ Item {
             root.reason = "localsend-cli is not installed"
             return true
         }
+        // Discovery starts a CLI run that announces this box and receives for its length, so a menu
+        // with the row hidden in Settings never starts one.
+        if (Menu.isHidden(ViewState.menuHidden, "localsend")) {
+            root.peers = []
+            root.reason = "hidden in Settings"
+            return true
+        }
         if (root.checking) return false
         if (root._askedAt > 0 && Date.now() - root._askedAt < root.warmMs) return true
         root.checking = true
@@ -43,8 +52,12 @@ Item {
         root._askedAt = Date.now()
         root.checking = false
         var rows = []
+        var named = {}
+        for (var n = 0; n < list.length; n++) named[list[n].name] = (named[list[n].name] || 0) + 1
+        // Two devices under one name are told apart by their address, which is also what the send checks.
         for (var i = 0; i < list.length; i++)
-            rows.push({ id: String(list[i].name), label: String(list[i].name) })
+            rows.push({ id: LocalSendJs.peerId(list[i].name, list[i].address),
+                        label: String(list[i].name) + (named[list[i].name] > 1 ? " (" + list[i].address + ")" : "") })
         root.peers = rows
         root.reason = why
         root.refreshed()

@@ -2,6 +2,10 @@
 // ui/PreviewTable.qml runs it and parses the answer with the same reader a .csv gets, so the grid,
 // its widths and its alignment are one code path whatever the file was. The package is a zip, and
 // bsdtar, which the archive preview already needs, is what opens it: no zip crate, no inflate here.
+// bsdtar parses the untrusted package, so it runs in the same jail as every other archive tool, and
+// the reader here is held to a byte budget, because a few kilobytes of shared strings or ODF repeats
+// can otherwise expand into gigabytes of cells.
+use crate::backend::sandbox;
 use crate::{sheetods, sheetxlsx};
 use std::io::{Read, Write};
 use std::path::Path;
@@ -14,6 +18,34 @@ const MAX_PART_BYTES: usize = 256 * 1024 * 1024;
 // Columns past this are not written; the table draws fewer still.
 const MAX_COLUMNS: usize = 256;
 const MAX_ROWS: usize = 1_000_000;
+// One cell shows at most this much; the table elides far sooner, and a longer cell is a padding attack.
+pub const MAX_CELL_CHARS: usize = 4096;
+// The whole answer stops growing here, whatever the rows and columns would still allow.
+const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
+
+// What a reader may produce, so an 8 KB workbook cannot answer with 4 GB of copies of one string.
+#[derive(Clone, Copy)]
+pub struct Limits {
+    pub rows: usize,
+    pub columns: usize,
+    pub cell_chars: usize,
+    pub bytes: usize,
+}
+
+impl Limits {
+    pub fn rows(rows: usize) -> Limits {
+        Limits { rows, columns: MAX_COLUMNS, cell_chars: MAX_CELL_CHARS, bytes: MAX_OUTPUT_BYTES }
+    }
+}
+
+// A cell cut to the budget at a character boundary, marked so a cut is never mistaken for the value.
+pub fn clip(mut cell: String, max_chars: usize) -> String {
+    if let Some((at, _)) = cell.char_indices().nth(max_chars) {
+        cell.truncate(at);
+        cell.push('\u{2026}');
+    }
+    cell
+}
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Format {
@@ -59,6 +91,13 @@ fn refuse(message: &str) -> i32 {
 
 pub fn read(path: &Path, limit: usize) -> Result<Vec<Vec<String>>, String> {
     let format = format_of(&path.to_string_lossy()).ok_or("not a spreadsheet this can read")?;
+    // The jail binds the input by its real path, so a relative name or a symlink is resolved first.
+    let resolved = std::fs::canonicalize(path).map_err(|e| e.to_string())?;
+    let path = resolved.as_path();
+    // Fail closed, the rule archivework.rs follows: without bwrap and prlimit no package is opened.
+    if format != Format::Fods && !sandbox::available() {
+        return Err("the sandbox is unavailable: bwrap or prlimit is not on PATH".into());
+    }
     // Enough closing tags to fill the rows asked for, with room for the empty rows ODF writes as
     // their own elements, so a huge sheet is inflated only as far as the preview looks.
     let enough = limit.saturating_mul(4).max(1000);
@@ -72,26 +111,29 @@ pub fn read(path: &Path, limit: usize) -> Result<Vec<Vec<String>>, String> {
                 date1904: sheetxlsx::date1904(&workbook),
             };
             let sheet = member(path, &sheetxlsx::first_sheet(&workbook, &rels), Some(("row", enough))).ok_or("no first sheet in the package")?;
-            Ok(sheetxlsx::rows(&sheet, &book, limit, MAX_COLUMNS))
+            Ok(sheetxlsx::rows(&sheet, &book, Limits::rows(limit)))
         }
         Format::Ods => {
             let content = member(path, "content.xml", Some(("table-row", enough))).ok_or("no content in the package")?;
-            Ok(sheetods::rows(&content, limit, MAX_COLUMNS))
+            Ok(sheetods::rows(&content, Limits::rows(limit)))
         }
         Format::Fods => {
             let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
             let mut bytes = Vec::new();
             file.take(MAX_PART_BYTES as u64).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
-            Ok(sheetods::rows(&String::from_utf8_lossy(&bytes), limit, MAX_COLUMNS))
+            Ok(sheetods::rows(&String::from_utf8_lossy(&bytes), Limits::rows(limit)))
         }
     }
 }
 
-// One member of the package, inflated by bsdtar to a pipe. With stop, reading ends once that many
-// elements of that local name have closed, and bsdtar is killed rather than left to inflate the rest.
+// One member of the package, inflated by a jailed bsdtar to a pipe: the package is bound read-only
+// and nothing is writable, the boundary sandbox::wrap_readonly gives ffprobe. With stop, reading
+// ends once that many elements of that local name have closed, and bsdtar is killed rather than
+// left to inflate the rest.
 fn member(path: &Path, name: &str, stop: Option<(&str, usize)>) -> Option<String> {
-    let mut child = Command::new(BSDTAR)
-        .arg("-xOf").arg(path).arg("--").arg(name)
+    let inner = [BSDTAR, "-xOf", &path.to_string_lossy(), "--", name].map(String::from);
+    let full = sandbox::wrap_readonly(&inner, path);
+    let mut child = Command::new(&full[0]).args(&full[1..])
         .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null())
         .spawn().ok()?;
     let mut pipe = child.stdout.take()?;
@@ -128,14 +170,24 @@ fn member(path: &Path, name: &str, stop: Option<(&str, usize)>) -> Option<String
     Some(String::from_utf8_lossy(&bytes).into_owned())
 }
 
+// A closing tag's name is never longer than this; "</" with no ">" this soon is not a tag at all.
+const MAX_TAG_NAME: usize = 256;
+
 // How many </x:local> or </local> tags close in bytes[from..], and where the scan stopped: before a
-// tag the buffer cuts off, so the next chunk reads it whole and nothing is counted twice.
+// tag the buffer cuts off, so the next chunk reads it whole and nothing is counted twice. Only a
+// short tail is ever left for the next chunk, so a "</" with no ">" cannot make every chunk rescan
+// the rest of the part, which cost 110 s of CPU on a 254 KB package.
 pub fn closes(bytes: &[u8], from: usize, local: &str) -> (usize, usize) {
     let (mut count, mut i) = (0usize, from);
     while let Some(at) = bytes[i..].windows(2).position(|w| w == b"</") {
         let start = i + at + 2;
-        let Some(len) = bytes[start..].iter().position(|&b| b == b'>') else {
-            return (count, i + at);
+        let window = &bytes[start..bytes.len().min(start + MAX_TAG_NAME)];
+        let Some(len) = window.iter().position(|&b| b == b'>') else {
+            if window.len() < MAX_TAG_NAME {
+                return (count, i + at);
+            }
+            i = start;
+            continue;
         };
         let name = &bytes[start..start + len];
         let tail = name.rsplit(|&b| b == b':').next().unwrap_or(name);

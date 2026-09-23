@@ -52,6 +52,10 @@ function run(check) {
     var tall = "a,b\n\"four\nmore text here\",x\n"
     check("a multi-line cell is as wide as its first line and its return mark, not its longest line",
           Delimited.columnChars(tall, Delimited.recordStarts(tall, ",", 10), ",", 40).join(","), "6,1")
+    var huge = "a," + new Array(Delimited.MAX_RECORD_CHARS * 4).join("z") + ",tail\n"
+    var cut = Delimited.fields(huge, 0, huge.length, ",")
+    check("a record past the parse limit is read only that far, not walked to its end",
+          cut.length + "|" + (cut[0] + "," + cut[1]).length, "2|" + Delimited.MAX_RECORD_CHARS)
     check("a multi-line cell draws its first line and a return mark",
           Delimited.shown("first\r\nsecond") + "|" + Delimited.shown("one"), "first ↵|one")
 }

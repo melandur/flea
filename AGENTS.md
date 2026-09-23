@@ -1018,7 +1018,8 @@ this coverage needed no new entry there.
   claims or releases the desktop's file chooser alone, `--pick <reply>` opens one chooser window
   for `tools/flea-portal`, `--ui-state [<patch>]` reads or merges the shared view state,
   `--version` prints the version, `--sheet <path> <rows>` prints a spreadsheet's first sheet as
-  CSV for the preview's table, `--print-target` resolves `--select`'s pair for the tests, and
+  CSV for the preview's table, `--preview-image <path> <size>` renders an image for the Quick Look
+  in the thumbnail jail and prints the PNG's path, `--print-target` resolves `--select`'s pair for the tests, and
   anything else opens the window, on `--select`'s parent directory when one is given, unless
   explicit `--tui` requests the terminal interface, `--gui` being the explicit spelling of the
   window a bare invocation already means, see "Modes".
@@ -1028,9 +1029,17 @@ this coverage needed no new entry there.
 - `open.rs` hands one file to `gio open` and waits for it, and on a refusal over a file with no
   bytes launches the entry its name's own type names, see "Opening a file" and "When the sniffer abstains".
 - `terminal.rs` hands one directory to `xdg-terminal-exec --dir=` and does not wait, see "Opening a file".
-- `sheet.rs` is `--sheet`: it pulls an `.xlsx` or `.ods` package's parts out through `bsdtar -xOf`,
-  killing it once enough rows have closed or 256 MiB has been inflated, reads a `.fods` directly, and
-  writes CSV. `sheetxlsx.rs` resolves the first tab, shared strings and date styles, `sheetods.rs`
+- `previewimage.rs` is `--preview-image`: the Quick Look's image is rendered by the cache's own
+  thumbnailer under the same jail, at the window's size, into `$XDG_RUNTIME_DIR/flea-preview` (0700,
+  48 renders kept), and `ui/PreviewImage.qml` draws only that PNG. Qt picks an image decoder by
+  content inside the UI process, so a `photo.jpg` holding PostScript reached kimageformats' EPS
+  plugin and ran Ghostscript unjailed; the columns view no longer falls back to the original file
+  when the thumbnailer refuses one either. A type with no thumbnailer has no image preview.
+- `sheet.rs` is `--sheet`: it pulls an `.xlsx` or `.ods` package's parts out through `bsdtar -xOf`
+  in the archive jail (`sandbox::wrap_readonly`, refused without bwrap and prlimit), killing it once
+  enough rows have closed or 256 MiB has been inflated, reads a `.fods` directly, and writes CSV held
+  to a budget of 4096 characters a cell and 64 MiB in all: one shared string referenced by every
+  cell, or ODF's repeat counts, otherwise turned an 8.9 KB package into a 4 GiB allocation. `sheetxlsx.rs` resolves the first tab, shared strings and date styles, `sheetods.rs`
   reads display text and collapses ODF's repeat padding, and `sheetxml.rs` is the small tokenizer
   both share. `ui/PreviewTable.qml` runs it and draws the answer with the same reader
   (`ui/js/Delimited.js`) a `.csv`, `.tsv`, `.tab` or `.psv` gets; `.xls` and `.numbers` stay Unsupported.
@@ -3857,6 +3866,23 @@ cancel (ENOSPC, EPERM, a socket deeper in the tree) leaves the partial destinati
 because removing it on a transient error would destroy data, and `copyfile.rs` reports that path in
 `Progress.partial` so `transfer` and `duplicate` journal it as a `Created` step and the existing undo
 path removes it. A destination that already existed is never reported, because nothing was created there.
+
+**Undo of a copy moves it to the Trash, it does not delete it.** By the time Ctrl+Z runs, the copy can
+be the only one left: photos copied off a card that has been wiped since. `Created` and `Copied` steps
+go through `gio trash` like the Trash key, and a filesystem with no trash refuses and leaves the item in
+place rather than falling back to a delete. Under `cargo test` the trash is a `.flea-test-trash` folder
+beside the item (`undo::test_trash`), so no test ever writes to the operator's real Trash.
+
+**A move across filesystems removes only what it copied.** `movesource.rs` photographs the source tree
+(inode, size, ctime) before the copy and afterwards removes only entries still exactly as photographed
+whose copy exists; `remove_dir_all` took with it whatever a sync client wrote into the folder while
+the copy ran. Anything new or changed stays, and the item reports how many were kept. Copies keep
+their source's access and modification times, best effort, as `cp -a` and `mv` do.
+
+**A restore is checked before gio sees it.** `gio trash --list` prints a trashed path verbatim, so a
+name holding a newline and a tab forged a line whose URI was `--empty`, and undo ran
+`gio trash --restore --empty`. Only a `trash:///` URI with an absolute original is an entry, and the
+restore passes `--`.
 
 **The trash URI is captured at trash time, and that is forced by a measured fact.**
 `gio trash --restore` refuses an original path (`Location given doesn't start with trash:///`), and two

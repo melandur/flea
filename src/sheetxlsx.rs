@@ -1,6 +1,7 @@
 // An .xlsx read far enough to preview: the first sheet's cells as text, in their grid positions,
 // shared strings looked up and dates shown as dates. The parts come in as strings, so nothing here
 // knows the package is a zip; src/sheet.rs pulls them out.
+use crate::sheet::{clip, Limits};
 use crate::sheetxml::{attr, decode, tokens, Tok};
 use std::collections::HashMap;
 
@@ -117,13 +118,15 @@ pub fn is_date_code(code: &str) -> bool {
 
 // The first limit rows of a sheet, each padded out to its cells' columns; a row the file skips is an
 // empty row here, so the preview's row numbers are the sheet's own.
-pub fn rows(sheet: &str, book: &Book, limit: usize, max_cols: usize) -> Vec<Vec<String>> {
+pub fn rows(sheet: &str, book: &Book, limits: Limits) -> Vec<Vec<String>> {
+    let (limit, max_cols) = (limits.rows, limits.columns);
+    let mut spent = 0usize;
     let mut out: Vec<Vec<String>> = Vec::new();
     let mut row: Vec<String> = Vec::new();
     let (mut col, mut kind, mut style, mut value) = (0usize, String::new(), 0usize, String::new());
     let (mut in_v, mut in_t, mut in_rph) = (false, false, false);
     for t in tokens(sheet) {
-        if out.len() >= limit {
+        if out.len() >= limit || spent >= limits.bytes {
             break;
         }
         match t {
@@ -153,13 +156,15 @@ pub fn rows(sheet: &str, book: &Book, limit: usize, max_cols: usize) -> Vec<Vec<
             Tok::Close("v") => in_v = false,
             Tok::Close("t") => in_t = false,
             Tok::Close("rPh") => in_rph = false,
-            Tok::Text(s) if in_v || (in_t && !in_rph) => value.push_str(&decode(s)),
-            Tok::Cdata(s) if in_v || (in_t && !in_rph) => value.push_str(s),
+            Tok::Text(s) if (in_v || (in_t && !in_rph)) && value.len() < limits.bytes => value.push_str(&decode(s)),
+            Tok::Cdata(s) if (in_v || (in_t && !in_rph)) && value.len() < limits.bytes => value.push_str(s),
             Tok::Close("c") if col < max_cols => {
                 if row.len() <= col {
                     row.resize(col + 1, String::new());
                 }
-                row[col] = shown(&kind, &value, style, book);
+                let cell = clip(shown(&kind, &value, style, book), limits.cell_chars);
+                spent += cell.len() + 1;
+                row[col] = cell;
             }
             Tok::Close("sheetData") => break,
             _ => {}
@@ -182,7 +187,9 @@ pub fn column_of(reference: &str) -> usize {
 
 fn shown(kind: &str, value: &str, style: usize, book: &Book) -> String {
     match kind {
-        "s" => value.trim().parse::<usize>().ok().and_then(|i| book.strings.get(i)).cloned().unwrap_or_default(),
+        // Cut before it is copied: one shared string referenced by every cell is the amplifier.
+        "s" => value.trim().parse::<usize>().ok().and_then(|i| book.strings.get(i))
+            .map(|s| s.chars().take(crate::sheet::MAX_CELL_CHARS + 1).collect()).unwrap_or_default(),
         "b" => if value.trim() == "1" { "TRUE".into() } else { "FALSE".into() },
         "str" | "inlineStr" | "e" | "d" => value.to_string(),
         _ => match value.trim().parse::<f64>() {

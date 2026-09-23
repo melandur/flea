@@ -29,6 +29,7 @@ mod shelfplugin;
 mod shelfthumb;
 mod shelfundo;
 mod shelfzip;
+mod previewimage;
 mod sheet;
 mod sheetods;
 mod sheetxlsx;
@@ -247,6 +248,11 @@ fn main() {
 
     if args.get(1).map(String::as_str) == Some("--favourites") {
         exit(favourites::command(&args));
+    }
+
+    // flea --preview-image <path> <size>: the preview's image, rendered in the thumbnail jail.
+    if args.get(1).map(String::as_str) == Some("--preview-image") {
+        exit(previewimage::command(&args));
     }
 
     // flea --sheet <path> <rows>: the preview's table asks this for a spreadsheet's first sheet as CSV.

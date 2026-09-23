@@ -55,7 +55,8 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
     // Issue 109: a create takes the umask, so a 0600 source landed 0644 and the copy published what
     // the original kept private. The source's own bits are carried by the create itself, so there is
     // no window where the bytes are on disk under a wider mode, narrowed by the umask and never widened.
-    let mode = r.metadata().map(|m| keep_mode(m.permissions().mode())).unwrap_or(0o600);
+    let source = r.metadata().ok();
+    let mode = source.as_ref().map(|m| keep_mode(m.permissions().mode())).unwrap_or(0o600);
     let mut w = std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -92,6 +93,7 @@ fn copy_file_at(src: At, dst: At, total: u64, p: &mut Progress) -> Result<(), Fl
     if let Err(e) = w.flush() {
         return Err(left_partial(p, dst.named, from_io("copy", &dst.named.to_string_lossy(), &e)));
     }
+    keep_times(&w, source.as_ref());
     if let Some(carried) = p.tree.as_mut() {
         *carried += done;
     }
@@ -204,7 +206,21 @@ fn copy_dir_at(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError> {
     if let Some(mode) = keep {
         let _ = std::fs::set_permissions(&into_held, std::fs::Permissions::from_mode(mode));
     }
+    // After every child landed, since each one moved the directory's own modification time on.
+    keep_times(&into, from.metadata().ok().as_ref());
     r
+}
+
+// A copy keeps its source's access and modification times, as cp -a, mv and every rival file manager
+// do: stamping today's date on every file lost the one fact a photo folder or an archive is sorted by,
+// and after a move across filesystems the original that still held it is gone. Best effort, because
+// a destination that cannot store them, a FAT stick's two-second clock say, has still been copied.
+fn keep_times(dst: &std::fs::File, src: Option<&std::fs::Metadata>) {
+    let Some(src) = src else { return };
+    let mut times = std::fs::FileTimes::new();
+    if let Ok(t) = src.accessed() { times = times.set_accessed(t); }
+    if let Ok(t) = src.modified() { times = times.set_modified(t); }
+    let _ = dst.set_times(times);
 }
 
 fn copy_dir_entries(src: At, dst: At, p: &mut Progress) -> Result<(), FleaError> {
@@ -275,8 +291,12 @@ pub fn move_any(src: &Path, dst: &Path, p: &mut Progress) -> Result<(), FleaErro
     match crate::backend::renamecompat::rename_noreplace(src, dst) {
         Ok(()) => Ok(()),
         Err(e) if e.raw_os_error() == Some(EXDEV) => {
+            let before = crate::backend::movesource::snapshot(src)?;
             copy_any(src, dst, p)?;
-            remove_any(src)
+            match crate::backend::movesource::remove_copied(src, dst, &before)? {
+                0 => Ok(()),
+                kept => Err(crate::backend::movesource::kept_error(src, kept)),
+            }
         }
         Err(e) => Err(from_io("rename", &dst.to_string_lossy(), &e)),
     }

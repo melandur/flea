@@ -73,4 +73,8 @@ function run(check) {
     check("a CLI that left between the menu and the pick says why",
           LocalSend.missing({ installed: false, reason: "localsend-cli is not installed." }),
           "LocalSend \u00b7 localsend-cli is not installed.")
+
+    check("a peer id pins the address and a sentence names only the device",
+          LocalSend.peerId("Clean Lemon", "192.168.21.23") + "|" + LocalSend.peerName("192.168.21.23 Clean Lemon"),
+          "192.168.21.23 Clean Lemon|Clean Lemon")
 }

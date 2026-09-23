@@ -1,5 +1,6 @@
 // Linux's atomic no-clobber rename, plus the measured mounts that need a safe caller-owned copy fallback.
 use crate::backend::copyfile::{copy_any, remove_any, Progress};
+use crate::backend::movesource;
 use crate::backend::mountinfo::mount_type_in;
 use crate::error::{from_io, FleaError};
 use std::ffi::{c_char, CString};
@@ -95,6 +96,7 @@ pub(crate) fn copy_then_remove(from: &Path, to: &Path) -> Result<(), FleaError> 
     let cancel = AtomicBool::new(false);
     let mut sink = |_: u64, _: u64| {};
     let mut progress = Progress { cancel: &cancel, on_bytes: &mut sink, partial: None, tree: None };
+    let before = movesource::snapshot(from).map_err(rename_error)?;
     if let Err(error) = copy_any(from, to, &mut progress) {
         if progress.partial.as_deref() == Some(to) {
             if let Err(cleanup) = remove_any(to) {
@@ -107,8 +109,10 @@ pub(crate) fn copy_then_remove(from: &Path, to: &Path) -> Result<(), FleaError> 
         }
         return Err(rename_error(error));
     }
-    match remove_any(from) {
-        Ok(()) => Ok(()),
+    // Only what the copy carried goes, so nothing that landed in the source meanwhile is lost with it.
+    match movesource::remove_copied(from, to, &before) {
+        Ok(0) => Ok(()),
+        Ok(kept) => Err(kept_error(from, movesource::kept_error(from, kept))),
         Err(error) => Err(after_failed_removal(from, to, error)),
     }
 }
