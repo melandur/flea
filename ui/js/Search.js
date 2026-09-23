@@ -10,9 +10,11 @@ var OFF = ""
 var TYPING = "typing"
 var RESULTS = "results"
 
-// f opens the query line. The walk does not start here: a subtree walk per keystroke would be a
-// sweep, and the design's own ruling is that enter commits the query.
-function start(root) {
+// Ctrl+F opens the query line over the open folder alone, Ctrl+Shift+F over it and every folder
+// below it. The walk does not start here: a subtree walk per keystroke would be a sweep, and the
+// design's own ruling is that enter commits the query.
+function start(root, deep) {
+    root.searchDeep = deep === true
     root.searchMode = TYPING
 }
 
@@ -24,43 +26,18 @@ function backspace(root) {
     root.searchQuery = root.searchQuery.substring(0, root.searchQuery.length - 1)
 }
 
-// Universal search: the walk covers the whole home directory whenever the pane sits somewhere
-// inside it, and the pane's own directory otherwise, so a search started on a NAS mount searches
-// that mount rather than silently walking home instead. The backend has no notion of home and
-// walks whatever path this picks, see docs/protocol.md "search".
-//
-// Issue 30 wanted the other one, so here is the operator's own answer: with it set the walk stays
-// where the pane is standing. It is a property of this window and not of the application: close()
-// and reveal() below leave it alone, so it holds until it is pressed again or the window closes,
-// and nothing writes it to ui.json.
-function scopeRoot(path, home, here) {
-    if (here === true) {
-        return path
-    }
-    if (home.length === 0) {
-        return path
-    }
-    if (path === home || String(path).indexOf(home + "/") === 0) {
-        return home
-    }
-    return path
-}
-
 // Enter commits: the walk starts and the keyboard goes back to the results, so j/k move again.
 function run(root) {
     if (root.searchQuery.length === 0) {
         close(root)
         return
     }
-    var scope = scopeRoot(root.path, root.home, root.searchHere)
-    // The scope becomes the pane's path because it is the listing's base: every result name is
-    // relative to it, so join, reveal and every per-row facility keep working untouched.
-    // A second search started from the results keeps the first one's origin: the pane's path is
-    // the scope by then, so overwriting this would send esc to home instead of where it began.
+    // The walk is always the folder the pane is standing in, never home and never root: the
+    // operator's ruling of 2026-09-23. The pane's path stays the listing's base, so every result
+    // name is relative to it and join, reveal and every per-row facility keep working untouched.
     if (root.searchFrom.length === 0) {
         root.searchFrom = root.path
     }
-    root.path = scope
     root.searchMode = RESULTS
     root.searchRunning = true
     root.searchScanned = 0
@@ -72,7 +49,7 @@ function run(root) {
     root.cursorIndex = 0
     root.listingState = "loading"
     root.clearSelection()
-    root.backend.search(scope, root.searchQuery, root.showHidden)
+    root.backend.search(root.path, root.searchQuery, root.showHidden, !root.searchDeep)
 }
 
 // Esc stops a running walk and leaves the results up; a second Esc is what returns to the listing.
@@ -84,9 +61,8 @@ function cancel(root) {
     close(root)
 }
 
-// Leaving search re-lists the directory the search was started from, which is not the scope it
-// walked: a home-wide search begun in Downloads returns to Downloads, not to home. No history
-// entry, because entering and leaving a search is not a navigation.
+// Leaving search re-lists the directory the search was started from. No history entry, because
+// entering and leaving a search is not a navigation.
 function close(root) {
     var relist = root.searchMode === RESULTS
     var back = root.searchFrom.length > 0 ? root.searchFrom : root.path
@@ -116,11 +92,10 @@ function typeKey(event, root) {
         backspace(root)
         return true
     }
-    // Issue 30's control: tab flips the scope between the whole home directory and the one the pane
-    // is standing in. It is the only writer, and nothing resets it, so the flip holds for the window;
-    // ui/SearchStrip.qml draws "in <scope>" under the caret, so every search says which one it took.
+    // Tab flips the depth the chord chose, between this folder alone and this folder with every one
+    // below it; ui/SearchStrip.qml draws "in <scope>" beside the caret, so every search says which.
     if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
-        root.searchHere = !root.searchHere
+        root.searchDeep = !root.searchDeep
         return true
     }
     if (event.text.length === 1 && event.text >= " ") {
@@ -197,8 +172,8 @@ function wayOut(running) {
 }
 
 // The rule itself lives in Format.tilde, because the window chrome draws a path through the same one.
-function scope(path, home) {
-    return Format.tilde(path, home)
+function scope(path, home, deep) {
+    return Format.tilde(path, home) + (deep === true ? " and subfolders" : "")
 }
 
 // The status bar's own left half while a search is up, the two lines the canvas draws.

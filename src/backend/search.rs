@@ -12,6 +12,8 @@ pub struct Search {
     // Folded once by Fuzzy, because the comparison runs once per entry and the query never changes mid-walk.
     fuzzy: Fuzzy,
     hidden: bool,
+    // Reads root alone and never descends, which is Ctrl+F's search of the open folder.
+    shallow: bool,
     // Directories still to read, each a path relative to root; the empty string is root itself.
     pending: Vec<String>,
     // One score per pushed match, in push order, so ranking is a permutation of the listing's spans.
@@ -21,11 +23,12 @@ pub struct Search {
 }
 
 impl Search {
-    pub fn new(root: &str, query: &str, hidden: bool) -> Search {
+    pub fn new(root: &str, query: &str, hidden: bool, shallow: bool) -> Search {
         Search {
             root: PathBuf::from(root),
             fuzzy: Fuzzy::new(query),
             hidden,
+            shallow,
             pending: vec![String::new()],
             scores: Vec::new(),
             scanned: 0,
@@ -70,7 +73,7 @@ impl Search {
                 self.scores.push(score);
             }
             // corner: a symlink reports its own type here, so a link to a directory is never descended and no loop is possible.
-            if is_dir {
+            if is_dir && !self.shallow {
                 self.pending.push(child);
             }
         }
@@ -112,7 +115,7 @@ mod tests {
     }
 
     fn walk_all(root: &str, query: &str, hidden: bool) -> (Listing, Search) {
-        let mut s = Search::new(root, query, hidden);
+        let mut s = Search::new(root, query, hidden, false);
         let mut l = Listing::new();
         while !s.step(&mut l) {}
         s.rank(&mut l);
@@ -146,6 +149,22 @@ mod tests {
                 assert!(l.is_dir(i));
             }
         }
+    }
+
+    #[test]
+    fn a_shallow_walk_reads_the_root_alone() {
+        let d = TestDir::new("shallow");
+        d.dir("bench");
+        d.file("bench/bench-run.sh", "");
+        d.file("bench.txt", "");
+
+        let mut s = Search::new(root(&d), "bench", false, true);
+        let mut l = Listing::new();
+        // One directory to read, so the first step is also the last.
+        assert!(s.step(&mut l));
+        s.rank(&mut l);
+        assert_eq!(names(&l), ["bench", "bench.txt"]);
+        assert_eq!(s.scanned, 2);
     }
 
     #[test]
@@ -199,7 +218,7 @@ mod tests {
 
     #[test]
     fn a_missing_root_finishes_with_nothing_rather_than_failing() {
-        let mut s = Search::new("/definitely/not/here", "x", false);
+        let mut s = Search::new("/definitely/not/here", "x", false, false);
         let mut l = Listing::new();
         assert!(s.step(&mut l));
         assert_eq!(l.len(), 0);
@@ -212,7 +231,7 @@ mod tests {
         for i in 0..DIRS_PER_TICK + 3 {
             d.dir(&format!("d{}", i));
         }
-        let mut s = Search::new(root(&d), "zzz", false);
+        let mut s = Search::new(root(&d), "zzz", false, false);
         let mut l = Listing::new();
         // The root read queues every child, so the first step cannot also drain them.
         assert!(!s.step(&mut l));
@@ -220,7 +239,7 @@ mod tests {
 
     #[test]
     fn a_listing_the_walk_did_not_fill_is_never_reordered() {
-        let s = Search::new("/definitely/not/here", "x", false);
+        let s = Search::new("/definitely/not/here", "x", false, false);
         let mut l = Listing::new();
         l.push("b.txt", false);
         l.push("a.txt", false);

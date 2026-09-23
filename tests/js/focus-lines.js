@@ -21,7 +21,7 @@ function queryPane() {
     p.searchMode = ""
     p.searchQuery = ""
     p.searchFrom = ""
-    p.searchHere = false
+    p.searchDeep = false
     p.searchRunning = false
     p.searchScanned = 0
     p.searchCancelled = false
@@ -44,7 +44,9 @@ function queryPane() {
     p.clearSelection = function () { p.picked = {} }
     p.renameEditor = function () { return null }
     p.act = function (action) { Focus.act(action, p) }
-    p.backend = { search: function (path, query, hidden) { p.walked.push(path + "?" + query) } }
+    p.backend = { search: function (path, query, hidden, shallow) {
+        p.walked.push(path + "?" + query + (shallow ? "" : "+deep"))
+    } }
     return p
 }
 
@@ -123,45 +125,37 @@ function run(check) {
     check("and commits the search's walk exactly once, the way the down arrow does",
           committed.join("|"), "results:1")
 
-    // Issue 30's only control is tab on the search's query line, and it was driven straight into
+    // Tab on the search's query line flips the depth, and it was driven straight into
     // Search.typeKey. Nothing said Focus.handleKey routes Qt.Key_Tab there rather than resolving it
     // through Keymap to focusNext, which is what the very same key means one state away.
     var scoping = queryPane()
     scoping.searchMode = "typing"
     scoping.searchQuery = "scr"
     Focus.handleKey(key(Qt.Key_Tab, "\t"), scoping, noRail())
-    check("tab on the search's query line reaches the scope and not the focus switch",
-          scoping.searchHere + "|" + scoping.focusView, "true|list")
+    check("tab on the search's query line reaches the depth and not the focus switch",
+          scoping.searchDeep + "|" + scoping.focusView, "true|list")
     var switching = queryPane()
     Focus.handleKey(key(Qt.Key_Tab, "\t"), switching, noRail())
     check("and with no query line up the same key is the focus switch the sheet draws",
-          switching.searchHere + "|" + switching.focusView, "false|rail")
+          switching.searchDeep + "|" + switching.focusView, "false|rail")
 
-    // ui/js/Search.js says the scope is a property of the window: close() and reveal() leave
-    // searchHere standing on purpose, so it holds until it is pressed again. That is a claim about
-    // state outliving the search that set it, and it was written in a comment and driven by nothing.
-    var sticky = queryPane()
-    sticky.home = "/d"
-    sticky.path = "/d/sub"
-    sticky.searchMode = "typing"
-    sticky.searchQuery = "scr"
-    Focus.handleKey(key(Qt.Key_Tab, "\t"), sticky, noRail())
-    Focus.handleKey(key(Qt.Key_Escape, ""), sticky, noRail())
-    check("escape off the query line closes the search and leaves the scope where tab put it",
-          sticky.searchMode + "|" + sticky.searchHere, "|true")
-    sticky.searchMode = "typing"
-    sticky.searchQuery = "de"
-    Focus.handleKey(key(Qt.Key_Return, ""), sticky, noRail())
-    check("so the next search walks the pane's own directory with no second press",
-          sticky.walked.join(","), "/d/sub?de")
-    // The denominator: without that flip the same fixture walks home, so the check above is not
-    // reading a scope the pane would have chosen anyway.
-    var wide = queryPane()
-    wide.home = "/d"
-    wide.path = "/d/sub"
-    wide.searchMode = "typing"
-    wide.searchQuery = "de"
-    Focus.handleKey(key(Qt.Key_Return, ""), wide, noRail())
-    check("and a window that never pressed tab still walks the whole home directory",
-          wide.walked.join(","), "/d?de")
+    // The operator's ruling of 2026-09-23: Ctrl+F searches the open folder alone, Ctrl+Shift+F it
+    // and its subfolders, and neither ever walks home or root. Driven through the real key route.
+    function chord(shifted) {
+        return { key: Qt.Key_F, text: "", modifiers: Qt.ControlModifier | (shifted ? Qt.ShiftModifier : 0) }
+    }
+    var here = queryPane()
+    here.home = "/d"
+    here.path = "/d/sub"
+    Focus.handleKey(chord(false), here, noRail())
+    here.searchQuery = "de"
+    Focus.handleKey(key(Qt.Key_Return, ""), here, noRail())
+    check("ctrl+f walks the open folder alone, never home", here.walked.join(","), "/d/sub?de")
+    var below = queryPane()
+    below.home = "/d"
+    below.path = "/d/sub"
+    Focus.handleKey(chord(true), below, noRail())
+    below.searchQuery = "de"
+    Focus.handleKey(key(Qt.Key_Return, ""), below, noRail())
+    check("ctrl+shift+f walks the open folder and its subfolders", below.walked.join(","), "/d/sub?de+deep")
 }

@@ -19,18 +19,8 @@ function run(check) {
     check("the home prefix reads as a tilde", Search.scope("/home/gm/Work/claude/flea", "/home/gm"), "~/Work/claude/flea")
     check("home itself is the bare tilde", Search.scope("/home/gm", "/home/gm"), "~")
     check("a path outside home keeps its own form", Search.scope("/usr/share", "/home/gm"), "/usr/share")
-
-    // The scope rule: the backend walks whatever path this picks, so this is the whole of
-    // "universal search across the home folder" and the only place the policy lives.
-    check("a search anywhere under home walks the whole home directory",
-          Search.scopeRoot("/home/u/Downloads/deep", "/home/u"), "/home/u")
-    check("home itself is already the scope", Search.scopeRoot("/home/u", "/home/u"), "/home/u")
-    check("a mount outside home searches the mount, never home instead",
-          Search.scopeRoot("/run/media/u/NAS/photos", "/home/u"), "/run/media/u/NAS/photos")
-    check("a sibling whose name merely starts with home's is outside it",
-          Search.scopeRoot("/home/under", "/home/u"), "/home/under")
-    check("with no home in the environment the pane searches where it stands",
-          Search.scopeRoot("/d", ""), "/d")
+    check("a deep search says it reaches below the folder",
+          Search.scope("/home/gm/Work", "/home/gm", true), "~/Work and subfolders")
 
     // The strip's own right edge, which the board draws as the pair esc really is from here.
     check("the strip says esc stops the walk and then leaves", Search.wayOut(true), "esc cancels, then returns")
@@ -59,11 +49,13 @@ function run(check) {
             searchMode: "typing", searchQuery: query, searchRunning: false, searchScanned: 0,
             searchCancelled: false, path: "/d", showHidden: false, total: 0, held: 0, rows: [],
             kindNames: [], cursorIndex: 0, listingState: "ready", opened: 0, sent: sent,
-            home: "", searchFrom: "", relisted: "", searchHere: false,
+            home: "", searchFrom: "", relisted: "", searchDeep: false,
             clearSelection: function () {},
             open: function (path) { this.opened += 1 },
             openWithoutHistory: function (path) { this.relisted = path },
-            backend: { search: function (path, query, hidden) { sent.push(path + "?" + query) } }
+            backend: { search: function (path, query, hidden, shallow) {
+                sent.push(path + "?" + query + (shallow ? "" : "+deep"))
+            } }
         }
     }
     function press(code, text) { return { key: code, text: text, modifiers: Qt.NoModifier } }
@@ -80,50 +72,50 @@ function run(check) {
     Search.typeKey(press(Qt.Key_Escape, ""), abandoned)
     check("escape abandons the line without re-listing, since no walk ran",
           abandoned.searchMode + "|" + abandoned.searchQuery + "|" + abandoned.opened, "||0")
+    // The operator's ruling of 2026-09-23: the walk is the open folder, never home and never root.
     var underHome = typing("scr")
     underHome.home = "/home/u"
     underHome.path = "/home/u/Downloads"
     Search.typeKey(press(Qt.Key_Return, ""), underHome)
-    check("the walk is sent the home scope, and the pane takes it as its listing base",
-          underHome.sent.join(",") + "|" + underHome.path, "/home/u?scr|/home/u")
+    check("the walk is sent the pane's own folder alone, never home",
+          underHome.sent.join(",") + "|" + underHome.path, "/home/u/Downloads?scr|/home/u/Downloads")
     check("where the search was started from is remembered", underHome.searchFrom, "/home/u/Downloads")
     Search.close(underHome)
     check("leaving the results returns there, and never as a history entry",
           underHome.relisted + "|" + underHome.opened, "/home/u/Downloads|0")
 
     var again = typing("scr")
-    again.home = "/home/u"
     again.path = "/home/u/Downloads"
     Search.typeKey(press(Qt.Key_Return, ""), again)
-    Search.start(again)
+    Search.start(again, true)
     again.searchQuery = "other"
     Search.typeKey(press(Qt.Key_Return, ""), again)
-    check("a second search from the results still remembers the first one's origin",
-          again.searchFrom, "/home/u/Downloads")
+    check("a second search from the results walks the same folder",
+          again.sent.join(","), "/home/u/Downloads?scr,/home/u/Downloads?other+deep")
     Search.close(again)
-    check("so esc returns where the operator began, not to the scope",
-          again.relisted, "/home/u/Downloads")
+    check("so esc returns where the operator began", again.relisted, "/home/u/Downloads")
 
-    // Issue 30: the scope is chosen on the query line itself rather than in the settings, because it
-    // belongs to this search and not to the application; the strip's own "in <scope>" is the readout,
-    // and nothing is persisted, which is the whole reason this needs no settings row.
-    check("with the scope set to here the walk stays in the pane's own directory",
-          Search.scopeRoot("/home/u/Downloads/deep", "/home/u", true), "/home/u/Downloads/deep")
-    check("and with it off the walk is still the whole home directory",
-          Search.scopeRoot("/home/u/Downloads/deep", "/home/u", false), "/home/u")
+    // Ctrl+F is this folder, Ctrl+Shift+F this folder and every one below it.
+    var shallow = typing("")
+    Search.start(shallow, false)
+    check("the plain chord opens a search of the folder alone", shallow.searchDeep, false)
+    var deep = typing("")
+    Search.start(deep, true)
+    check("the shifted chord opens a search of its subfolders too", deep.searchDeep, true)
+
+    // Tab on the query line flips the depth the chord chose, and the strip's "in <scope>" reads it.
     var here = typing("scr")
-    here.home = "/home/u"
     here.path = "/home/u/Downloads"
     Search.typeKey(press(Qt.Key_Tab, "\t"), here)
-    check("tab on the query line points the walk at the directory the pane is in", here.searchHere, true)
+    check("tab on the query line reaches into the subfolders", here.searchDeep, true)
     // Both presses land while the line still has the caret, which is the only state ui/js/Focus.js
     // handleKey routes to typeKey at all: after enter the mode is results and the key is the rail's.
     Search.typeKey(press(Qt.Key_Backtab, "\t"), here)
-    check("and the key flips back, so home is one press away again", here.searchHere, false)
+    check("and the key flips back to the folder alone", here.searchDeep, false)
     Search.typeKey(press(Qt.Key_Tab, "\t"), here)
     Search.typeKey(press(Qt.Key_Return, ""), here)
-    check("and the walk goes there instead of to home",
-          here.sent.join(",") + "|" + here.path, "/home/u/Downloads?scr|/home/u/Downloads")
+    check("and the walk descends from the same folder",
+          here.sent.join(",") + "|" + here.path, "/home/u/Downloads?scr+deep|/home/u/Downloads")
 
     var blank = typing("")
     Search.typeKey(press(Qt.Key_Return, ""), blank)

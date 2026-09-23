@@ -55,11 +55,11 @@ FocusScope {
     property string keySequenceIdentity: ""
     // "" off, "typing" while the query line has the keyboard, "results" once a walk was asked for; ui/js/Search.js owns every transition.
     property string searchMode: ""
-    // Where the search was started from, which a home-wide walk leaves behind; see ui/js/Search.js.
+    // Where the search was started from, which esc re-lists; see ui/js/Search.js.
     property string searchFrom: ""
     property string searchQuery: ""
-    // Issue 30: which scope the next walk takes, flipped by tab on the query line; see ui/js/Search.js.
-    property bool searchHere: false
+    // Whether the walk descends below the open folder: Ctrl+Shift+F sets it, Ctrl+F clears it, tab on the query line flips it.
+    property bool searchDeep: false
     property bool searchRunning: false
     property bool searchCancelled: false
     // The query narrowing the listing in place, and whether its line still has the keyboard;
@@ -477,7 +477,7 @@ FocusScope {
         onMenuRequested: function (pos) { menu.openForHeader(pos) }
         searchMode: root.searchMode
         searchQuery: root.searchQuery
-        searchScope: Search.scope(Search.scopeRoot(root.path, root.home, root.searchHere), root.home)
+        searchScope: Search.scope(root.path, root.home, root.searchDeep)
         searchNote: Search.note(root.total, root.searchRunning, root.searchCancelled)
         searchWayOut: Search.wayOut(root.searchRunning)
     }

@@ -46,11 +46,17 @@ fn parses_each_request_shape() {
         _ => panic!("expected Sort"),
     }
     match parse_request(r#"{"c":"search","path":"/home/gm","query":"bench","hidden":true}"#) {
-        Request::Search { path, query, hidden } => {
+        Request::Search { path, query, hidden, shallow } => {
             assert_eq!(path, "/home/gm");
             assert_eq!(query, "bench");
             assert!(hidden);
+            // A client that never names shallow still walks the whole subtree.
+            assert!(!shallow);
         }
+        _ => panic!("expected Search"),
+    }
+    match parse_request(r#"{"c":"search","path":"/home/gm","query":"bench","shallow":true}"#) {
+        Request::Search { shallow, .. } => assert!(shallow),
         _ => panic!("expected Search"),
     }
     match parse_request(r#"{"c":"mkdir","path":"/home/gm","name":"New Folder"}"#) {

@@ -11,7 +11,8 @@ pub enum Request {
     Window { start: usize, count: usize },
     // desc rides the list request itself, so the sort request's own copy is read by its tests alone.
     Sort { by: String, #[cfg_attr(not(test), allow(dead_code))] desc: bool },
-    Search { path: String, query: String, hidden: bool },
+    // shallow reads path alone rather than its subtree; a missing one walks the subtree, as before it existed.
+    Search { path: String, query: String, hidden: bool, shallow: bool },
     // Unlike thumbcancel there is no rows form: one walk runs at a time, so a cancel can only mean that one.
     SearchCancel,
     Thumb { rows: Vec<usize> },
@@ -88,6 +89,7 @@ pub fn parse_request(line: &str) -> Request {
             path: field_str(line, "path").unwrap_or_default(),
             query: field_str(line, "query").unwrap_or_default(),
             hidden: field_bool(line, "hidden"),
+            shallow: field_bool(line, "shallow"),
         },
         Some("searchcancel") => Request::SearchCancel,
         Some("thumb") => Request::Thumb { rows: field_usize_array(line, "rows") },

@@ -513,7 +513,7 @@ class Native:
         self.key("-M", "ctrl", "-k", "f", "-m", "ctrl")
         self.snapshot("search-editor", lambda text: "search:" in text and "Tab changes scope" in text)
         self.key("-k", "Tab")
-        self.snapshot("search-current-scope", lambda text: "search:" in text and "in " + str(self.case / "listing") in text)
+        self.snapshot("search-deep-scope", lambda text: "search:" in text and "in " + str(self.case / "listing") + " and subfolders" in text)
         self.key("needleproof")
         self.key("-k", "Return")
         self.snapshot("search-result", lambda text: "Search: 1 matches" in text and "delta-needleproof.txt" in text)

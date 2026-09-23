@@ -431,12 +431,9 @@ pub fn draw(
                 .into()
         } else if editor.kind == "search" {
             format!(
-                " · in {} · Tab changes scope",
-                if m.search_here {
-                    path.clone()
-                } else {
-                    "Home".into()
-                }
+                " · in {}{} · Tab changes scope",
+                path,
+                if m.search_deep { " and subfolders" } else { "" }
             )
         } else {
             String::new()

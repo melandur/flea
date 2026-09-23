@@ -7,7 +7,7 @@
 // the separator that follows it, so the pieces concatenate to exactly the one line they replace;
 // path is the directory the piece names, which is what ui/ChromeBar.qml hands to pathEntered. The
 // home test is the whole-component one, home itself or home and a separator, which ui/js/Format.js
-// tilde and ui/js/Search.js scopeRoot now both make too: a sibling like /home/gmx is not inside home.
+// tilde now makes too: a sibling like /home/gmx is not inside home.
 function crumbs(path, home) {
     var text = String(path)
     var base = String(home)

@@ -210,7 +210,7 @@ Press **?** for the full keymap, or **,** to change settings.
 | Reload this folder | `F5` |
 | New folder / new file | `Ctrl+N` / `Ctrl+M` |
 | Show or hide hidden files | `Ctrl+H` |
-| Search | `Ctrl+F` |
+| Search this folder / this folder and its subfolders | `Ctrl+F` / `Ctrl+Shift+F` (`Tab` on the line flips it) |
 | Show or hide the sidebar | `Ctrl+G` |
 | Split the window in two, or join it | `Ctrl+T` (the new pane takes the keyboard) |
 | Context menu | `m`, `Menu` or `Shift+F10` |

@@ -208,20 +208,22 @@ Settings value. `mode` is not a supported sort key.
 
 ### search
 
-`{"c":"search","path":"<string>","query":"<string>","hidden":<bool>}`
+`{"c":"search","path":"<string>","query":"<string>","hidden":<bool>,"shallow":<bool>}`
 
 Example: `{"c":"search","path":"/home/gm","query":"dwnhelp","hidden":false}`
 
-Walks the whole subtree under `path` and streams every entry whose path relative to `path`
+Walks the whole subtree under `path`, or with `shallow` true reads `path` alone and descends
+nothing, and streams every entry whose path relative to `path`
 contains `query` as a case-insensitive subsequence, into a fresh listing that replaces the
 current one. The match is fuzzy rather than a substring, and it runs over the whole relative
 path rather than the base name, so `dwnhelp` finds `downloads/helper.txt`. `hidden` follows
 `list`'s rule exactly: `false`, or missing, drops dot-prefixed names before they are
 counted or descended, so a `.git` costs one `readdir` entry and nothing more.
 
-`path` is whatever the client asks for, and the backend walks exactly that and nothing else:
-a client searching a whole home directory sends home as the `path`, and one searching a mount
-sends the mount. The backend has no notion of home and no scope of its own.
+`path` is whatever the client asks for, and the backend walks exactly that and nothing else. The
+GUI and the TUI both send the folder the pane is standing in, with `shallow` true for Ctrl+F and
+false for Ctrl+Shift+F. The backend has no notion of home and no scope of its own. A missing
+`shallow` is false, so a client that never names it walks the subtree as it always did.
 
 **Results are ranked, and the rank is what makes a subsequence match usable.** A subsequence
 over a hundred thousand entries matches far too much to read, so every match carries a score

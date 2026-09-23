@@ -35,6 +35,7 @@ function run(check) {
     key("X", "", ctrl, "cut")
     key("Z", "", ctrl, "undo")
     key("F", "", ctrl, "search")
+    key("F", "", ctrl | shift, "searchDeep")
     key("B", "", ctrl, "copypath")
     key("G", "", ctrl, "sidebar")
     key("T", "", ctrl, "toggleDual")
@@ -201,6 +202,6 @@ function run(check) {
     check("every effective binding resolves to the action it advertises", effective.every(function (row) {
         return Keymap.lookupFor("default", row.keycode, row.text, row.mask, "listing", "gui") === row.action
     }), true)
-    check("and the table is the size the strip left it, plus the split's chord, the creation trio, Select all and F5",
-          effective.length, 28)
+    check("and the table is the size the strip left it, plus the split's chord, the creation trio, Select all, F5 and the deep search",
+          effective.length, 29)
 }

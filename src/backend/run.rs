@@ -251,7 +251,7 @@ fn handle_line(
             write_window(out, st, start, count, tb);
             out.flush().ok();
         }
-        Request::Search { path, query, hidden } => {
+        Request::Search { path, query, hidden, shallow } => {
             if finish_search(out, st, true) {
                 forget_rows(st, pool);
             }
@@ -262,7 +262,7 @@ fn handle_line(
             forget_rows(st, pool);
             // The client is told at once that its old rows are gone, then the count grows as matches arrive.
             writeln!(out, "{}", listed_line(0, 0.0, 0.0, dev_of(&st.base), &st.base.to_string_lossy())).ok();
-            st.search = Some(Search::new(&path, &query, hidden));
+            st.search = Some(Search::new(&path, &query, hidden, shallow));
             st.search_reported = Instant::now();
             out.flush().ok();
         }

@@ -349,7 +349,10 @@ fn act(m: &mut Model, action: &str, w: &mut Wire) -> io::Result<()> {
             m.completion = m.completer.request("", &m.path);
         }
         "filter" => m.editor = Some(Editor::new("filter", m.filter.clone(), m.path.clone())),
-        "search" => m.editor = Some(Editor::new("search", String::new(), m.path.clone())),
+        "search" | "searchDeep" => {
+            m.search_deep = action == "searchDeep";
+            m.editor = Some(Editor::new("search", String::new(), m.path.clone()));
+        }
         "rename" => {
             if m.selected.len() > 1 {
                 m.action_id = m.action_id.wrapping_add(1).max(1);
@@ -934,10 +937,7 @@ fn edit(m: &mut Model, key: &Key, w: &mut Wire) -> io::Result<()> {
                 if m.search_from.is_none() {
                     m.search_from = Some(m.path.clone());
                 }
-                let home = PathBuf::from(std::env::var("HOME").unwrap_or_default());
-                if !m.search_here && home.is_absolute() && m.path.starts_with(&home) {
-                    m.path = home;
-                }
+                // The walk is always the open folder: never home, never root.
                 m.invalidate_rows();
                 m.cursor = 0;
                 m.top = 0;
@@ -950,6 +950,7 @@ fn edit(m: &mut Model, key: &Key, w: &mut Wire) -> io::Result<()> {
                     ("path", word(&m.path.to_string_lossy())),
                     ("query", word(value)),
                     ("hidden", Json::Bool(m.hidden)),
+                    ("shallow", Json::Bool(!m.search_deep)),
                 ])?;
             }
             "rename" => {
@@ -978,7 +979,7 @@ fn edit(m: &mut Model, key: &Key, w: &mut Wire) -> io::Result<()> {
             editor.replace(m.completion.clone());
         }
     } else if key.name == "Tab" && kind == "search" {
-        m.search_here = !m.search_here;
+        m.search_deep = !m.search_deep;
     } else {
         editor.update(key);
     }

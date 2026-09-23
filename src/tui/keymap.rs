@@ -197,6 +197,7 @@ fn supported(action: &str) -> bool {
             | "pathBar"
             | "filter"
             | "search"
+            | "searchDeep"
             | "rename"
             | "newFolder"
             | "newFile"

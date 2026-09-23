@@ -146,8 +146,8 @@ Item {
     }
 
     // The walk replaces the current listing with its matches, each named relative to path; see docs/protocol.md "search".
-    function search(path, query, hidden) {
-        root.send({ c: "search", path: path, query: query, hidden: hidden })
+    function search(path, query, hidden, shallow) {
+        root.send({ c: "search", path: path, query: query, hidden: hidden, shallow: shallow === true })
     }
 
     // No rows form, unlike thumbcancel: one walk runs at a time, so a cancel can only mean that one.

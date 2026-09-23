@@ -124,7 +124,7 @@ function act(action, root, menuId, paths) {
     case "selectAll": root.selectAll(); return
     // A walk replaces the listing the filter was narrowing, so the filter goes before the query line
     // does: leaving it up would hide every result that did not happen to match it.
-    case "search": Filter.close(root); Search.start(root); return
+    case "search": case "searchDeep": Filter.close(root); Search.start(root, action === "searchDeep"); return
     case "filter": Filter.start(root); return
     case "reveal": Search.reveal(root); return
     // The write operations; every one of them is reversible with undo, so none of them confirms.

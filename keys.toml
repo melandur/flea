@@ -79,6 +79,12 @@ action = "toggleHidden"
 # pages. Shift+period is delivered as Greater on a US layout and as Period elsewhere, so both rows
 # name the one action.
 
+# Ctrl+F searches the open folder alone and Ctrl+Shift+F that folder and every one below it, the
+# operator's ruling of 2026-09-23. Neither ever walks home or root.
+[[ctrlshift]]
+key = "F"
+action = "searchDeep"
+
 # Bindings on the key code, for the keys that carry no printable character. The four arrows lead the
 # table: they are the navigation the Default preset has and the only navigation it has, so they are
 # the spelling the keymap sheet should reach for first.
@@ -183,7 +189,7 @@ action = "keymapSheet"
 move = ["cursorDown", "cursorUp", "open", "parent", "pageForward", "focusNext", "escape",
         "toggleSelect", "selectAll"]
 look = ["preview", "sidebar", "toggleDual", "toggleHidden", "mute", "keymapSheet", "refresh"]
-find = ["search"]
+find = ["search", "searchDeep"]
 change = ["copy", "cut", "paste", "copypath", "rename", "trash", "undo", "newFolder", "newFile",
           "menu", "settings"]
 
@@ -233,9 +239,9 @@ action = "selectAll"
 label = "select all"
 
 [[sheet]]
-keys = "^f"
+keys = "^f ^F"
 action = "search"
-label = "find"
+label = "find / deep"
 
 [[sheet]]
 keys = "tab"

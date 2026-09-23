@@ -83,7 +83,8 @@ pub struct Model {
     pub search_query: String,
     pub searching: bool,
     pub search_from: Option<PathBuf>,
-    pub search_here: bool,
+    // Ctrl+Shift+F walks the subtree; Ctrl+F reads the open folder alone. Tab on the line flips it.
+    pub search_deep: bool,
     pub transfer: String,
     pub pending_clipboard: bool,
     pub clipboard: Vec<String>,
@@ -198,7 +199,7 @@ impl Model {
             search_query: String::new(),
             searching: false,
             search_from: None,
-            search_here: false,
+            search_deep: false,
             transfer: String::new(),
             pending_clipboard: false,
             clipboard: Vec::new(),
@@ -319,7 +320,8 @@ impl Model {
             self.search = "Search: refreshing".into();
             self.invalidate_rows();
             wire.send(vec![("c", word("search")), ("path", word(&self.path.to_string_lossy())),
-                ("query", word(&self.search_query)), ("hidden", Json::Bool(self.hidden))])
+                ("query", word(&self.search_query)), ("hidden", Json::Bool(self.hidden)),
+                ("shallow", Json::Bool(!self.search_deep))])
         } else { self.open(self.path.clone(), wire) }
     }
     pub fn window(&mut self, wire: &mut Wire) -> io::Result<()> {
