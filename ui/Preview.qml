@@ -8,8 +8,9 @@ import "js/Motion.js" as Motion
 Item {
     id: root
     anchors.fill: parent
-    // active flips instantly, so the IPC read never races the close fade; visible outlives it until surface's own opacity finishes.
-    visible: root.active || surface.opacity > 0
+    // Close is instant, the operator's ruling of 2026-09-23 ("full view faster and snappier, and also
+    // full view esc exit"): its fade kept a shrinking, emptied surface up after Escape. Only open moves.
+    visible: root.active
     z: 1
 
     property bool active: false
@@ -40,8 +41,7 @@ Item {
         if (root.kind === "text") return textPane.bodyItem
         return null
     }
-    function mediaLoaded() { return mediaLoader.item !== null }
-    function textShown() { return textPane.shownText() }
+    function mediaLoaded() { return mediaLoader.item !== null } function textShown() { return textPane.shownText() }
     function archiveNames() { return root.archiveMeta && root.archiveMeta.names ? root.archiveMeta.names.map(function (e) { return e.n }).join("|") : "" }
     // Expanded is the overlay's own state and not the PDF's, the 2026-09-18 ruling that every kind
     // behaves the same way: before it, the filled window existed for a PDF alone and no key reached
@@ -70,10 +70,9 @@ Item {
     property string pendingIcon: ""
     property string pendingKind: ""
     property int pendingSize: 0
-    // The settle idiom Pane's own thumbnail request reuses: a held j/k costs zero reloads until the cursor rests.
+    // follow()'s cooldown: the first step loads at once, and a held j/k costs zero reloads until the cursor rests.
     readonly property int followSettleMs: 120
-    // The same dim ui/SettingsPanel.qml lays over the listing.
-    readonly property real groundOpacity: 0.5
+    readonly property real groundOpacity: 0.5 // the same dim ui/SettingsPanel.qml lays over the listing
 
     // Read through to PreviewMedia so this file never imports QtMultimedia, and 0 before the loader has an item.
     readonly property int position: (root.isMedia && mediaLoader.item) ? mediaLoader.item.position : 0
@@ -98,9 +97,7 @@ Item {
     function seekTo(ms) { if (root.isMedia && mediaLoader.item) mediaLoader.item.seekTo(ms) }
 
     // Relative seek in ms, Left/Right's own shape; seekTo does the clamping.
-    function seek(deltaMs) {
-        root.seekTo(root.position + deltaMs)
-    }
+    function seek(deltaMs) { root.seekTo(root.position + deltaMs) }
 
     // The PDF viewer's three actions come through this file, so ui/js/Focus.js never learns a Loader item answers them.
     function turnPage(delta) { if (root.isPdf && pdfLoader.item) pdfLoader.item.turn(delta) }
@@ -138,23 +135,23 @@ Item {
     }
 
     function follow(newPath, newIcon, newSize, newKind) {
-        root.pendingPath = newPath
-        root.pendingIcon = newIcon
-        root.pendingSize = newSize
-        root.pendingKind = newKind
+        if (!followSettle.running) { followSettle.start(); root.pendingPath = ""; root.load(newPath, newIcon, newSize, newKind); return }
+        root.pendingPath = newPath; root.pendingIcon = newIcon
+        root.pendingSize = newSize; root.pendingKind = newKind
         followSettle.restart()
     }
 
-    // Dropping the loader's source is what stops playback: media dies with the loader.
+    // Dropping the loader's source is what stops playback: media dies with the loader. The surface is
+    // emptied before expanded drops, so leaving the filled window re-lays out and re-renders nothing.
     function close() {
         followSettle.stop()
         stripHideTimer.stop()
         root.active = false
-        root.expanded = false
         root.kind = ""
         mediaLoader.source = ""
         pdfLoader.source = ""
         imageLoader.source = ""
+        root.expanded = false
         root.archiveMeta = null
         root.archiveRow = -1
         root.mediaRate = 0
@@ -223,7 +220,7 @@ Item {
         id: followSettle
         interval: root.followSettleMs
         repeat: false
-        onTriggered: root.load(root.pendingPath, root.pendingIcon, root.pendingSize, root.pendingKind)
+        onTriggered: if (root.pendingPath.length > 0 && root.pendingPath !== root.path) root.load(root.pendingPath, root.pendingIcon, root.pendingSize, root.pendingKind)
     }
 
     Timer {
@@ -253,10 +250,7 @@ Item {
         anchors.fill: parent
         color: Theme.color.background
         opacity: root.active ? root.groundOpacity : 0
-        Behavior on opacity {
-            enabled: !Theme.reducedMotion
-            NumberAnimation { duration: root.active ? Motion.durMs.open : Motion.durMs.close }
-        }
+        Behavior on opacity { enabled: root.active && !Theme.reducedMotion; NumberAnimation { duration: Motion.durMs.open } }
     }
 
     Rectangle {
@@ -264,7 +258,7 @@ Item {
         anchors.centerIn: parent
         border.width: Theme.spacing.hairline
         border.color: Theme.color.muted
-        // Open rises into place and close only fades, faster, because the translation is enabled: root.active.
+        // Open rises and fades into place; every Behavior is enabled: root.active, so close animates nothing.
         anchors.verticalCenterOffset: root.active ? 0 : Motion.translateUpPx
         opacity: root.active ? 1 : 0
         // Expand drops the Quick Look inset, which is the whole of the canvas's "expand fills the window".
@@ -279,14 +273,9 @@ Item {
             enabled: root.active && !Theme.reducedMotion
             NumberAnimation { duration: Motion.durMs.open; easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.bezierCurve }
         }
-
         Behavior on opacity {
-            enabled: !Theme.reducedMotion
-            NumberAnimation {
-                duration: root.active ? Motion.durMs.open : Motion.durMs.close
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: Motion.bezierCurve
-            }
+            enabled: root.active && !Theme.reducedMotion
+            NumberAnimation { duration: Motion.durMs.open; easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.bezierCurve }
         }
 
         Flea.PreviewText {
@@ -310,11 +299,17 @@ Item {
             }
         }
 
-        // source rather than sourceComponent, so a file is decoded only while an image is open and its texture goes with the item.
+        // source rather than sourceComponent, so a file is decoded only while an image is open and its texture goes with the item;
+        // decoded at the window's size, not the inset's, so filling the window scales the frame rather than decoding it again,
+        // and that box is bound before the path, because the path starts the decode and a box landing after it decodes twice.
         Loader {
             id: imageLoader
             anchors.fill: parent
-            onLoaded: item.path = Qt.binding(function () { return root.path })
+            onLoaded: {
+                item.decodeWidth = Qt.binding(function () { return root.width })
+                item.decodeHeight = Qt.binding(function () { return root.height })
+                item.path = Qt.binding(function () { return root.path })
+            }
         }
 
         // The canvas's PdfViewer, source not sourceComponent, so QtQuick.Pdf loads on the first PDF and never for a folder without one.

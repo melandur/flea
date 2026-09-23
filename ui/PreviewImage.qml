@@ -9,13 +9,21 @@ Item {
     id: root
 
     property string path: ""
+    // The box the file is decoded to fit. ui/Preview.qml binds it to the whole window, so filling the
+    // window only scales the frame already decoded, where binding it to the inset re-decoded the file
+    // and blanked the surface on every Space and every Escape out of it.
+    property real decodeWidth: root.width
+    property real decodeHeight: root.height
+    // The path whose frame is on screen: a re-decode for a new window size keeps drawing it, so only a
+    // new file ever reads as loading.
+    property string shownPath: ""
 
     // The same name the media and PDF panes give their unreadable state, so Preview.qml tests one property.
     readonly property bool failed: picture.status === Image.Error
     // Every state is terminal: a decode ends Ready or Error, and a vanished file ends Error too.
     readonly property string status: {
         if (root.failed) return "This image could not be read."
-        return picture.status === Image.Ready ? "image" : "loading"
+        return picture.status === Image.Ready || root.shownPath === root.path ? "image" : "loading"
     }
     readonly property string name: root.path.substring(root.path.lastIndexOf("/") + 1)
 
@@ -28,17 +36,19 @@ Item {
     Image {
         id: picture
         anchors.fill: parent
-        visible: picture.status === Image.Ready
+        visible: picture.status === Image.Ready || (picture.status === Image.Loading && root.shownPath === root.path)
+        onStatusChanged: if (picture.status === Image.Ready) root.shownPath = root.path
         // Format.fileUri, not a concatenation: a # or a ? in the name would truncate a hand-built URI.
         source: root.path.length > 0 ? Format.fileUri(root.path) : ""
         fillMode: Image.PreserveAspectFit
         asynchronous: true
+        retainWhileLoading: true
         cache: false
-        // Decoded no larger than the surface: the same 6016x3900 PNG is 94 MB of texture at full size
+        // Decoded no larger than the window: the same 6016x3900 PNG is 94 MB of texture at full size
         // and 8 MB bound to this box's 2099x1156 surface, measured, for 17 ms more decode.
         // corner: a zero here means unbounded to Qt, so the floor is 1 and never 0.
-        sourceSize.width: Math.max(1, Math.round(root.width))
-        sourceSize.height: Math.max(1, Math.round(root.height))
+        sourceSize.width: Math.max(1, Math.round(root.decodeWidth))
+        sourceSize.height: Math.max(1, Math.round(root.decodeHeight))
     }
 
     // A failed decode is a mark and a sentence, never a bare ground: the blank-frame class again otherwise.

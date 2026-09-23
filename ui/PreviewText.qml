@@ -65,7 +65,8 @@ Item {
         Text {
             id: body
             width: parent.width
-            text: file.text()
+            // Emptied as the preview closes, so the window it leaves never re-wraps a whole file.
+            text: root.active ? file.text() : ""
             // For ui/Ipc.qml: the drawn body, its box and its text, so a test counts pixels where the words are.
             readonly property Item bodyItem: body
             // MarkdownText resolves inline image references, so a downloaded README would fetch from

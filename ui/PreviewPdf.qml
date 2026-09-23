@@ -31,7 +31,7 @@ Item {
 
     // A new document starts at its first page, whatever page the last one was left on, and its own
     // opening waits for the cursor to settle, which is issue 117 below.
-    onPathChanged: { root.page = 0; pdfSettle.restart() }
+    onPathChanged: { root.page = 0; root.settle() }
     onPageCountChanged: if (root.pageCount > 0) root.page = Math.min(root.page, root.pageCount - 1)
 
     function turn(delta) {
@@ -45,7 +45,13 @@ Item {
     // folder of PDFs settles before a document is opened rather than opening one per cursor step.
     property string opened: ""
     readonly property int settleMs: 120
-    onActiveChanged: pdfSettle.restart()
+    onActiveChanged: root.settle()
+    // The race needs a document already open, so the first one of this reader opens at once: the
+    // settle only ever delays a switch, never Right on a PDF.
+    function settle() {
+        if (root.opened.length === 0 && root.active && root.path.length > 0) { pdfSettle.stop(); root.opened = root.path }
+        else pdfSettle.restart()
+    }
     Timer {
         id: pdfSettle
         interval: root.settleMs
@@ -79,6 +85,11 @@ Item {
         currentFrame: Math.min(root.page, Math.max(0, root.pageCount - 1))
         fillMode: Image.PreserveAspectFit
         asynchronous: true
+        // A re-render for a new width or page keeps drawing the old raster until the new one lands, so
+        // filling the window sharpens the page instead of blanking it; a new document starts bare.
+        retainWhileLoading: page.retainFor === root.opened
+        property string retainFor: ""
+        onStatusChanged: if (page.status === Image.Ready) page.retainFor = root.opened
         // Fit inside the frame without ever upscaling past the page's own resolution.
         width: Math.min(parent.width, parent.height * root.pageAspect)
         height: Math.min(parent.height, parent.width / root.pageAspect)
