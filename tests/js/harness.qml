@@ -35,6 +35,7 @@ import "pathbar.js" as PathBarSuite
 import "phones.js" as PhonesSuite
 import "picker.js" as PickerSuite
 import "previewkeys.js" as PreviewKeysSuite
+import "textchunks.js" as TextChunksSuite
 import "places.js" as PlacesSuite
 import "rail.js" as RailSuite
 import "placemenu.js" as PlaceMenuSuite
@@ -97,7 +98,7 @@ Item {
             ["palette", PaletteSuite], ["pathbar", PathBarSuite], ["places", PlacesSuite], ["placemenu", PlaceMenuSuite], ["rail", RailSuite], ["scripts", ScriptsSuite],
             ["phones", PhonesSuite],
             ["picker", PickerSuite],
-            ["previewkeys", PreviewKeysSuite],
+            ["previewkeys", PreviewKeysSuite], ["textchunks", TextChunksSuite],
             ["protocols", ProtocolsSuite], ["railkeys", RailKeysSuite],
             ["recent", RecentSuite],
             ["renderer", RendererSuite],
