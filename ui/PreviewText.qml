@@ -11,7 +11,16 @@ Item {
 
     // FileView reads the whole file into memory, so this is the largest read a preview will start.
     readonly property int maxBytes: 1048576
-    readonly property bool tooLarge: root.size > root.maxBytes
+    // Right on the refusal lifts the gate up to this ceiling: laying out plain text blocks the UI
+    // thread, measured at 1.6 s for 4 MiB, 3 s for 16 MiB and 12 s for 64 MiB, so past it no key
+    // loads the file at all.
+    readonly property int forceMaxBytes: 16777216
+    property bool forced: false
+    readonly property bool forcible: root.size <= root.forceMaxBytes
+    readonly property bool tooLarge: root.size > (root.forced ? root.forceMaxBytes : root.maxBytes)
+    onPathChanged: root.forced = false
+    onActiveChanged: if (!root.active) root.forced = false
+    function loadAnyway() { if (root.tooLarge && root.forcible) root.forced = true }
     property bool readFailed: false
 
     readonly property Item bodyItem: body
@@ -69,13 +78,28 @@ Item {
         }
     }
 
-    Text {
+    Column {
         anchors.centerIn: parent
         visible: root.tooLarge || root.readFailed
-        text: root.status
-        color: Theme.color.muted
-        font.family: Theme.font.family
-        font.pixelSize: Theme.font.body
-        textFormat: Text.PlainText
+        spacing: Theme.spacing.gap
+
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: root.status
+            color: Theme.color.muted
+            font.family: Theme.font.family
+            font.pixelSize: Theme.font.body
+            textFormat: Text.PlainText
+        }
+
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: root.tooLarge && root.forcible
+            text: "Press right to load it anyway."
+            color: Theme.color.muted
+            font.family: Theme.font.family
+            font.pixelSize: Theme.font.caption
+            textFormat: Text.PlainText
+        }
     }
 }

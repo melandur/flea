@@ -109,6 +109,10 @@ Item {
 
     function toggleExpand() { root.expanded = !root.expanded }
 
+    // A text file over the preview's gate that Right can still load, and the load itself.
+    readonly property bool textRefused: root.kind === "text" && textPane.tooLarge && textPane.forcible
+    function loadAnyway() { textPane.loadAnyway() }
+
     // The expanded surface's Up and Down: each kind scrolls whatever it has, and a fitted image has
     // no overflow at all while a media file's own axis is the playhead Left and Right already move.
     function scrollPage(delta) {

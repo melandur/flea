@@ -85,7 +85,10 @@ function act(action, root) {
         if (root.preview.isMedia) root.preview.seek(-SEEK_MS)
         else root.preview.turnPage(-1)
         return
+    // A text file refused for size is the one exception to both states: Right loads it anyway, and
+    // the next Right is the ordinary one.
     case "previewForward":
+        if (root.preview.textRefused) { root.preview.loadAnyway(); return }
         if (!expanded) { root.preview.toggleExpand(); return }
         if (root.preview.isMedia) root.preview.seek(SEEK_MS)
         else root.preview.turnPage(1)

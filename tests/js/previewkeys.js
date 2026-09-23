@@ -49,8 +49,11 @@ function run(check) {
             scrollPage: function (delta) { pane.scrolled += delta },
             turnPage: function (delta) { pane.pages += delta },
             seek: function (ms) { pane.seeked += ms },
-            follow: function () { pane.followed += 1 }
+            follow: function () { pane.followed += 1 },
+            textRefused: false,
+            loadAnyway: function () { pane.forced += 1; pane.preview.textRefused = false }
         }
+        pane.forced = 0
         return pane
     }
 
@@ -119,6 +122,17 @@ function run(check) {
     var still = previewPane("image", true)
     PreviewKeys.act("previewForward", still)
     check("the pair asks an expanded image for nothing it cannot do", still.seeked + still.closed + still.expands, 0)
+
+    // A text file refused for size: Right loads it anyway in either state, then means what it always did.
+    for (var refusedExpanded of [false, true]) {
+        var refused = previewPane("text", refusedExpanded)
+        refused.preview.textRefused = true
+        PreviewKeys.act("previewForward", refused)
+        check("right loads a refused text file anyway, expanded=" + refusedExpanded, refused.forced, 1)
+        check("and that press changes nothing else", refused.expands + refused.closed + refused.pages, 0)
+        PreviewKeys.act("previewForward", refused)
+        check("and the next right is the ordinary one", refused.forced * 10 + refused.expands, refusedExpanded ? 10 : 11)
+    }
 
     // Space no longer plays, so p does, and only where there is something to play.
     var playing = previewPane("audio")
