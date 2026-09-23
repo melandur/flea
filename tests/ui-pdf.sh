@@ -75,7 +75,7 @@ pdf_controls() {
     pdf_expect "$overlay" '.page == 1' "Left pages back"
     if [[ "$overlay" == true ]]; then
         key -k space >/dev/null
-        [[ "$(ipc previewExpanded)" == false ]] || fail "PDF space did not bring the inset surface back"
+        [[ "$(ipc previewExpanded)" == true ]] || fail "PDF space left the filled window"
     fi
     key '+' >/dev/null
     pdf_expect "$overlay" '.zoom == 1.25' "plus zooms in"

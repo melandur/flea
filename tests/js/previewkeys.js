@@ -79,10 +79,10 @@ function run(check) {
         PreviewKeys.act("preview", spaced)
         check("space fills the window on a " + kind + " preview", spaced.expands + (spaced.preview.expanded ? 10 : 0), 11)
         PreviewKeys.act("preview", spaced)
-        check("and space again brings the inset one back", spaced.expands + (spaced.preview.expanded ? 10 : 0), 2)
+        check("and space again leaves the " + kind + " window filled", spaced.expands + (spaced.preview.expanded ? 10 : 0), 11)
         check("neither press closes a " + kind + " preview", spaced.closed, 0)
-        PreviewKeys.act("previewBack", spaced)
-        check("and the inset one it left closes on left", spaced.closed, 1)
+        PreviewKeys.act("escape", spaced)
+        check("and escape leaves the filled window for the folder", spaced.closed, 1)
 
         // Expanded: the arrows move the surface, and none of the four leaves it.
         var big = previewPane(kind, true)

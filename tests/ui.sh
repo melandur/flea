@@ -4079,10 +4079,9 @@ PYEOF
     [[ "$(ipc previewOpen)" == "true" ]] || fail "preview: l on sample.txt did not open a preview"
     [[ "$(ipc previewKind)" == "text" ]] || fail "preview: sample.txt classified as $(ipc previewKind), not text"
     shot preview-text
-    # The 2026-09-18 ruling, "all preview files behave the same way": Space fills the window and
-    # Space again brings the inset surface back, on every kind, and Left is what leaves the inset
-    # one. So the close this block used to assert on the second Space is now two keys, and the
-    # expansion between them is what a text preview gained.
+    # The 2026-09-18 ruling, "all preview files behave the same way": Space fills the window on
+    # every kind. The 2026-09-23 ruling took the second Space's way back to the inset surface away,
+    # so the filled window stays filled and Escape goes straight back to the folder.
     key -k space >/dev/null
     settle
     [[ "$(ipc previewExpanded)" == "true" ]] || fail "preview: space did not fill the window with the text preview"
@@ -4091,11 +4090,11 @@ PYEOF
     (( $(ipc previewScroll) > 0 )) || fail "preview: down did not scroll the expanded text body"
     key -k space >/dev/null
     settle
-    [[ "$(ipc previewExpanded)" == "false" && "$(ipc previewOpen)" == "true" ]] \
-        || fail "preview: the second space did not bring the inset text preview back"
-    key -k Left >/dev/null
+    [[ "$(ipc previewExpanded)" == "true" && "$(ipc previewOpen)" == "true" ]] \
+        || fail "preview: the second space left the filled text window"
+    key -k Escape >/dev/null
     settle
-    [[ "$(ipc previewOpen)" == "false" ]] || fail "preview: left did not leave the inset text preview"
+    [[ "$(ipc previewOpen)" == "false" ]] || fail "preview: escape did not leave the filled text window for the folder"
 
     open_row notes.md
     # Markdown renders verbatim like any other text, so the kind is text and there is no second path.
@@ -4147,15 +4146,15 @@ PYEOF
     key p >/dev/null
     wait_preview_state playing
 
-    # And the second space brings the inset surface back over a playing media preview, the way it
-    # does on every other kind, after which Left leaves it: the pair of keys the ruling names.
+    # And the second space leaves a playing media preview filled, the way it does on every other
+    # kind, after which Escape goes straight back to the folder.
     key -k space >/dev/null
     settle
-    [[ "$(ipc previewExpanded)" == "false" && "$(ipc previewOpen)" == "true" ]] \
-        || fail "preview: space did not bring the inset audio preview back"
-    key -k Left >/dev/null
+    [[ "$(ipc previewExpanded)" == "true" && "$(ipc previewOpen)" == "true" ]] \
+        || fail "preview: space left the filled audio window"
+    key -k Escape >/dev/null
     settle
-    [[ "$(ipc previewOpen)" == "false" ]] || fail "preview: left did not leave the playing audio preview"
+    [[ "$(ipc previewOpen)" == "false" ]] || fail "preview: escape did not leave the playing audio preview"
 
     open_row_fast clip.mp4
     [[ "$(ipc previewKind)" == "video" ]] || fail "preview: clip.mp4 classified as $(ipc previewKind), not video"

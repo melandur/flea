@@ -49,7 +49,8 @@ function open(root) {
 //   inset      Up/Down move the listing cursor and the preview follows it, Left leaves the preview,
 //              Right and Space make it fill the window.
 //   expanded   Up/Down scroll the surface, Left and Right move the content itself: a PDF's page and
-//              a media file's playhead. Space brings the inset surface back, where Left closes.
+//              a media file's playhead. Space does nothing: Escape goes straight back to the
+//              folder, skipping the inset surface, the operator's ruling of 2026-09-23.
 //
 // Escape closes outright from either state, because a preview must never need a particular key to
 // leave it. What this reverses is two rulings, and both are written down rather than re-litigated:
@@ -77,9 +78,10 @@ function act(action, root) {
     case "cursorUp":
         if (expanded) { root.preview.scrollPage(-1); return }
         Filter.moveCursor(root, -1); follow(root); return
-    // Space is the one key on both ends of the expansion, so it can never leave the operator with
-    // a filled window and no key to undo it.
-    case "preview": root.preview.toggleExpand(); return
+    // Space fills the window and nothing else. It used to bring the inset surface back too, which
+    // the operator ruled out on 2026-09-23 ("remove the space key to go back"): from the filled
+    // window Escape is the way out, straight to the folder.
+    case "preview": if (!expanded) root.preview.toggleExpand(); return
     case "previewBack":
         if (!expanded) { root.preview.close(); return }
         if (root.preview.isMedia) root.preview.seek(-SEEK_MS)
