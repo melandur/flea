@@ -45,6 +45,9 @@ function run(check) {
     key("N", "", ctrl | shift, "")
     key("M", "", ctrl, "newFile")
     key("H", "", ctrl, "toggleHidden")
+    key("J", "", ctrl, "sortName")
+    key("K", "", ctrl, "sortSize")
+    key("L", "", ctrl, "sortDate")
     // Ctrl+M and the bare m are different rows, and the unmodified one still opens the menu.
     key("M", "m", none, "menu")
     key("Menu", "", none, "menu")
@@ -72,8 +75,9 @@ function run(check) {
     // above. Nor are Ctrl+N, Ctrl+M and Ctrl+H, which the 2026-09-18 trio took for New Folder,
     // New File and the hidden toggle; all three are in that table too.
     // Ctrl+A is not here any more: Select all took it back, and the table above is where it is checked.
+    // Nor is Ctrl+L, which the date sort took on 2026-09-23 beside Ctrl+J and Ctrl+K.
     var goneChords = [["1", ctrl], ["2", ctrl], ["3", ctrl], ["D", ctrl], ["U", ctrl],
-                      ["E", ctrl], ["L", ctrl], ["W", ctrl],
+                      ["E", ctrl], ["W", ctrl],
                       ["Tab", ctrl], ["Space", ctrl], ["PageUp", ctrl], ["PageDown", ctrl],
                       ["P", alt], ["Down", shift], ["Up", shift], ["Delete", shift],
                       ["Backspace", none], ["Home", none], ["End", none],
@@ -202,6 +206,6 @@ function run(check) {
     check("every effective binding resolves to the action it advertises", effective.every(function (row) {
         return Keymap.lookupFor("default", row.keycode, row.text, row.mask, "listing", "gui") === row.action
     }), true)
-    check("and the table is the size the strip left it, plus the split's chord, the creation trio, Select all, F5 and the deep search",
-          effective.length, 29)
+    check("and the table is the size the strip left it, plus the split's chord, the creation trio, Select all, F5, the deep search and the three sort chords",
+          effective.length, 32)
 }

@@ -134,6 +134,28 @@ function run(check) {
           again.sent.join(","),
           "sort name desc,window 0 200,sort name asc,window 0 200")
 
+    // Ctrl+J, Ctrl+K and Ctrl+L: each order starts at its own default, and its own chord reverses it.
+    var bySize = pane("name", false)
+    Sort.chord(bySize, "sortSize")
+    check("ctrl+k starts size at the biggest", bySize.sent.join(","), "sort size desc,window 0 200")
+    Sort.chord(bySize, "sortSize")
+    check("and a second ctrl+k flips it to the smallest", bySize.backend.sortDesc, false)
+    Sort.chord(bySize, "sortDate")
+    check("ctrl+l from any size order starts at the latest",
+          bySize.backend.sortBy + ":" + bySize.backend.sortDesc, "mtime:true")
+    Sort.chord(bySize, "sortName")
+    check("ctrl+j from any date order starts at A", bySize.backend.sortBy + ":" + bySize.backend.sortDesc, "name:false")
+    Sort.chord(bySize, "sortName")
+    check("and a second ctrl+j flips it to Z first", bySize.backend.sortDesc, true)
+    Sort.chord(bySize, "sortSize")
+    check("so a reversed name never leaks into size, which starts at the biggest again",
+          bySize.backend.sortBy + ":" + bySize.backend.sortDesc, "size:true")
+    check("every chord is kept for the session so navigation keeps it",
+          JSON.stringify(bySize.backend.sessionSort), '{"key":"size","reverse":true}')
+    var viaKey = pane("name", false)
+    Sort.byKey(viaKey, "sortDate")
+    check("the key route reaches the chord", viaKey.sent.join(","), "sort mtime desc,window 0 200")
+
     // corner: a recorded order this list does not hold cannot wedge s; it wraps to the first one.
     var stray = pane("unknown", true)
     Sort.next(stray)

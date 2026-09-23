@@ -187,7 +187,11 @@ function run(check) {
     check("and nothing was asked of the shell", fromList.asked, 0)
     var ctrlL = key(Qt.Key_L, "l", Qt.ControlModifier)
     var listAgain = barPane("list")
-    check("ctrl-l no longer opens it either", Focus.handleKey(ctrlL, listAgain, listAgain.sidebar), false)
+    var acted = []
+    listAgain.act = function (action) { acted.push(action) }
+    // Ctrl+L is the modified-order chord now, so it is consumed, and as a sort rather than the bar.
+    Focus.handleKey(ctrlL, listAgain, listAgain.sidebar)
+    check("ctrl-l no longer opens it either, it sorts by date", listAgain.asked + "|" + acted.join(","), "0|sortDate")
     // The rail consumes every key it is handed, so only the count says the bar stayed shut there.
     var fromRail = barPane("rail")
     Focus.handleKey(ctrlL, fromRail, fromRail.sidebar)

@@ -76,7 +76,7 @@ function lookup(event, root) {
         return ""
     // A sort ends the running walk in the backend and the search strip hides the mark that would
     // show it happening, so both sort keys go quiet for as long as a search owns the header.
-    if (action === "sortNext" || action === "sortReverse")
+    if (action === "sortNext" || action === "sortReverse" || action in Sort.CHORDS)
         return root.searchMode.length === 0 ? action : ""
     return action
 }
@@ -155,8 +155,7 @@ function act(action, root, menuId, paths) {
     // Convert opens the one popup this whole design has; every other operation answers without one.
     case "convert": root.openConvert(menuId); return
     // The header answers the same two through ui/Pane.qml, so the key and the click share one route.
-    case "sortNext": Sort.next(root); return
-    case "sortReverse": Sort.reverse(root); return
+    case "sortNext": case "sortReverse": case "sortName": case "sortSize": case "sortDate": Sort.byKey(root, action); return
     case "addNetwork": if (root.sidebar) root.sidebar.addRequested(); return
     case "eject": Eject.release(root, root.sidebar, false); return
     // Finder's Cmd+1/2/3; the chrome's three buttons write the same property, so they follow.

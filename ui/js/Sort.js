@@ -13,6 +13,24 @@
 // refuses every other key by name, and the backend is the one that says so, see ui/js/Errors.js.
 var ORDERS = ["name", "size", "mtime", "kind"]
 
+// Ctrl+J, Ctrl+K and Ctrl+L, the operator's ruling of 2026-09-23: one order each, starting in the
+// direction that order is wanted first, A to Z, biggest first and latest first. The chord of the
+// order already shown reverses it; a chord for another order always starts at that one's default.
+var CHORDS = { sortName: "name", sortSize: "size", sortDate: "mtime" }
+var FIRST_DESC = { name: false, size: true, mtime: true }
+
+function chord(pane, action) {
+    var key = CHORDS[action]
+    resort(pane, key, pane.backend.sortBy === key ? !pane.backend.sortDesc : FIRST_DESC[key])
+}
+
+// The keyboard's one way in, so ui/js/Focus.js carries a single case for every sort key.
+function byKey(pane, action) {
+    if (action === "sortNext") next(pane)
+    else if (action === "sortReverse") reverse(pane)
+    else chord(pane, action)
+}
+
 // ui/Header.qml's click. The column already sorted reverses; any other column starts ascending,
 // which is the order the canvas's own header draws beside "Name". Only ORDERS may leave this file.
 function column(pane, key) {
@@ -49,6 +67,8 @@ function resort(pane, key, desc) {
     }
     pane.backend.sortBy = key
     pane.backend.sortDesc = desc
+    // Held for the session and never written to ui.json, so every launch starts at the saved default.
+    pane.backend.sessionSort = { key: key, reverse: desc }
     // A reorder moves every row, so the caches keyed by a row index are as stale as a new listing's,
     // and a selection of row indices would silently come to name different files.
     pane.thumbState = Thumbs.empty()

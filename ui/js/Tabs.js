@@ -186,6 +186,7 @@ function applyPending(pane) {
             pane.backend.sort(by, desc)
             pane.backend.sortBy = by
             pane.backend.sortDesc = desc
+            pane.backend.sessionSort = { key: by, reverse: desc }
             pane.backend.window(0, pane.windowSize)
             return
         }

@@ -14,7 +14,7 @@ function body(name, pattern) {
 const reset = new Function("root", "ViewState", body("Backend.qml", /    function resetSort\(\) \{([\s\S]*?)\n    \}/));
 const preference = new Function("root", body("Backend.qml", /^    onSortPreferenceChanged: (.*)$/m));
 const listed = new Function("pane", "ViewState", "Search", "total",
-    body("PaneWire.qml", /        function onListed\(total, readMs, sortMs\) \{([\s\S]*?)\n        \}/));
+    body("PaneWire.qml", /        function onListed\(total, readMs, sortMs, path\) \{([\s\S]*?)\n        \}/));
 const changed = new Function("root", "ViewState", "preferences",
     body("Pane.qml", /    onListingPreferencesChanged: (\{[\s\S]*?\n    \}|[^\n]*)/));
 const apply = new Function("root", "ViewState",
@@ -61,11 +61,19 @@ const saves = [];
 view.changeLeaf = (key, value) => saves.push([key, value]);
 listed(pane(), view, {RESULTS: "results"}, 80);
 equal(saves, []);
+// A chosen order is the session's alone: a single pane's listing writes nothing to ui.json either,
+// so every launch starts at the Settings default.
 const single = pane();
 single.dualMode = false;
 single.backend.sortBy = "mtime";
 listed(single, view, {RESULTS: "results"}, 80);
-equal(saves, [["sort", {key: "date", reverse: true}]]);
+equal(saves, []);
+single.backend.sessionSort = {key: "mtime", reverse: true};
+single.backend.preserveSort = false;
+single.backend.resetSort();
+equal([single.backend.sortBy, single.backend.sortDesc], ["mtime", true]);
+preference(single.backend);
+equal([single.backend.sortBy, single.backend.sortDesc, single.backend.sessionSort], ["name", false, null]);
 
 const hidden = pane(false), live = pane();
 view.state.sort = {key: "date", reverse: false};

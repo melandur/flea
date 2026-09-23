@@ -75,6 +75,21 @@ action = "selectAll"
 key = "H"
 action = "toggleHidden"
 
+# One chord per order, the operator's ruling of 2026-09-23: J is name from A, K is size from the
+# biggest, L is modified from the latest. The chord of the order already shown reverses it, and a
+# chord for another order always starts at that one's default; see ui/js/Sort.js chord.
+[[ctrl]]
+key = "J"
+action = "sortName"
+
+[[ctrl]]
+key = "K"
+action = "sortSize"
+
+[[ctrl]]
+key = "L"
+action = "sortDate"
+
 # Checked before the plain ctrl rows and falling through when unmatched, so Ctrl+Shift+D still
 # pages. Shift+period is delivered as Greater on a US layout and as Period elsewhere, so both rows
 # name the one action.
@@ -189,7 +204,7 @@ action = "keymapSheet"
 move = ["cursorDown", "cursorUp", "open", "parent", "pageForward", "focusNext", "escape",
         "toggleSelect", "selectAll"]
 look = ["preview", "sidebar", "toggleDual", "toggleHidden", "mute", "keymapSheet", "refresh"]
-find = ["search", "searchDeep"]
+find = ["search", "searchDeep", "sortName", "sortSize", "sortDate"]
 change = ["copy", "cut", "paste", "copypath", "rename", "trash", "undo", "newFolder", "newFile",
           "menu", "settings"]
 
@@ -242,6 +257,11 @@ label = "select all"
 keys = "^f ^F"
 action = "search"
 label = "find / deep"
+
+[[sheet]]
+keys = "^j ^k ^l"
+action = "sortName"
+label = "sort"
 
 [[sheet]]
 keys = "tab"

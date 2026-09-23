@@ -149,8 +149,6 @@ Item {
 
         function onListed(total, readMs, sortMs, path) {
             if (!pane.dualMode && !pane.listInFlight && pane.searchMode.length === 0) {
-                ViewState.changeLeaf("sort", { key: pane.backend.sortBy === "mtime" ? "date" : pane.backend.sortBy,
-                                             reverse: pane.backend.sortDesc })
                 pane.appliedListingPreferences = pane.listingPreferences
             }
             if (pane.listInFlight) {

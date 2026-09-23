@@ -74,17 +74,21 @@ Item {
     // What order the current listing is actually in, which is what ui/Header.qml's mark draws.
     // Only two things move it: list re-sorts by name ascending below, and an accepted sort, which
     // ui/js/Sort.js records here because it is the one place that knows which keys are accepted.
+    // sessionSort is the order chosen since launch; it rides every navigation and is never saved, so
+    // the next launch starts at the Settings default. A Settings change drops it.
     property string sortBy: "name"
     property bool sortDesc: false
+    property var sessionSort: null
     property bool preserveSort: false
     property bool hasListed: false
     readonly property string sortPreference: JSON.stringify(ViewState.state.sort || {})
-    onSortPreferenceChanged: if (!root.preserveSort || !root.hasListed) root.resetSort()
+    onSortPreferenceChanged: { root.sessionSort = null; if (!root.preserveSort || !root.hasListed) root.resetSort() }
 
     function resetSort() {
-        root.sortBy = (ViewState.state.sort || {}).key || "name"
+        var chosen = root.sessionSort || ViewState.state.sort || {}
+        root.sortBy = chosen.key || "name"
         if (root.sortBy === "date") root.sortBy = "mtime"
-        root.sortDesc = (ViewState.state.sort || {}).reverse === true
+        root.sortDesc = chosen.reverse === true
     }
 
     // What the settle gate asserts: how many thumb requests this process has attempted; see AGENTS.md.
