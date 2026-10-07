@@ -148,6 +148,11 @@ Item {
         target: pane.backend
 
         function onListed(total, readMs, sortMs, path) {
+            // A walk's listed is the first line it answers, so every line before the newest walk's is a superseded one's.
+            if (pane.searchPending > 0) {
+                pane.searchPending -= 1
+                if (pane.searchPending > 0 || !Search.listed(pane)) return
+            }
             if (!pane.dualMode && !pane.listInFlight && pane.searchMode.length === 0) {
                 pane.appliedListingPreferences = pane.listingPreferences
             }
@@ -156,7 +161,7 @@ Item {
             }
             pane.total = total
             // A search's opening listed line is the walk starting, not a directory that came back empty.
-            if (pane.searchMode === Search.RESULTS) {
+            if (Search.listed(pane)) {
                 pane.listingState = Search.listingState(pane, total)
                 pane.stateMessage = ""
                 return
@@ -168,7 +173,7 @@ Item {
         }
 
         function onRows(start, items, ms, kinds) {
-            if (pane.listInFlight && !pane.listedSeen) {
+            if ((pane.listInFlight && !pane.listedSeen) || pane.searchPending > 0) {
                 return
             }
             pane.held = start
@@ -206,7 +211,7 @@ Item {
 
         // Sample input: {"t":"searching","n":812,"scanned":41200,"ms":300.114}
         function onSearching(total, scanned, ms) {
-            if (pane.searchMode !== Search.RESULTS) {
+            if (!Search.listed(pane) || pane.searchPending > 0) {
                 return
             }
             pane.total = total
@@ -220,7 +225,7 @@ Item {
 
         // Sample input: {"t":"searched","n":14673,"scanned":284446,"ms":229.008,"cancelled":false}
         function onSearched(total, scanned, ms, cancelled) {
-            if (pane.searchMode !== Search.RESULTS) {
+            if (!Search.listed(pane) || pane.searchPending > 0) {
                 return
             }
             pane.searchRunning = false
@@ -312,7 +317,7 @@ Item {
             root.retryPaths = retryPaths
             root.retryFolder = pane.path
             root.retryListing = ""
-            if (pane.searchMode === Search.RESULTS) {
+            if (Search.listed(pane)) {
                 root.stale = true
                 root.locateRetry()
             } else pane.refresh("")
@@ -384,7 +389,7 @@ Item {
             pane.sticky("")
             pane.message(ok ? "Converted to " + Ops.leaf(path) + "." : collision ? err : Errors.sentence("convert", err), !ok)
             if (ok) {
-                if (pane.searchMode === Search.RESULTS) root.stale = true
+                if (Search.listed(pane)) root.stale = true
                 else pane.refresh(path)
             }
         }

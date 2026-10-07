@@ -53,7 +53,7 @@ FocusScope {
     property int trashedFirst: -1
     property string keySequence: ""
     property string keySequenceIdentity: ""
-    // "" off, "typing" while the query line has the keyboard, "results" once a walk was asked for; ui/js/Search.js owns every transition.
+    // "" off, "typing" while the query line has the keyboard (results follow it live), "results" once enter hands the keyboard to them; ui/js/Search.js owns every transition.
     property string searchMode: ""
     // Where the search was started from, which esc re-lists; see ui/js/Search.js.
     property string searchFrom: ""
@@ -62,6 +62,17 @@ FocusScope {
     property bool searchDeep: false
     property bool searchRunning: false
     property bool searchCancelled: false
+    // The depth and query of the last walk sent, so enter does not re-walk what typing already did.
+    property string searchWalked: ""
+    // Walks sent whose listed line has not come back; ui/PaneWire.qml drops a superseded walk's lines.
+    property int searchPending: 0
+    // The query line's debounce: results follow the typing without a walk per keystroke.
+    readonly property alias searchLive: searchLive
+    Timer {
+        id: searchLive
+        interval: Search.LIVE_MS
+        onTriggered: Search.live(root)
+    }
     // The query narrowing the listing in place, and whether its line still has the keyboard;
     // ui/js/Filter.js owns every transition, the way ui/js/Search.js owns the walk's.
     property string filterQuery: ""

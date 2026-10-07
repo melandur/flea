@@ -122,6 +122,58 @@ function run(check) {
     check("enter on an empty line closes it rather than walking for nothing",
           blank.searchMode + "|" + blank.sent.length, "|0")
 
+    // Results follow the typing: each edit restarts ui/Pane.qml's debounce, and its firing walks the
+    // query as it stands. Enter then only hands the keyboard over, since that walk is already out.
+    function debounced(query) {
+        var p = typing(query)
+        p.restarts = 0
+        p.searchLive = { restart: function () { p.restarts += 1 }, stop: function () {} }
+        p.searchWalked = ""
+        p.searchPending = 0
+        p.listInFlight = false
+        return p
+    }
+    var live = debounced("sc")
+    Search.typeKey(press(Qt.Key_R, "r"), live)
+    check("a keystroke restarts the debounce rather than walking", live.restarts + "|" + live.sent.length, "1|0")
+    Search.live(live)
+    check("the debounce walks the query as typed and the caret stays up",
+          live.sent.join(",") + "|" + live.searchMode, "/d?scr|typing")
+    check("and the walk's results count as a search listing while typing", Search.activateAction(live), "reveal")
+    Search.live(live)
+    check("a debounce over an unchanged query walks nothing more", live.sent.length, 1)
+    Search.typeKey(press(Qt.Key_Return, ""), live)
+    check("enter after a live walk hands over the keyboard without walking again",
+          live.sent.join(",") + "|" + live.searchMode, "/d?scr|results")
+
+    var flipped = debounced("scr")
+    Search.live(flipped)
+    Search.typeKey(press(Qt.Key_Tab, "\t"), flipped)
+    Search.live(flipped)
+    check("tab re-walks the same query one level deeper", flipped.sent.join(","), "/d?scr,/d?scr+deep")
+
+    var emptied = debounced("s")
+    emptied.path = "/home/u/Downloads"
+    Search.live(emptied)
+    Search.typeKey(press(Qt.Key_Backspace, ""), emptied)
+    Search.live(emptied)
+    check("emptying the line puts the folder back and keeps the caret",
+          emptied.relisted + "|" + emptied.searchMode + "|" + Search.listed(emptied), "/home/u/Downloads|typing|false")
+
+    var waiting = debounced("scr")
+    waiting.listInFlight = true
+    Search.live(waiting)
+    check("a re-list still out defers the walk rather than racing it",
+          waiting.sent.length + "|" + waiting.restarts, "0|1")
+
+    var twice = debounced("a")
+    Search.live(twice)
+    twice.searchQuery = "ab"
+    Search.live(twice)
+    check("each walk is counted until its listed line comes back", twice.searchPending, 2)
+    Search.close(twice)
+    check("and leaving keeps the count, since those lines are still on the wire", twice.searchPending, 2)
+
     // The terminal searched line. The backend ranks the rows in the statement before it writes that
     // line, so a client still drawing the walk's discovery order resolves every destructive key
     // against a listing it is not showing: trash on the highlighted row took another file.

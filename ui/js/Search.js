@@ -10,35 +10,92 @@ var OFF = ""
 var TYPING = "typing"
 var RESULTS = "results"
 
+// How long the query line waits after the last keystroke before it walks. A new walk ends the one
+// before it in the backend, so typing faster than this costs one walk, not one per character.
+var LIVE_MS = 120
+
 // Ctrl+F opens the query line over the open folder alone, Ctrl+Shift+F over it and every folder
-// below it. The walk does not start here: a subtree walk per keystroke would be a sweep, and the
-// design's own ruling is that enter commits the query.
+// below it. Results follow the query as it is typed; enter hands the keyboard to them.
 function start(root, deep) {
+    var depth = root.searchDeep !== (deep === true)
     root.searchDeep = deep === true
     root.searchMode = TYPING
+    if (depth) schedule(root)
+}
+
+// Whether the listing on screen is a walk's rather than the directory's: always after enter, and
+// while typing once the first live walk has gone out. searchFrom is set by walk alone.
+function listed(root) {
+    return root.searchMode === RESULTS || (root.searchMode === TYPING && (root.searchFrom || "").length > 0)
 }
 
 function typed(root, character) {
     root.searchQuery += character
+    schedule(root)
 }
 
 function backspace(root) {
     root.searchQuery = root.searchQuery.substring(0, root.searchQuery.length - 1)
+    schedule(root)
 }
 
-// Enter commits: the walk starts and the keyboard goes back to the results, so j/k move again.
+// ui/Pane.qml's debounce; the pure suites have none, and walk only on enter there.
+function schedule(root) {
+    if (root.searchLive) root.searchLive.restart()
+}
+
+// The debounce fired: walk the query as it stands, or with the line emptied put the folder back.
+function live(root) {
+    if (root.searchMode !== TYPING) return
+    // A re-list still out owns the rows; walking over it would interleave two listings.
+    if (root.listInFlight) {
+        schedule(root)
+        return
+    }
+    if (root.searchQuery.length === 0) {
+        if (listed(root)) {
+            var back = root.searchFrom
+            reset(root)
+            root.openWithoutHistory(back)
+        }
+        return
+    }
+    if (root.searchWalked !== walkKey(root)) walk(root)
+}
+
+function walkKey(root) {
+    return (root.searchDeep ? "deep:" : "here:") + root.searchQuery
+}
+
+// Enter commits: the keyboard goes back to the results, so j/k move again. A live walk of this
+// exact query is already on screen, or still running, so only a query the debounce never saw walks.
 function run(root) {
+    if (root.searchLive) root.searchLive.stop()
     if (root.searchQuery.length === 0) {
         close(root)
         return
     }
+    // A re-list still out would have its listed taken for the walk's; the debounce retries once it lands.
+    if (root.listInFlight) {
+        schedule(root)
+        return
+    }
+    if (!listed(root) || root.searchWalked !== walkKey(root)) walk(root)
+    root.searchMode = RESULTS
+}
+
+function walk(root) {
     // The walk is always the folder the pane is standing in, never home and never root: the
     // operator's ruling of 2026-09-23. The pane's path stays the listing's base, so every result
     // name is relative to it and join, reveal and every per-row facility keep working untouched.
-    if (root.searchFrom.length === 0) {
+    if ((root.searchFrom || "").length === 0) {
         root.searchFrom = root.path
     }
-    root.searchMode = RESULTS
+    root.searchWalked = walkKey(root)
+    // Every line the previous walk or window still has on the wire lands before this walk's listed;
+    // ui/PaneWire.qml drops them until it arrives, so a superseded walk never paints over this one.
+    // A count rather than a flag, because each walk answers exactly one listed and two can be out.
+    root.searchPending = (root.searchPending || 0) + 1
     root.searchRunning = true
     root.searchScanned = 0
     root.searchCancelled = false
@@ -64,16 +121,24 @@ function cancel(root) {
 // Leaving search re-lists the directory the search was started from. No history entry, because
 // entering and leaving a search is not a navigation.
 function close(root) {
-    var relist = root.searchMode === RESULTS
-    var back = root.searchFrom.length > 0 ? root.searchFrom : root.path
+    var relist = listed(root)
+    var back = (root.searchFrom || "").length > 0 ? root.searchFrom : root.path
+    if (root.searchLive) root.searchLive.stop()
     root.searchMode = OFF
     root.searchQuery = ""
-    root.searchRunning = false
-    root.searchScanned = 0
-    root.searchFrom = ""
+    reset(root)
     if (relist) {
         root.openWithoutHistory(back)
     }
+}
+
+// The walk's own state, which the query line outlives when it is emptied. searchPending is not
+// reset: the listed lines it counts are still on the wire and must still be swallowed.
+function reset(root) {
+    root.searchRunning = false
+    root.searchScanned = 0
+    root.searchFrom = ""
+    root.searchWalked = ""
 }
 
 // The query line's own keys while it has the caret, the twin of ui/js/Filter.js typeKey: printable
@@ -96,6 +161,7 @@ function typeKey(event, root) {
     // below it; ui/SearchStrip.qml draws "in <scope>" beside the caret, so every search says which.
     if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) {
         root.searchDeep = !root.searchDeep
+        schedule(root)
         return true
     }
     if (event.text.length === 1 && event.text >= " ") {
@@ -116,10 +182,10 @@ function reveal(root) {
     if (cut <= 0) {
         return
     }
+    if (root.searchLive) root.searchLive.stop()
     root.searchMode = OFF
     root.searchQuery = ""
-    root.searchRunning = false
-    root.searchFrom = ""
+    reset(root)
     root.pendingSelect = full
     root.open(full.substring(0, cut))
 }
@@ -128,7 +194,7 @@ function reveal(root) {
 // you to the file instead of opening it; the canvas keeps enter on open and o on reveal, so it is
 // only the pointer that asks this. ui/js/Tap.js is the one caller.
 function activateAction(root) {
-    return root.searchMode === RESULTS ? "reveal" : "open"
+    return listed(root) ? "reveal" : "open"
 }
 
 // The terminal searched line: the walk ranks its rows in the statement before writing it, so every

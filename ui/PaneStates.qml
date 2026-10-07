@@ -1,5 +1,6 @@
 import QtQuick
 import "." as Flea
+import "js/Search.js" as Search
 
 // What a pane draws instead of rows: the empty hero, the reading spiral and the failure block. All
 // three sit over the same slot and are gated on the same listing state, so they live together and
@@ -27,9 +28,9 @@ Item {
                ? root.pane.columnsArea.columnWidth : root.pane.listSlot.width
         height: root.pane.listSlot.height
         visible: !root.trashOpen && root.pane.listingState === "empty"
-        caption: root.pane.searchMode === "results" ? "Nothing matches " + root.pane.searchQuery : ""
+        caption: Search.listed(root.pane) ? "Nothing matches " + root.pane.searchQuery : ""
         mark: "search"
-        hint: root.pane.searchMode === "results" ? "Press Escape to clear."
+        hint: Search.listed(root.pane) ? "Press Escape to clear."
             : ViewState.keyHints ? "Press Ctrl+Shift+N for a new folder." : ""
     }
 

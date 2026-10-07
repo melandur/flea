@@ -72,7 +72,7 @@ function lookup(event, root) {
     if ((action === "trashArm" || action === "trash") && !Mounts.trashable(root.path))
         return ""
     // reveal only means something on a search result, so o is discarded everywhere else.
-    if (action === "reveal" && root.searchMode !== Search.RESULTS)
+    if (action === "reveal" && !Search.listed(root))
         return ""
     // A sort ends the running walk in the backend and the search strip hides the mark that would
     // show it happening, so both sort keys go quiet for as long as a search owns the header.
@@ -252,8 +252,8 @@ function handleKey(event, root, sidebar) {
     // Issue 12: a query line owns every key while it has the caret, which swallowed the cursor keys
     // and left a listing with more than one match unreachable from the keyboard. A cursor key commits
     // the line the way enter does and then goes on to mean what it means everywhere else: the filter
-    // is left standing over the rows it narrowed, and the search walks once for that press rather
-    // than once per keystroke, which is the sweep the design refused.
+    // is left standing over the rows it narrowed, and the search hands the keyboard to the results
+    // its debounced live walk already put up, walking only if the debounce had not fired yet.
     if ((root.searchMode === Search.TYPING || root.filterTyping) && leavesLine(event)) {
         if (root.filterTyping) Filter.commit(root)
         else Search.run(root)
