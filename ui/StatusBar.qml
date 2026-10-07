@@ -76,7 +76,7 @@ Item {
     readonly property real zoneSpan: Math.max(0, root.width - 2 * Theme.spacing.rowPaddingX)
     readonly property real zoneWidth: Math.round(root.zoneSpan / 3)
     readonly property real hintWidth: hintMetrics.width
-    signal transferCancelRequested(int id)
+    signal transferCancelRequested(var owner, int id)
     implicitHeight: Theme.chromeHeight + detailView.height
 
     // Completion messages cannot acknowledge a failure; each error requires its own dismissal.
@@ -102,17 +102,26 @@ Item {
         else root.notice = ""
     }
 
-    function cancelTransfer() {
-        var next = Status.cancelActivity(root.activities)
-        if (next === root.activities) return
-        root.activities = next
-        root.transferCancelRequested(root.transfer.id)
+    // The owner's running transfer, or once that is already cancelling, the newest one it has queued.
+    function cancelTransfer(owner) {
+        var at = Status.activityOf(root.activities, owner)
+        if (at < 0 || !root.activities[at].transfer.running) return false
+        var entry = root.activities[at]
+        var waiting = entry.owner.queued || []
+        if (entry.cancelling) {
+            if (waiting.length) root.transferCancelRequested(entry.owner, waiting[waiting.length - 1].id)
+            return true
+        }
+        root.activities = Status.cancelActivity(root.activities, at)
+        root.transferCancelRequested(entry.owner, entry.transfer.id)
+        return true
     }
 
-    function escapePressed() {
+    // Esc unwinds the nearest thing first: an error, then the pane's own selection, and only then the
+    // transfer that pane started. With no owner, from the rail or the trash view, it cancels nothing.
+    function escapePressed(owner, selected) {
         if (root.transientIsError) { root.dismiss(); return true }
-        if (root.transfer.running) { root.cancelTransfer(); return true }
-        return false
+        return !selected && !!owner && root.cancelTransfer(owner)
     }
 
     function setActivity(owner, text, transfer) {
@@ -310,7 +319,7 @@ Item {
             transfer: root.transfer
             owner: root.transferOwner
             cancelling: root.activity ? root.activity.cancelling : false
-            onCancelRequested: root.cancelTransfer()
+            onCancelRequested: root.cancelTransfer(root.transferOwner)
         }
     }
 }

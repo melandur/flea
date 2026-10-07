@@ -1,4 +1,5 @@
 .import "../../ui/js/Transfer.js" as Transfer
+.import "../../ui/js/Ops.js" as Ops
 
 // The card's own model: the count, the file line, the bar, and TransferCard.html's byte line under
 // it. ops.js still covers the headline and the fraction; this suite is the line the board added.
@@ -96,4 +97,36 @@ function run(check) {
     // The file line goes back to naming the item and its size: the bytes are the line under the bar.
     check("the file line states the size and never the running count",
           Transfer.fileLine({ name: "captures", total: 0, bytes: 700 * megabyte }), "captures")
+
+    // A second copy waits behind the first rather than being refused, and the headline counts it.
+    var waiting = Transfer.queue(Transfer.queue([], 4, 2, false), 5, 1, true)
+    var running = Transfer.stamped({ id: 3, n: 5, index: 1, moving: false }, waiting)
+    check("the headline counts what waits behind it", Transfer.head(running), "Copying 2 of 5 · 2 queued")
+    check("and says nothing of a queue that is empty", Transfer.head(Transfer.stamped(running, [])), "Copying 2 of 5")
+    check("a queued id is known until its turn comes",
+          Transfer.isQueued(waiting, 5) + "|" + Transfer.isQueued(Transfer.unqueue(waiting, 5), 5) + "|" + Transfer.isQueued(waiting, 3),
+          "true|false|false")
+    check("the queue keeps the order it was asked in", Transfer.unqueue(waiting, 9).map(function (w) { return w.id }).join(","), "4,5")
+    check("a queued transfer says what it is and how many are ahead",
+          Transfer.queuedLine(1, true, 1) + " / " + Transfer.queuedLine(3, false, 2),
+          "Move of 1 item queued · 1 ahead / Copy of 3 items queued · 2 ahead")
+
+    // A cut is spent when the backend takes the move, so a paste sent but not yet answered marks it
+    // rather than emptying it, and a second paste of the same cut is refused rather than queued.
+    var cutSent = []
+    var cutPane = { path: "/b", backend: { send: function (msg) { cutSent.push(msg) } } }
+    var said = ""
+    cutPane.message = function (text) { said = text }
+    cutPane.clipboard = { paths: ["/a/x"], moving: true }
+    Ops.paste(cutPane)
+    Ops.paste(cutPane)
+    check("a pasted cut is held until the backend takes it, and only sent once",
+          cutSent.length + "|" + cutPane.clipboard.spending + "|" + said, "1|true|That cut is already being pasted.")
+    cutPane.clipboard = { paths: ["/a/y"], moving: false }
+    Ops.paste(cutPane, true)
+    check("movePaste moves a copy and spends it the same way",
+          cutSent[1].op + "|" + cutPane.clipboard.spending, "move|true")
+    cutPane.clipboard = { paths: ["/a/z"], moving: false }
+    Ops.paste(cutPane)
+    check("a pasted copy stays on the clipboard untouched", cutPane.clipboard.spending === undefined, true)
 }

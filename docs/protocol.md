@@ -413,10 +413,13 @@ indices are resolved against the listing at request time and the operation runs 
 so it still owns a snapshot that outlives whatever the listing does next. `paths` wins when both are
 present, and an index past the end of the listing is dropped in silence.
 
-**One of `transfer`, `trash` or `duplicate` runs at a time.** One of those arriving while another is
-still running answers an `error` line saying so and touches nothing. The cap is one because the status
+**One of `transfer`, `trash` or `duplicate` runs at a time.** A `trash` or `duplicate` arriving while
+another is still running answers an `error` line saying so and touches nothing. A `transfer` arriving
+then waits instead: it answers `transferqueued` at once and starts, with its own `transferstarted`,
+the moment the slot frees, in the order transfers were asked for. The cap is one because the status
 bar carries one transient slot for the running operation, so a second concurrent operation would have
-nowhere to report. `rename` and `mkdir` never take that slot, and an `archive` or a `convert` is keyed by its own
+nowhere to report; a queued transfer has nothing to report until its turn. A shelf drop is the
+exception and is still refused while busy, because redeeming its token spends it. `rename` and `mkdir` never take that slot, and an `archive` or a `convert` is keyed by its own
 `id` and runs alongside by design, so the cap was never one write of any kind.
 
 The answer is a `transferstarted` line, then per top-level item a bounded stream of `transferprogress`
@@ -443,7 +446,10 @@ Example: `{"c":"transfercancel","id":12}`
 
 Cancels the running transfer if `id` names it, and does nothing otherwise, so a cancel aimed at an
 operation that already finished can never reach the one after it. There is no response line of its own:
-the running transfer answers with its own `transferdone` carrying `cancelled` true.
+the running transfer answers with its own `transferdone` carrying `cancelled` true. A queued transfer
+that `id` names is taken out of line instead and answered at once with a `transferdone` of `ok` 0,
+`skipped` its `n` and `cancelled` true; it never started, so it touched nothing. The next queued
+transfer starts after a cancelled one exactly as after one that finished.
 
 **The item in flight is stopped rather than allowed to finish, and what it had already written is
 removed: a partial file by `copy_file`, a partly-copied directory by `copy_dir`.** A cancel that waited out a multi-gigabyte copy would not be a cancel, and a half-written file
@@ -850,9 +856,22 @@ metadata sweep over an unbounded subtree, which is the shape this codebase refus
 a transfer's first line is on the critical path of every operation.
 
 `moving` is the verb the request actually resolved to, after the rule that anything which is not
-exactly `"move"` copies. It is on the wire because the client cannot derive it: a paste spends a cut
-clipboard before this line arrives, and a move to Dropbox never touches the clipboard at all, so a
-client reading its own clipboard reports a move as a copy.
+exactly `"move"` copies. It is on the wire because the client cannot derive it: a cut clipboard is
+spent by the line that accepts its paste, and a move to Dropbox never touches the clipboard at all, so
+a client reading its own clipboard reports a move as a copy.
+
+### transferqueued
+
+`{"t":"transferqueued","id":<uint>,"n":<uint>,"moving":<bool>,"ahead":<uint>}`
+
+Example: `{"t":"transferqueued","id":13,"n":1,"moving":false,"ahead":1}`
+
+The answer to a `transfer` that arrived while another operation held the slot. `id`, `n` and `moving`
+are the ones its `transferstarted` will carry when its turn comes, and `transfercancel` takes that `id`
+already. `ahead` counts what is in front of it, the running operation included, so the first transfer to
+wait answers 1. The destination was checked before this line, so a transfer with no usable destination
+is refused with an `error` rather than queued; the paths are checked when it starts, as for any other.
+A `quit` or stdin closing drops every queued transfer unstarted and unanswered.
 
 ### meta
 

@@ -118,6 +118,19 @@ Item {
         function onListInFlightChanged() { if (!pane.listInFlight) root.locateRetry() }
     }
 
+    // A cut is spent when the backend takes its move, not when it is sent, so a refused paste keeps it.
+    function spendCut() {
+        if (pane.clipboard.spending) pane.clipboard = Ops.emptyClipboard()
+    }
+
+    // The running transfer's headline counts what waits behind it, so the two change together.
+    function requeued(list) {
+        pane.queued = list
+        if (!pane.transfer.running) return
+        pane.transfer = Transfer.stamped(pane.transfer, list)
+        pane.sticky(Ops.progressLine(pane.transfer))
+    }
+
     function locateRetry() {
         if (!root.retryId || root.retryListing || pane.listInFlight || pane.searchRunning) return
         if (pane.path !== root.retryFolder) { root.retryId = 0; root.retryPaths = []; return }
@@ -268,14 +281,23 @@ Item {
         }
 
         // Sample input: {"t":"transferstarted","id":12,"n":2,"moving":true}
-        // The verb comes off the wire, never off the clipboard: paste spends a cut before this line
-        // arrives, and a Dropbox move never touches the clipboard at all.
+        // The verb comes off the wire, never off the clipboard, and a Dropbox move never touches the
+        // clipboard at all. An id that was queued is reaching its turn, not answering a paste.
         function onTransferStarted(id, n, moving) {
+            if (!Transfer.isQueued(pane.queued, id)) root.spendCut()
             root.retryId = 0
             root.retryPaths = []
             root.retrySelectionText = ""
-            pane.transfer = Ops.started(id, moving, n)
+            pane.queued = Transfer.unqueue(pane.queued, id)
+            pane.transfer = Transfer.stamped(Ops.started(id, moving, n), pane.queued)
             pane.sticky(Ops.progressLine(pane.transfer))
+        }
+
+        // Sample input: {"t":"transferqueued","id":13,"n":1,"moving":false,"ahead":1}
+        function onTransferQueued(id, n, moving, ahead) {
+            root.spendCut()
+            root.requeued(Transfer.queue(pane.queued, id, n, moving))
+            pane.message(Transfer.queuedLine(n, moving, ahead), false)
         }
 
         // Sample input: {"t":"transferprogress","id":12,"index":0,"name":"a.txt","bytes":40000000,"total":120000000,"scanned":8400000000}
@@ -304,6 +326,12 @@ Item {
 
         // Sample input: {"t":"transferdone","id":12,"ok":1,"failed":1,"skipped":0,"cancelled":false}
         function onTransferDone(id, ok, failed, skipped, cancelled, retryPaths) {
+            // A queued transfer that was cancelled never started, so it ends without touching the card.
+            if (Transfer.isQueued(pane.queued, id)) {
+                root.requeued(Transfer.unqueue(pane.queued, id))
+                pane.message("Cancelled a queued transfer.", false)
+                return
+            }
             if (id !== pane.transfer.id) {
                 return
             }
@@ -406,6 +434,7 @@ Item {
         }
 
         function onFailed(where, input, message, mode) {
+            if (where === "transfer" && pane.clipboard.spending) pane.clipboard = Object.assign({}, pane.clipboard, { spending: false })
             // A listing that failed cannot seat the row a peeked right click asked for, so its menu intent dies here.
             pane.pendingMenu = false
             if (pane.path.length === 0 && input.length > 0) pane.path = input
@@ -458,6 +487,7 @@ Item {
                 // No transferdone is coming from a backend that is gone, and nothing else ends a
                 // running transfer, so the card would crawl over a dead child until the app closed.
                 pane.transfer = Ops.emptyTransfer()
+                pane.queued = []
                 pane.sticky("")
             }
             if (terminal || where === "scan" || pane.listingState === "loading") {

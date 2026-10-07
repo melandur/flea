@@ -114,7 +114,7 @@ function act(action, root, menuId, paths) {
     case "escape":
         if (root.filterTyping || root.filterQuery.length > 0) Filter.close(root)
         else if (root.searchMode.length > 0 && root.focusView === LIST) Search.cancel(root)
-        else if (root.statusBar && root.statusBar.escapePressed()) return
+        else if (root.statusBar && root.statusBar.escapePressed(root, root.selection.count() > 0)) return
         else root.escapePressed()
         return
     case "preview": PreviewKeys.open(root); return
@@ -136,11 +136,7 @@ function act(action, root, menuId, paths) {
     case "copypath": root.copyPath(); return
     case "cut": Ops.clip(root, true, paths); return
     case "paste": Ops.paste(root); return
-    case "movePaste":
-        if (root.clipboard.paths.length === 0) { root.message("The clipboard is empty.", false); return }
-        root.backend.send({c: "transfer", op: "move", paths: root.clipboard.paths, dest: root.path})
-        root.clipboard = Ops.emptyClipboard()
-        return
+    case "movePaste": Ops.paste(root, true); return
     case "undo": Ops.undo(root); return
     case "redo": root.backend.send({c: "redo"}); return
     // m. Mounts.raiseMenu says why a favourite has no menu; here the pane says whether a row was

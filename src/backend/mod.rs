@@ -65,6 +65,7 @@ pub mod movesource;
 pub mod ops;
 pub mod opscancel;
 pub mod opsdispatch;
+pub mod opsqueue;
 pub mod opsreq;
 mod mountinfo;
 mod renamecompat;

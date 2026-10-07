@@ -3773,9 +3773,14 @@ listing it started from: a copy of a large tree is still running when the user n
 index would name a different file by then. So the write requests take absolute paths and the backend
 never consults the listing to serve one.
 
-**One of `transfer`, `trash` or `duplicate` runs at a time.** `opsdispatch.rs` holds `Ops::running`, and a second `transfer`,
-`trash` or `duplicate` while one is live answers an `error` line rather than queueing. The reason is the
-surface, not the backend: the operations design gives transfers the status bar's single transient slot,
+**One of `transfer`, `trash` or `duplicate` runs at a time.** `opsdispatch.rs` holds `Ops::live`, and a second
+`trash` or `duplicate` while one is live answers an `error` line rather than queueing. A second `transfer`
+waits instead, in `opsqueue.rs`: it answers `transferqueued`, and `report_op` starts the oldest one after
+every terminal message, so copying a second folder while the first is still going is the operator's next
+intent rather than an error to retry by hand. A cancelled queued transfer answers its own `transferdone`.
+Esc unwinds an error, then the pane's selection, and only then cancels the transfer that same pane
+started; once that one is already cancelling, Esc takes the newest queued one out of line instead. The
+cap itself stays one, and the reason is the surface, not the backend: the operations design gives transfers the status bar's single transient slot,
 so a second concurrent operation would have nowhere to report itself. `rename` and `mkdir` are exempt because
 neither spawns at all. An `archive` or a `convert` never claims the slot either: `Ops::claim_id` numbers them
 and they run alongside by design, so the cap was never one write of any kind.

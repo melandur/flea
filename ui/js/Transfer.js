@@ -65,6 +65,30 @@ function word(text) {
 // ui/js/Ops.js builds the status bar's one-line form from this same string.
 function head(t) {
     return (t.redo ? "Redoing " + t.redo + " " : t.moving ? "Moving " : "Copying ") + (t.index + 1) + " of " + t.n
+           + (t.queued > 0 ? " · " + t.queued + " queued" : "")
+}
+
+// The transfers the backend holds until its one slot frees, in the order it queued them. The pane
+// keeps the list and the running transfer carries its length, which is all the headline needs.
+function queue(list, id, n, moving) {
+    return list.concat([{ id: id, n: n, moving: moving }])
+}
+
+function unqueue(list, id) {
+    return list.filter(function (waiting) { return waiting.id !== id })
+}
+
+function isQueued(list, id) {
+    return list.some(function (waiting) { return waiting.id === id })
+}
+
+function stamped(t, list) {
+    return Object.assign({}, t, { queued: list.length })
+}
+
+// ahead counts the operation running too, so the first transfer to wait is 1 ahead.
+function queuedLine(n, moving, ahead) {
+    return (moving ? "Move" : "Copy") + " of " + n + (n === 1 ? " item" : " items") + " queued · " + ahead + " ahead"
 }
 
 // The card's second row: the item in flight and how big it is. total is 0 for a directory, whose

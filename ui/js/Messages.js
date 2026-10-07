@@ -25,6 +25,8 @@ function route(root, message) {
         root.searched(message.n, message.scanned, message.ms, message.cancelled)
     } else if (message.t === "transferstarted") {
         root.transferStarted(message.id, message.n, message.moving)
+    } else if (message.t === "transferqueued") {
+        root.transferQueued(message.id, message.n, message.moving, message.ahead)
     } else if (message.t === "transferprogress") {
         root.transferProgress(message.id, message.index, message.name, message.bytes, message.total, message.scanned || 0)
     } else if (message.t === "transferitem") {

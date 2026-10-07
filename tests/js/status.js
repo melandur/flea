@@ -158,4 +158,13 @@ function run(check) {
     activities = Status.activityChanged(activities, right, "", { id: 0, running: false })
     check("completed activities release their owner references", activities.length, 0)
     check("an idle cancel is harmless", Status.cancelActivity(activities).length, 0)
+
+    // Escape cancels only the transfer its own pane started, which need not be the card's.
+    activities = Status.activityChanged([], left, "Copying 1 of 5", { id: 1, running: true })
+    activities = Status.activityChanged(activities, right, "Moving 1 of 3", { id: 1, running: true })
+    check("each owner finds its own activity", Status.activityOf(activities, right) + "|" + Status.activityOf(activities, {}), "1|-1")
+    activities = Status.cancelActivity(activities, Status.activityOf(activities, right))
+    check("cancelling the second pane's transfer leaves the card's alone",
+          activities[0].cancelling + "|" + activities[1].cancelling, "false|true")
+    check("an owner with no activity cancels nothing", Status.cancelActivity(activities, -1) === activities, true)
 }

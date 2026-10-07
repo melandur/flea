@@ -320,7 +320,7 @@ fn handle_line(
                 start_transfer(out, ops, &op, named, &dest)
             }
         }
-        Request::TransferCancel { id } => cancel_transfer(ops, id),
+        Request::TransferCancel { id } => cancel_transfer(out, ops, id),
         Request::Trash { paths, rows, menu_id } => {
             let named = resolve_rows(paths, &rows, &st.base, &st.listing);
             start_trash(out, ops, named, menu_id)
@@ -427,6 +427,8 @@ fn drain(
     cache: &Cache,
 ) {
     let deadline = Instant::now() + DRAIN_LIMIT;
+    // Nothing waiting may start once the window is closing, so the queue goes before the cancel.
+    ops.queue.clear();
     // A clean shutdown cancels the operation rather than abandoning it: a cancelled copy removes its own
     // partial destination, a file by copy_file and a tree by copy_dir, so quitting leaves nothing behind.
     if let Some(id) = ops.live.running() {

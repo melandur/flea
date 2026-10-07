@@ -105,6 +105,7 @@ function escaper(query, retreated) {
     p.searchRunning = false
     p.backend = { searchcancel: function () { p.cancelled += 1 } }
     p.escapePressed = function () { p.retreated += 1 }
+    p.selection = { picked: 0, count: function () { return this.picked } }
     return p
 }
 
@@ -211,6 +212,15 @@ function run(check) {
     activeStatus.statusBar.escapePressed = function () { return false }
     Focus.act("escape", activeStatus)
     check("idle status lets Escape clear marks", activeStatus.retreated, 1)
+    // The status bar is told whose Escape this is and whether a selection is standing, because a
+    // selection must clear before the transfer that pane started is cancelled, and another pane's never.
+    var asked = []
+    activeStatus.statusBar.escapePressed = function (owner, selected) { asked.push((owner === activeStatus) + "/" + selected); return false }
+    activeStatus.selection.picked = 2
+    Focus.act("escape", activeStatus)
+    activeStatus.selection.picked = 0
+    Focus.act("escape", activeStatus)
+    check("Escape names its pane and its standing selection to the status bar", asked.join(" "), "true/true true/false")
 
     // The search strip covers the header whole, so its mark cannot be seen moving, and a sort ends
     // the walk in the backend. Both keys go silent while a search is up rather than cancelling one

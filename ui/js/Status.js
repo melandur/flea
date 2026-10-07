@@ -87,10 +87,16 @@ function activityChanged(activities, owner, text, transfer) {
     return next
 }
 
-function cancelActivity(activities) {
-    if (!activities.length || !activities[0].transfer.running || activities[0].cancelling)
+// at is the activity to cancel, the card's own when it is left out.
+function cancelActivity(activities, at) {
+    at = at || 0
+    if (at < 0 || at >= activities.length || !activities[at].transfer.running || activities[at].cancelling)
         return activities
     var next = activities.slice()
-    next[0] = Object.assign({}, next[0], { cancelling: true })
+    next[at] = Object.assign({}, next[at], { cancelling: true })
     return next
+}
+
+function activityOf(activities, owner) {
+    return activities.findIndex(function (activity) { return activity.owner === owner })
 }

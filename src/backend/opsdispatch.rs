@@ -1,14 +1,16 @@
-// Dispatch for the five write operations: one runs at a time, because the status bar has one sticky slot for it.
+// Dispatch for the five write operations: one runs at a time, because the status bar has one sticky slot for it,
+// and a transfer asked for meanwhile waits its turn in opsqueue.rs.
 use crate::backend::ops;
 use crate::backend::opsreq::{
-    duplicated_line, made_line, op_err, renamed_line, run_duplicate_checked, run_transfer_checked, run_trash, trashed_line,
-    transferdone_line, transferitem_line, transferprogress_line, transferstarted_line, undone_line, usable_dest,
-    OpMsg,
+    duplicated_line, made_line, op_err, renamed_line, run_duplicate_checked, run_trash, trashed_line,
+    transferdone_line, transferitem_line, transferprogress_line, undone_line, usable_dest, OpMsg,
 };
+use crate::backend::opsqueue::{self, Waiting};
 use crate::backend::listing::Listing;
 use crate::backend::proto::error_line;
 use crate::backend::undo::{Entry, ItemIdentity, Journal};
 use std::io::Write;
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::Sender;
@@ -26,13 +28,15 @@ pub(crate) struct Ops {
     pub next_id: usize,
     // The operation on the thread and its cancel flag, shared with the reader thread; one at a time.
     pub live: Arc<super::opscancel::Live>,
+    // Transfers asked for while the slot was held, oldest first.
+    pub queue: VecDeque<Waiting>,
     pub tx: Sender<OpMsg>,
 }
 
 impl Ops {
     pub fn new(tx: Sender<OpMsg>) -> Ops {
         Ops { journal: Journal::new(), permissions: super::permissions::Permissions::default(), picker: None, menuactions: None, trashbrowser: None,
-              transfer_retry: (0, Vec::new()), next_id: 1, live: Arc::new(super::opscancel::Live::new()), tx }
+              transfer_retry: (0, Vec::new()), next_id: 1, live: Arc::new(super::opscancel::Live::new()), queue: VecDeque::new(), tx }
     }
 
     // An id with no slot claimed: archive and convert are id-keyed and run concurrently by design,
@@ -53,7 +57,7 @@ impl Ops {
     }
 }
 
-// The status bar shows one operation, so a second one is refused as data rather than queued invisibly behind the first.
+// The status bar shows one operation, so a second trash, duplicate or redo is refused as data; a transfer waits instead.
 fn busy(out: &mut impl Write, where_: &str) -> bool {
     let e = op_err(where_, "", "an operation is already running");
     writeln!(out, "{}", error_line(&e)).ok();
@@ -106,10 +110,6 @@ pub(crate) fn start_menu_transfer(out: &mut impl Write, ops: &mut Ops, op: &str,
 
 fn start_transfer_checked(out: &mut impl Write, ops: &mut Ops, op: &str, paths: Vec<String>, dest: &str,
                           selection: Option<Vec<super::menu_actions::Selected>>, destination: Option<super::menu_actions::Selected>) {
-    if ops.live.running().is_some() {
-        busy(out, "transfer");
-        return;
-    }
     let dest = match usable_dest(dest) {
         Ok(d) => d,
         Err(e) => {
@@ -120,18 +120,15 @@ fn start_transfer_checked(out: &mut impl Write, ops: &mut Ops, op: &str, paths: 
     };
     // Anything that is not exactly "move" is a copy, so a malformed op can never remove a source.
     let moving = op == "move";
-    let n = paths.len();
-    ops.transfer_retry = (0, Vec::new());
-    let (id, cancel) = ops.claim_transfer();
-    writeln!(out, "{}", transferstarted_line(id, n, moving)).ok();
-    out.flush().ok();
-    let tx = ops.tx.clone();
-    thread::spawn(move || run_transfer_checked(id, moving, paths, dest, cancel, tx, selection, destination));
+    let id = ops.claim_id();
+    opsqueue::submit(out, ops, Waiting { id, moving, paths, dest, selection, destination });
 }
 
-// No response line of its own: the running operation answers with its own terminal transferdone.
-pub(crate) fn cancel_transfer(ops: &Ops, id: usize) {
-    ops.live.cancel(id);
+// A running operation answers with its own terminal transferdone; a waiting one is answered here.
+pub(crate) fn cancel_transfer(out: &mut impl Write, ops: &mut Ops, id: usize) {
+    if !opsqueue::cancel_waiting(out, ops, id) {
+        ops.live.cancel(id);
+    }
 }
 
 pub(crate) fn menu_sources(ops: &Ops, id: usize) -> Result<Option<Vec<super::menu_actions::Selected>>, String> {
@@ -304,6 +301,7 @@ pub(crate) fn report_op(out: &mut impl Write, ops: &mut Ops, msg: OpMsg) {
         }
     }
     out.flush().ok();
+    opsqueue::pump(out, ops);
 }
 
 #[cfg(test)]
@@ -345,9 +343,9 @@ mod tests {
     fn a_cancel_for_an_operation_that_is_not_running_does_nothing() {
         let mut o = ops();
         let (id, flag) = o.claim_transfer();
-        cancel_transfer(&o, id + 99);
+        cancel_transfer(&mut out(), &mut o, id + 99);
         assert!(!flag.load(Ordering::Relaxed), "a stale id must not cancel the live operation");
-        cancel_transfer(&o, id);
+        cancel_transfer(&mut out(), &mut o, id);
         assert!(flag.load(Ordering::Relaxed));
     }
 
@@ -478,7 +476,7 @@ mod tests {
     }
 
     #[test]
-    fn a_second_operation_while_one_runs_is_refused_as_data_rather_than_queued_invisibly() {
+    fn a_trash_while_an_operation_runs_is_refused_as_data_rather_than_queued_invisibly() {
         let d = TestDir::new("dispatchbusy");
         let mut o = ops();
         o.claim_transfer();

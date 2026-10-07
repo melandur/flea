@@ -179,6 +179,8 @@ FocusScope {
     property var pathsPending: null
     // What the status bar's sticky slot is reporting, or an idle transfer; see ui/js/Ops.js.
     property var transfer: Ops.emptyTransfer()
+    // Transfers the backend is holding until that one ends, oldest first; see ui/js/Transfer.js.
+    property var queued: []
     // The row that is its own editor right now, or -1; ui/List.qml's delegate reads it per row.
     property int renamingIndex: -1
     // Set by a pointer-committed rename so the reply reveals nothing; ui/js/Nav.js clears it.

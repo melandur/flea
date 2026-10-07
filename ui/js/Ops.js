@@ -209,17 +209,14 @@ function archiveDoneLine(verified) {
                     : "Extracted. The archive index could not be read, so this was not verified."
 }
 
-function paste(pane) {
-    var clip = pane.clipboard
-    if (!clip || clip.paths.length === 0) {
-        pane.message("There is nothing to paste; y copies and x cuts.", false)
-        return
-    }
-    pane.backend.send({ c: "transfer", op: clip.moving ? "move" : "copy", paths: clip.paths, dest: pane.path })
-    // A cut is spent by its paste; a copy stays on the clipboard so it can be pasted again.
-    if (clip.moving) {
-        pane.clipboard = emptyClipboard()
-    }
+// forceMove is movePaste, which moves even a copy. A move spends the clipboard once the backend takes
+// it, in ui/PaneWire.qml, so a refused paste keeps it; a copy stays so it can be pasted again.
+function paste(pane, forceMove) {
+    var clip = pane.clipboard, moving = clip && (clip.moving || !!forceMove)
+    if (!clip || clip.paths.length === 0) return pane.message("There is nothing to paste; y copies and x cuts.", false)
+    if (moving && clip.spending) return pane.message("That cut is already being pasted.", false)
+    pane.backend.send({ c: "transfer", op: moving ? "move" : "copy", paths: clip.paths, dest: pane.path })
+    if (moving) pane.clipboard = Object.assign({}, clip, { spending: true })
 }
 
 function undo(pane) {
