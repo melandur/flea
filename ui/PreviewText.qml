@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell.Io
 import "." as Flea
 import "js/Kinds.js" as Kinds
+import "js/Syntax.js" as Syntax
 import "js/TextChunks.js" as TextChunks
 
 // Text previews: FileView reads the whole file, so a row over the gate is refused, not truncated.
@@ -38,6 +39,14 @@ Item {
     readonly property bool sheet: Kinds.isSheet(root.path)
     readonly property string text: root.active && !root.sheet ? file.text() : ""
     readonly property var runs: root.tabular ? [] : TextChunks.split(root.text)
+    // Code draws in colour, ui/js/Syntax.js's four roles on the surface this pane sits on; past
+    // Syntax.MAX_BYTES, or for a name with no family, it stays plain text.
+    readonly property var syntax: root.tabular || root.size > Syntax.MAX_BYTES ? null : Syntax.language(root.path)
+    // The open comment or string each run starts in, kept per body; see Syntax.memo.
+    readonly property var syntaxMemo: root.syntax ? Syntax.memo(root.runs, root.syntax) : null
+    readonly property var syntaxColours: Syntax.colours(String(Theme.color.accent), String(Theme.color.executable),
+                                                  String(Theme.color.symlink), String(Theme.color.muted),
+                                                  String(Theme.color.surface))
     readonly property Flickable flick: root.tabular ? table.view : textFlick
     // For ui/Ipc.qml: the drawn body's box and its text.
     readonly property Item bodyItem: root.flick
@@ -85,11 +94,14 @@ Item {
 
         delegate: Text {
             required property string modelData
+            required property int index
             width: textFlick.width
-            text: modelData
+            // Syntax.highlight escapes every byte of the file before it builds a tag, so StyledText
+            // here draws only the colours it was given and never a tag the file wrote.
+            text: root.syntaxMemo ? Syntax.run(root.syntaxMemo, index, root.syntaxColours) : modelData
             // MarkdownText resolves inline image references, so a downloaded README would fetch from
             // the network on cursor movement; the canvas asks for the file verbatim in any case.
-            textFormat: Text.PlainText
+            textFormat: root.syntaxMemo ? Text.StyledText : Text.PlainText
             wrapMode: Text.Wrap
             color: Theme.color.foreground
             font.family: Theme.font.family

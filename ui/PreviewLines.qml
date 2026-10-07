@@ -3,10 +3,11 @@ import Quickshell.Io
 import qs.Commons
 import "." as Flea
 import "js/Kinds.js" as Kinds
+import "js/Syntax.js" as Syntax
 
-// The first lines of a text file, in the preview column's frame. The canvas is explicit that this
-// invents no highlighting: "first lines verbatim, mono" for text, "line numbers muted, text
-// foreground, still just text" for code. A gutter is the only difference between the two.
+// The first lines of a text file, in the preview column's frame: verbatim for text, and for code
+// with a muted number gutter and ui/js/Syntax.js's colours, the operator's ruling of 2026-10-07
+// over the canvas's "still just text".
 Item {
     id: root
 
@@ -33,6 +34,14 @@ Item {
             return []
         return file.text().split("\n").slice(0, root.maxLines)
     }
+
+    // The same lines coloured, one StyledText string each, or null for a file with no family.
+    readonly property var syntax: Syntax.language(root.path)
+    readonly property var styled: root.syntax && !root.tabular
+        ? Syntax.lines(root.lines, root.syntax, Syntax.colours(String(Theme.color.accent), String(Theme.color.executable),
+                                                               String(Theme.color.symlink), String(Theme.color.muted),
+                                                               String(Theme.color.background)))
+        : null
 
     // Surfaced so the column can show the canvas's Error tile instead of an empty frame.
     property bool readFailed: false
@@ -100,13 +109,14 @@ Item {
                     textFormat: Text.PlainText
                 }
 
-                // corner: file contents are arbitrary text, so PlainText, the same rule every name follows.
+                // corner: file contents are arbitrary text, so PlainText, the same rule every name
+                // follows; the coloured form is StyledText built only from escaped bytes.
                 Text {
-                    text: "  " + modelData
+                    text: root.styled ? "&nbsp;&nbsp;" + root.styled[index] : "  " + modelData
                     color: Theme.color.foreground
                     font.family: Theme.font.family
                     font.pixelSize: Theme.font.caption
-                    textFormat: Text.PlainText
+                    textFormat: root.styled ? Text.StyledText : Text.PlainText
                     // One line per row, never wrapped: the canvas shows the file's own line breaks.
                     elide: Text.ElideRight
                 }

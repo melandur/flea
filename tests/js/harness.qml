@@ -46,6 +46,7 @@ import "recent.js" as RecentSuite
 import "renderer.js" as RendererSuite
 import "scroll.js" as ScrollSuite
 import "search.js" as SearchSuite
+import "syntax.js" as SyntaxSuite
 import "selection.js" as SelectionSuite
 import "scripts.js" as ScriptsSuite
 import "settings.js" as SettingsSuite
@@ -103,7 +104,7 @@ Item {
             ["protocols", ProtocolsSuite], ["railkeys", RailKeysSuite],
             ["recent", RecentSuite],
             ["renderer", RendererSuite],
-            ["scroll", ScrollSuite], ["search", SearchSuite],
+            ["scroll", ScrollSuite], ["search", SearchSuite], ["syntax", SyntaxSuite],
             ["selection", SelectionSuite], ["settings", SettingsSuite], ["settingsopen", SettingsOpenSuite], ["settingsmenus", SettingsMenusSuite], ["settingsshelf", SettingsShelfSuite],
             ["sort", SortSuite], ["startup", StartupSuite], ["trashdates", TrashDatesSuite], ["permissions", PermissionsSuite], ["status", StatusSuite], ["taildrop", TaildropSuite], ["textsize", TextSizeSuite],
             ["trash", TrashSuite], ["tap", TapSuite], ["marquee", MarqueeSuite], ["tabs", TabsSuite], ["tabs-switch", TabsSwitchSuite], ["shelfmodel", ShelfModelSuite],
