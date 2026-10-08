@@ -171,6 +171,17 @@ function typeKey(event, root) {
     return true
 }
 
+// The search ends because the operator went somewhere from it: into a result folder, back, up, or
+// to a result's own folder. Unlike close nothing is re-listed, because the caller is about to list
+// where they are going, and that list ends a walk still running (docs/protocol.md "searched").
+function leave(root) {
+    if (!root.searchMode) return
+    if (root.searchLive) root.searchLive.stop()
+    root.searchMode = OFF
+    root.searchQuery = ""
+    reset(root)
+}
+
 // o on a result opens the directory that holds it and puts the cursor on the row, the design's reveal.
 function reveal(root) {
     var row = root.rowFor(root.cursorIndex)
@@ -182,12 +193,21 @@ function reveal(root) {
     if (cut <= 0) {
         return
     }
-    if (root.searchLive) root.searchLive.stop()
-    root.searchMode = OFF
-    root.searchQuery = ""
-    reset(root)
+    leave(root)
     root.pendingSelect = full
     root.open(full.substring(0, cut))
+}
+
+// A preview opened over the results reveals the file it ends on once it closes, the operator's
+// ruling of 2026-10-08: j and k still walk the results inside it, and whichever one is showing when
+// it closes is where the pane lands, selected in its own folder. Module state, because the preview
+// is one overlay shared by both panes and only the pane that opened it may be moved.
+var peeked = null
+function peek(root) { peeked = listed(root) ? root : null }
+function unpeek(root) {
+    var was = peeked === root
+    peeked = null
+    if (was && listed(root)) reveal(root)
 }
 
 // What activating a row means right now. On a search result the operator's ruling is that it takes

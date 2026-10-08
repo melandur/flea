@@ -3,6 +3,7 @@
 .import "DirSizes.js" as DirSizes
 .import "Filter.js" as Filter
 .import "Kinds.js" as Kinds
+.import "Search.js" as Search
 .import "SettingsOpen.js" as OpenRules
 .import "Thumbs.js" as Thumbs
 
@@ -18,6 +19,8 @@ function open(pane, newPath) {
         pane.message("A directory is already loading.", false)
         return
     }
+    // Going anywhere from a search ends it, so a result folder opened by enter is a folder again.
+    Search.leave(pane)
     if (pane.path.length > 0 && newPath !== pane.path) {
         pane.history = pane.history.concat([pane.path])
         pane.forwardHistory = []
@@ -40,6 +43,7 @@ function back(pane) {
     pane.forwardHistory = (pane.forwardHistory || []).concat([pane.path])
     // The pop happens before the open, because open() is what would otherwise push it straight back on.
     pane.history = pane.history.slice(0, pane.history.length - 1)
+    Search.leave(pane)
     pane.openWithoutHistory(target)
 }
 
@@ -52,6 +56,7 @@ function forward(pane) {
     var target = pane.forwardHistory[pane.forwardHistory.length - 1]
     pane.history = pane.history.concat([pane.path])
     pane.forwardHistory = pane.forwardHistory.slice(0, -1)
+    Search.leave(pane)
     pane.openWithoutHistory(target)
 }
 
@@ -229,6 +234,12 @@ function leafOf(path) {
 function parent(pane) {
     if (pane.listInFlight) {
         pane.message("A directory is already loading.", false)
+        return
+    }
+    // Up from a search's results is back out of it, to the folder it walked, and not to that
+    // folder's parent: the results are a view of the folder, not a level below it.
+    if (Search.listed(pane)) {
+        Search.close(pane)
         return
     }
     if (pane.path === "/") {

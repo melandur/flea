@@ -1,4 +1,6 @@
 .import "../../ui/js/Search.js" as Search
+.import "../../ui/js/Nav.js" as Nav
+.import "../../ui/js/PreviewKeys.js" as PreviewKeys
 
 function run(check) {
     // Rule 6: a count that is still growing says so, beside the count.
@@ -204,4 +206,55 @@ function run(check) {
     check("and puts the cursor on the highest-ranked row rather than a stale index", reordered.cursor, 0)
     check("and re-reads the window, which is what keeps trash on the row that is drawn",
           reordered.sent.join(","), "window 0 200")
+
+    // Going anywhere from the results ends the search, the operator's ruling of 2026-10-08: enter on
+    // a result folder, back, forward and up each land in a plain folder, never a stale query strip.
+    function searching() {
+        var p = {
+            searchMode: "results", searchQuery: "cases", searchFrom: "/d", searchWalked: "here:cases",
+            searchRunning: false, searchScanned: 0, path: "/d", listInFlight: false, history: ["/a"],
+            forwardHistory: [], pendingSelect: "", cursorIndex: 1, listed: "", opened: [],
+            searchLive: { stop: function () {}, restart: function () {} },
+            rows: [{ n: "sub/batch_01", d: true }, { n: "sub/batch_01/cases.txt", d: false, i: "text-plain", s: 9, k: 0 }],
+            kindNames: ["Text"],
+            rowFor: function (i) { return this.rows[i] },
+            join: function (base, name) { return base + "/" + name },
+            message: function () {},
+            openWithoutHistory: function (path) { this.listed = path },
+            preview: { opened: "", open: function (path) { this.opened = path } }
+        }
+        p.open = function (path) { Nav.open(p, path) }
+        return p
+    }
+    var entered = searching()
+    Nav.open(entered, "/d/sub/batch_01")
+    check("opening a result folder ends the search and lists the folder",
+          entered.searchMode + "|" + entered.searchQuery + "|" + entered.listed, "||/d/sub/batch_01")
+    check("and back returns to the folder the search walked", entered.history.join(","), "/a,/d")
+    var backed = searching()
+    Nav.back(backed)
+    check("back from the results ends the search too", backed.searchMode + "|" + backed.listed, "|/a")
+    var climbed = searching()
+    Nav.parent(climbed)
+    check("up from the results backs out to the walked folder, not its parent",
+          climbed.searchMode + "|" + climbed.listed, "|/d")
+
+    // A preview opened over the results lands the pane beside the file it showed once it closes.
+    var peeking = searching()
+    PreviewKeys.open(peeking)
+    check("space on a result previews the file by its full path", peeking.preview.opened, "/d/sub/batch_01/cases.txt")
+    Search.unpeek(searching())
+    check("another pane's close moves nothing", peeking.searchMode, "results")
+    PreviewKeys.open(peeking)
+    Search.unpeek(peeking)
+    check("closing it ends the search in the file's own folder, the file selected",
+          peeking.searchMode + "|" + peeking.listed + "|" + peeking.pendingSelect,
+          "|/d/sub/batch_01|/d/sub/batch_01/cases.txt")
+    Search.unpeek(peeking)
+    check("and the peek is spent, so a later close moves nothing", peeking.history.join(","), "/a,/d")
+    var plain = searching()
+    plain.searchMode = ""
+    PreviewKeys.open(plain)
+    Search.unpeek(plain)
+    check("a preview over an ordinary folder closes where it was", plain.listed, "")
 }

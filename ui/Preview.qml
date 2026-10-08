@@ -3,6 +3,7 @@ import qs.Commons
 import "." as Flea
 import "js/Kinds.js" as Kinds
 import "js/Motion.js" as Motion
+import "js/Search.js" as Search
 
 // The overlay lives inside the Flea window, Finder's Quick Look shape: a second window breaks omarchy-drive focus flea and every test that narrows on it.
 Item {
@@ -157,6 +158,7 @@ Item {
         root.mediaRate = 0
         root.mediaRow = -1
         if (root.pane) root.pane.listArea.forceActiveFocus()
+        if (root.pane) Search.unpeek(root.pane) // opened over search results: go to the file it showed
     }
 
     function load(newPath, newIcon, newSize, newKind) {

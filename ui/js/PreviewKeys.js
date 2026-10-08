@@ -1,6 +1,7 @@
 .pragma library
 
 .import "Filter.js" as Filter
+.import "Search.js" as Search
 
 // What the preview overlay does with a key, split out of Focus.js at its 300-line hard cap the
 // same way ui/js/Trash.js was: Focus.js decides which surface owns a key, and this is the surface.
@@ -38,8 +39,10 @@ function pdfAction(action, viewer) {
 // A directory has no preview kind of its own, so Space on one is a silent no-op rather than an error.
 function open(root) {
     var row = root.rowFor(root.cursorIndex)
-    if (row && !row.d)
-        root.preview.open(root.join(root.path, row.n), row.i, row.s, root.kindNames[row.k] || "")
+    if (!row || row.d) return
+    // Over search results, closing this preview takes the pane to the file it ends on.
+    Search.peek(root)
+    root.preview.open(root.join(root.path, row.n), row.i, row.s, root.kindNames[row.k] || "")
 }
 
 // The preview's whole keyboard, one contract for every kind it can draw: the operator's ruling of
