@@ -134,6 +134,7 @@ function run(check) {
     check("a jump to the last run colours it as reading down did",
           Syntax.run(jumped, last, P), Syntax.run(walked, last, P))
     check("there is more than one run to cross", runs.length > 3, true)
+    check("a run past the body's end draws nothing rather than throw", Syntax.run(jumped, runs.length + 5, P), "")
 
     // The column's first lines carry an open comment down from line to line.
     var first = Syntax.lines(["/* a", "b */ c"], Syntax.language("a.c"), P)

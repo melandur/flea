@@ -278,9 +278,28 @@ Item {
             NumberAnimation { duration: Motion.durMs.open; easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.bezierCurve }
         }
 
+        // The name and folder over every kind but a PDF, whose viewer draws its own bar; the kinds
+        // below fill what the strip leaves rather than the surface.
+        Flea.PreviewHeader {
+            id: header
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            visible: root.active && !root.isPdf
+            path: root.path
+            iconName: root.iconName
+            home: root.pane ? root.pane.home : ""
+        }
+
+        Item {
+            id: body
+            anchors.fill: parent
+            anchors.topMargin: header.visible ? header.height : 0
+        }
+
         Flea.PreviewText {
             id: textPane
-            anchors.fill: parent
+            anchors.fill: body
             anchors.margins: Theme.spacing.gap
             active: root.kind === "text"
             path: root.path
@@ -289,7 +308,7 @@ Item {
 
         Loader {
             id: mediaLoader
-            anchors.fill: parent
+            anchors.fill: body
             onLoaded: {
                 item.path = Qt.binding(function () { return root.path })
                 item.kind = Qt.binding(function () { return root.kind })
@@ -304,7 +323,7 @@ Item {
         // and that box is bound before the path, because the path starts the decode and a box landing after it decodes twice.
         Loader {
             id: imageLoader
-            anchors.fill: parent
+            anchors.fill: body
             onLoaded: {
                 item.decodeWidth = Qt.binding(function () { return root.width })
                 item.decodeHeight = Qt.binding(function () { return root.height })
@@ -338,45 +357,23 @@ Item {
 
         Flea.PreviewArchivePane {
             id: archivePane
-            anchors.fill: parent
+            anchors.fill: body
             anchors.margins: Theme.spacing.rowPaddingX
             visible: root.isArchive && root.archiveMeta !== null && !root.archiveFailed
             path: root.path
             meta: root.archiveMeta
         }
 
-        // Declined, or an archive whose index could not be read: a mark over the sentence, never a bare surface.
-        Column {
-            anchors.centerIn: parent
-            width: parent.width - 2 * Theme.spacing.rowPaddingX
-            spacing: Theme.spacing.gap
+        Flea.PreviewDeclined {
+            anchors.fill: body
             visible: root.kind === "unsupported" || root.archiveFailed
-
-            Flea.Glyph {
-                anchors.horizontalCenter: parent.horizontalCenter
-                // The overlay declining is a pane state standing alone, which States.dc.html draws at 40.
-                maxSize: Theme.stateMarkSize
-                width: Theme.stateMarkSize
-                height: Theme.stateMarkSize
-                name: root.archiveFailed ? "alert" : "file"
-                color: root.archiveFailed ? Theme.color.error : Theme.color.muted
-            }
-
-            Text {
-                width: parent.width
-                horizontalAlignment: Text.AlignHCenter
-                text: root.status
-                color: root.archiveFailed ? Theme.color.foreground : Theme.color.muted
-                font.family: Theme.font.family
-                font.pixelSize: Theme.font.body
-                textFormat: Text.PlainText
-                wrapMode: Text.Wrap
-            }
+            failed: root.archiveFailed
+            status: root.status
         }
 
         // Media still buffering or an image still decoding shows the crawl; LoadingState's hold-off keeps a fast local open from flashing it.
         Flea.LoadingState {
-            anchors.fill: parent
+            anchors.fill: body
             visible: (root.isMedia || root.isImage || root.isArchive) && root.status === "loading"
         }
 

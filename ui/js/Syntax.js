@@ -222,6 +222,8 @@ function highlight(text, sp, state, paint, palette) {
 function memo(runs, sp) { return { runs: runs, spec: sp, states: [null] } }
 
 function run(cache, index, palette) {
+    // A reused delegate can ask once with its old index while a new, shorter body's memo lands.
+    if (index < 0 || index >= cache.runs.length) return ""
     var states = cache.states
     for (var k = states.length - 1; k < index; k++)
         states.push(highlight(cache.runs[k], cache.spec, states[k], false, palette).state)
