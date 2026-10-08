@@ -564,7 +564,7 @@ FocusScope {
     function togglePreviewColumn() { ViewState.changeLeaf("preview", { column: !ViewState.previewColumn }) }
     function chooseView(mode) { ViewState.changeKey("view", mode) }
     // Ctrl+T: the split is a window shape and not a pane's view, so it toggles rather than chooses.
-    function toggleDual() { ViewState.toggleDual() }
+    function toggleDual() { ViewState.toggleDual(root.path) }
     function focusPreviewColumn() {
         if (!ViewState.previewColumn || root.dualMode) return
         if (root.viewMode === "columns" && columnsLoader.item) columnsLoader.item.focusPreview()

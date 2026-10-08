@@ -1242,6 +1242,15 @@ the handler runs: `focusSide` is set before the item can exist, and `onLoaded` f
 first call, then `item=true` and `secondFocus=true` from the loader. Leaving the split still puts
 the keyboard back on the primary pane, which is the only pane left.
 
+**Entering the split duplicates the folder it was entered from.** The operator's ruling of
+2026-10-08: "with split we always split the actual view im on". `ViewState.toggleDual(path)` sets
+`ViewState.splitPath`, never stored, before it flips the view, so a first split's `onLoaded` reads it
+there, and `view.duplicatePrimary()` sends a second pane an earlier split already built, which is
+still where it was left, to the same folder. The chrome's split button goes through the same call.
+**A launch opens on the start path, split or not**, the ruling of the same day: "new flea app when
+open should always start in my home". `ui/js/Startup.js` `startPath` decides, home by default, and a
+window left split opens both panes there; `dual.paths` is still written but no longer read back.
+
 **Right in the rail opens the place and takes the keyboard into it; Enter opens it and stays.** The
 operator's ruling of 2026-09-18: "when in side view and arrow right open go directly with active
 selection to the opened folder". Both were one action before, so opening a place from the sidebar

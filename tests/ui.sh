@@ -7563,7 +7563,7 @@ case_dualsort() {
     done
     kill_flea
     launch "$dir/left"
-    menus_expect dualState '.active and .focused == 1 and all(.panes[]; .total == 80 and (.loading | not))' 'restart restores paths and focus with the saved default sort'
+    menus_expect dualState '.active and .focused == 1 and all(.panes[]; .total == 80 and (.loading | not))' 'restart opens both panes on the launch path, restores focus and the saved default sort'
     dual_sort_wait kind:asc file-00.txt
     key -k Tab >/dev/null
     dual_sort_wait kind:asc file-00.txt

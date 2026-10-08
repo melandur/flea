@@ -98,12 +98,17 @@ QtObject {
     // Ctrl+T both ways. Entering records the view being left, in the same group that already holds
     // the pair's paths and focus, so the trip back is not always to the list; leaving reads it. The
     // record is written first: flipping the view repaints the window, and a "from" landing after that
-    // would be the split's own word by the time anything read it.
-    function toggleDual() {
+    // would be the split's own word by the time anything read it. The split opens on the folder Ctrl+T
+    // was pressed in, on both sides, the operator's ruling of 2026-10-08: "with split we always split
+    // the actual view im on". splitPath is set before the view flips, so a second pane built by the
+    // flip reads it in ui/shell.qml's onLoaded; it is never stored, so a launch never sees it.
+    property string splitPath: ""
+    function toggleDual(path) {
         if (root.dualMode) {
             root.changeKey("view", root.dualFrom)
             return
         }
+        root.splitPath = path || ""
         root.changeLeaf("dual", { from: root.view })
         root.changeKey("view", "dual")
     }

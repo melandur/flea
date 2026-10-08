@@ -152,7 +152,13 @@ ShellRoot {
                 // read by the startup path at Component.onCompleted and by the loader below, and a
                 // toggle at runtime is the one case that is neither. The loader re-focuses when the
                 // second pane finishes building, which is why focusSide is set before it can.
-                else { focusSide = 1; focusPane(1); rememberPaths() }
+                // A second pane already built from an earlier split is still where it was left, so it
+                // is sent to the folder the split was pressed in; a fresh one reads it from ViewState.splitPath.
+                else { view.duplicatePrimary(); focusSide = 1; focusPane(1); rememberPaths() }
+            }
+            function duplicatePrimary() {
+                var other = secondPane.item ? secondPane.item.pane : null, here = primaryPane.path
+                if (other && here && other.path !== here && !(other.listInFlight && other.listingPath === here)) other.open(here)
             }
 
             Backend {
@@ -183,7 +189,7 @@ ShellRoot {
                 onSearchRequested: view.currentPane.act("search")
                 onFilterRequested: view.currentPane.act("filter")
                 onSortRequested: view.currentPane.act("sortNext")
-                onViewChosen: function (mode) { ViewState.changeKey("view", mode) }
+                onViewChosen: function (mode) { if (mode === "dual" && !view.dualMode) ViewState.toggleDual(primaryPane.path); else ViewState.changeKey("view", mode) }
                 // The path bar's four. The primaryPane navigates and answers for the keyboard exactly as it
                 // does for every other route in, so a path typed and a row opened end the same way.
                 onPathEntered: function (path) { view.currentPane.open(path) }
@@ -290,9 +296,8 @@ ShellRoot {
                 }
                 onLoaded: {
                     built = true
-                    var paths = (ViewState.state.dual || {}).paths || []
                     item.pane.clipboard = primaryPane.clipboard
-                    item.pane.open(paths.length === 2 ? paths[1] : primaryPane.path || primaryPane.home)
+                    item.pane.open(ViewState.splitPath || view.startPath())
                     if (view.initialized && view.dualMode) view.focusPane(view.focusSide)
                 }
             }
@@ -510,13 +515,14 @@ ShellRoot {
                 }
             }
 
+            // A launch opens where Settings > Opening says, home unless told otherwise, and a window left
+            // split opens both panes there too: the operator's ruling of 2026-10-08, "new flea app when
+            // open should always start in my home". dual.paths is no longer read back at launch.
+            function startPath() { return Startup.startPath(ViewState.state, Quickshell.env("HOME"), Quickshell.env("FLEA_PATH")) }
             Component.onCompleted: {
-                var home = Quickshell.env("HOME")
-                var start = Startup.startPath(ViewState.state, home, Quickshell.env("FLEA_PATH"))
                 // Read once: Pane.applyPendingSelect() forgets it after the first rows response.
-                var paths = (ViewState.state.dual || {}).paths || []
                 primaryPane.pendingSelect = Quickshell.env("FLEA_SELECT") || ""
-                primaryPane.open(view.dualMode && paths.length === 2 ? paths[0] : start)
+                primaryPane.open(view.startPath())
                 view.initialized = true
                 if (view.dualMode) view.focusPane(view.focusSide)
                 trashSweep.start()
