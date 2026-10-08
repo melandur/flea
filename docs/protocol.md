@@ -210,13 +210,15 @@ Settings value. `mode` is not a supported sort key.
 
 `{"c":"search","path":"<string>","query":"<string>","hidden":<bool>,"shallow":<bool>}`
 
-Example: `{"c":"search","path":"/home/gm","query":"dwnhelp","hidden":false}`
+Example: `{"c":"search","path":"/home/gm","query":"helper","hidden":false}`
 
 Walks the whole subtree under `path`, or with `shallow` true reads `path` alone and descends
-nothing, and streams every entry whose path relative to `path`
-contains `query` as a case-insensitive subsequence, into a fresh listing that replaces the
-current one. The match is fuzzy rather than a substring, and it runs over the whole relative
-path rather than the base name, so `dwnhelp` finds `downloads/helper.txt`. `hidden` follows
+nothing, and streams every entry whose name holds `query` as plain, case-insensitive text,
+into a fresh listing that replaces the current one. The match is a substring and never a scattered subsequence, the operator's ruling of
+2026-10-08: a subsequence let `_dee` find `deepbratumia_model_install_handover.md` by its
+scattered letters. It runs over the entry's own name, so a file under a matching folder is not a
+match for that alone; a query holding a `/` runs over the whole relative path instead, so
+`downloads/help` finds `downloads/helper.txt`. `hidden` follows
 `list`'s rule exactly: `false`, or missing, drops dot-prefixed names before they are
 counted or descended, so a `.git` costs one `readdir` entry and nothing more.
 
@@ -225,12 +227,10 @@ GUI and the TUI both send the folder the pane is standing in, with `shallow` tru
 false for Ctrl+Shift+F. The backend has no notion of home and no scope of its own. A missing
 `shallow` is false, so a client that never names it walks the subtree as it always did.
 
-**Results are ranked, and the rank is what makes a subsequence match usable.** A subsequence
-over a hundred thousand entries matches far too much to read, so every match carries a score
-and the walk answers in score order. Characters matching consecutively score highest; a
-character starting the candidate, a path segment, a word or a camelCase hump scores next; a
-character in the file's own name beats one in a parent directory the query merely passed
-through; and every candidate character skipped between two matches is charged back. Ties go
+**Results are ranked, so the likeliest answer is the first row.** The query being the whole
+name scores highest, then the query starting the name, then the query starting a later word (after
+`/`, `-`, `_`, `.`, a space or on a camelCase hump), and an earlier occurrence beats a later one;
+a name holding the query twice is scored by its better occurrence. Ties go
 to the shorter path, then to the listing's own name order, so one walk over one tree always
 answers in exactly one order.
 

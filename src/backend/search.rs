@@ -1,5 +1,5 @@
 // The subtree walk behind a search request, ticked a slice at a time so a cancel is never blocked.
-use crate::backend::fuzzy::{rank_order, Fuzzy};
+use crate::backend::matcher::{rank_order, Matcher};
 use crate::backend::listing::Listing;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -9,8 +9,8 @@ const DIRS_PER_TICK: usize = 4;
 
 pub struct Search {
     root: PathBuf,
-    // Folded once by Fuzzy, because the comparison runs once per entry and the query never changes mid-walk.
-    fuzzy: Fuzzy,
+    // Folded once by Matcher, because the comparison runs once per entry and the query never changes mid-walk.
+    matcher: Matcher,
     hidden: bool,
     // Reads root alone and never descends, which is Ctrl+F's search of the open folder.
     shallow: bool,
@@ -26,7 +26,7 @@ impl Search {
     pub fn new(root: &str, query: &str, hidden: bool, shallow: bool) -> Search {
         Search {
             root: PathBuf::from(root),
-            fuzzy: Fuzzy::new(query),
+            matcher: Matcher::new(query),
             hidden,
             shallow,
             pending: vec![String::new()],
@@ -65,9 +65,9 @@ impl Search {
             // d_type is free and answers is_dir with no stat, matching scan.rs's phase 1.
             let is_dir = entry.file_type().map(|f| f.is_dir()).unwrap_or(false);
             let child = if rel.is_empty() { name.to_string() } else { format!("{}/{}", rel, name) };
-            // The candidate is the whole relative path, not the base name, so one query can span a
-            // separator: "dwnhelp" reaches "downloads/helper.txt", see docs/protocol.md "search".
-            if let Some(score) = self.fuzzy.score(&child) {
+            // Matcher reads the name alone, or the whole relative path for a query holding a /, see
+            // docs/protocol.md "search".
+            if let Some(score) = self.matcher.score(&child) {
                 // The row's name is its path relative to the root, so base.join(name) still reaches the file and every per-row facility works unchanged.
                 listing.push(&child, is_dir);
                 self.scores.push(score);
@@ -168,13 +168,21 @@ mod tests {
     }
 
     #[test]
-    fn a_query_spanning_a_separator_finds_the_file() {
+    fn a_query_is_plain_text_and_never_a_scattered_subsequence() {
         let d = TestDir::new("span");
         d.dir("downloads");
         d.file("downloads/helper.txt", "");
+        d.file("deepbratumia_model_install_handover.md", "");
 
-        let (l, _) = walk_all(root(&d), "dwnhelp", false);
-        assert_eq!(names(&l), ["downloads/helper.txt"]);
+        let (scattered, _) = walk_all(root(&d), "dwnhelp", false);
+        assert_eq!(names(&scattered), Vec::<String>::new());
+        let (scattered, _) = walk_all(root(&d), "_dee", false);
+        assert_eq!(names(&scattered), Vec::<String>::new());
+        let (plain, _) = walk_all(root(&d), "_model", false);
+        assert_eq!(names(&plain), ["deepbratumia_model_install_handover.md"]);
+        // A / in the query reaches across the separator, so a path can still be typed.
+        let (path, _) = walk_all(root(&d), "downloads/help", false);
+        assert_eq!(names(&path), ["downloads/helper.txt"]);
     }
 
     #[test]
@@ -184,10 +192,12 @@ mod tests {
         d.file("bench/unrelated-notes.txt", "");
         d.file("bench.txt", "");
 
+        d.file("bench/my-bench.txt", "");
+
         let (l, _) = walk_all(root(&d), "bench", false);
-        // All three carry the query whatever readdir said: the two whose own name is the query lead
-        // on score, the shorter of those two leads on the tie, and the parent-only match comes last.
-        assert_eq!(names(&l), ["bench", "bench.txt", "bench/unrelated-notes.txt"]);
+        // Whatever readdir said: the whole name leads, then the name the query starts, then the one
+        // where it starts a later word. A file matching only through its parent is not a result.
+        assert_eq!(names(&l), ["bench", "bench.txt", "bench/my-bench.txt"]);
     }
 
     #[test]

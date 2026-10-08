@@ -18,7 +18,7 @@ pub mod dirsizereq;
 pub mod listpaths;
 pub mod events;
 pub mod scan;
-pub mod fuzzy;
+pub mod matcher;
 pub mod search;
 pub mod searchreq;
 pub mod sort;
