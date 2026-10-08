@@ -1,7 +1,8 @@
 .pragma library
 
-.import "Contrast.js" as Contrast
 .import "SyntaxLanguages.js" as Languages
+.import "SyntaxMarkdown.js" as Markdown
+.import "SyntaxStyle.js" as Style
 
 // Syntax colour for the text previews, in PyCharm's Monokai: keywords, builtins, strings and their
 // escapes, numbers and constants, comments, operators, the name a function is defined under, its
@@ -13,8 +14,6 @@
 // Larger files preview as plain text: the colour of a run depends on every run above it, so the
 // first paint far down a big file would scan everything before it.
 var MAX_BYTES = 2097152
-// Tabs are expanded to this stop, because StyledText collapses a tab the way it collapses spaces.
-var TAB = 4
 
 var byExtension = null, specs = {}
 
@@ -32,6 +31,8 @@ function language(path) {
         }
     }
     var key2 = byExtension[name.substring(dot + 1).toLowerCase()]
+    // A well-known name with a suffix of its own, Dockerfile.dev or Makefile.am, is still that file.
+    key2 = key2 || Languages.NAMES[name.substring(0, name.indexOf("."))]
     return key2 ? spec(key2) : null
 }
 
@@ -70,7 +71,7 @@ function spec(key) {
                    constants: constants, closes: closes, ci: f.ci, hashWord: f.hashWord,
                    lifetimes: f.lifetimes, builtins: set(Languages.BUILTINS[f.words], false),
                    selfWords: set(f.self, false), definers: set(Languages.DEFINERS, false),
-                   kwargs: f.kwargs, macros: f.macros, attrs: f.attrs }
+                   kwargs: f.kwargs, macros: f.macros, attrs: f.attrs, markdown: f.markdown }
     return specs[key]
 }
 
@@ -122,63 +123,22 @@ function closeAt(text, from, open) {
     }
 }
 
-function expandTabs(text) {
-    if (text.indexOf("\t") < 0) return text
-    var out = "", col = 0
-    for (var i = 0; i < text.length; i++) {
-        var ch = text.charAt(i)
-        if (ch === "\t") { var pad = TAB - col % TAB; out += "    ".substring(0, pad); col += pad }
-        else { out += ch; col = ch === "\n" ? 0 : col + 1 }
-    }
-    return out
-}
-
-function escape(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
-
-// StyledText collapses runs of spaces and ignores a bare newline, so indentation becomes &nbsp;
-// and a line break <br>. A single space between words stays a space, so wrapping still breaks there.
-// The spaces are marked on the raw text, before any tag splits a run of them, with a private-use
-// character no file is drawn with; layout turns the marks into the entity after escaping.
-var HARD = "\uE000"
-function hardSpaces(text) {
-    return text.replace(/ {2,}/g, function (m) { return new Array(m.length + 1).join(HARD) })
-               .replace(/(^|\n) /g, "$1" + HARD)
-}
-
-function layout(html) {
-    return html.replace(/\uE000/g, "&nbsp;").replace(/\n/g, "<br>")
-}
-
-// PyCharm's Monokai, the operator's ruling of 2026-10-08, from its .icls and its sample picture.
-// Fixed rather than the theme's, because the scheme is the point; keywords and parameters, self
-// among them, draw italic as the picture shows them.
-var MONOKAI = { keyword: "#66d9ef", builtin: "#66d9ef", string: "#e6db74", number: "#ae81ff",
-                comment: "#75715e", operator: "#f92672", func: "#a6e22e", param: "#fd971f" }
-var ITALIC = { keyword: true, param: true }
-
-// The colours, each lifted to 4.5:1 on the ground it is drawn over, comments to 3:1. A dark theme
-// keeps Monokai's own hexes; a light one darkens them, hue kept, until they read.
-function colours(ground) {
-    var out = {}
-    for (var role in MONOKAI)
-        out[role] = Contrast.ensureRatio(MONOKAI[role], ground, role === "comment" ? 3 : 4.5)
-    return out
-}
+// The drawing lives in ui/js/SyntaxStyle.js; the previews ask for their colours here.
+function colours(ground) { return Style.colours(ground) }
+var host = { highlight: highlight, language: language }
 
 // One run of the file: { html, state }, where state is the comment or string still open at its end
 // and is what the next run starts in. With paint false only the state is worked out, which is how
 // a run far down the file learns what the runs above it left open.
 function highlight(text, sp, state, paint, palette) {
-    text = expandTabs(text)
-    if (paint) text = hardSpaces(text)
+    if (sp.markdown) return Markdown.highlight(text, state, paint, palette, host)
+    text = Style.expandTabs(text)
+    if (paint) text = Style.hardSpaces(text)
     var out = [], i = 0, n = text.length
     // Neighbouring text of one role is one tag, so a row of signs is not a tag a character.
     var role = "", held = ""
     function flush() {
-        if (!held.length) return
-        var s = escape(held)
-        if (ITALIC[role]) s = "<i>" + s + "</i>"
-        out.push(role ? '<font color="' + palette[role] + '">' + s + "</font>" : s)
+        if (held.length) out.push(Style.tag(role, held, palette))
         held = ""
     }
     function put(r, s) {
@@ -254,7 +214,7 @@ function highlight(text, sp, state, paint, palette) {
         }
     }
     flush()
-    return { html: paint ? layout(out.join("")) : "", state: state }
+    return { html: paint ? Style.layout(out.join("")) : "", state: state }
 }
 
 // A fresh cache for one body: the state each run starts in, worked out in order and kept, so

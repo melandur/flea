@@ -2,14 +2,17 @@
 .import "../../ui/js/TextChunks.js" as TextChunks
 
 // Fixed colours with no lift, so a span names its role by its colour alone.
-var P = { keyword: "K", builtin: "B", string: "S", number: "N", comment: "C", operator: "O", func: "F", param: "P" }
+var P = { keyword: "K", builtin: "B", string: "S", number: "N", comment: "C", operator: "O", func: "F", param: "P",
+          heading: "H", strong: "G" }
 
 function paint(path, text, state) {
     return Syntax.highlight(text, Syntax.language(path), state || null, true, P)
 }
 function html(path, text) { return paint(path, text).html }
 function span(colour, text) {
-    return '<font color="' + colour + '">' + (colour === "K" || colour === "P" ? "<i>" + text + "</i>" : text) + "</font>"
+    if (colour === "K" || colour === "P") text = "<i>" + text + "</i>"
+    if (colour === "H" || colour === "G") text = "<b>" + text + "</b>"
+    return '<font color="' + colour + '">' + text + "</font>"
 }
 
 function run(check) {
@@ -54,6 +57,39 @@ function run(check) {
           "&lt;" + span("O", "a") + " " + span("F", "href") + "=" + span("S", '"x"') + "&gt;")
     check("a comment opener is never an operator", html("a.c", "x=/*c*/1"),
           "x" + span("O", "=") + span("C", "/*c*/") + span("N", "1"))
+
+    // Dockerfiles, by name, by a suffixed name and by extension.
+    check("a Dockerfile is its own family", Syntax.language("/d/Dockerfile").key, "docker")
+    check("so is Dockerfile.dev", Syntax.language("/d/Dockerfile.dev").key, "docker")
+    check("and app.dockerfile", Syntax.language("/d/app.dockerfile").key, "docker")
+    check("an instruction is a keyword, a lower-case one in a command is not",
+          html("Dockerfile", "RUN pip install from # x"), span("K", "RUN") + " pip install from " + span("C", "# x"))
+    check("FROM ... AS names a stage", html("Dockerfile", "FROM a AS b"),
+          span("K", "FROM") + " a " + span("K", "AS") + " b")
+
+    // Markdown is read a line at a time.
+    check("a markdown file has a family", Syntax.language("/d/README.md").key, "markdown")
+    check("a heading is its whole line", html("a.md", "## Two words"), span("H", "## Two words"))
+    check("a # mid-line is no heading", html("a.md", "issue #14"), "issue #14")
+    check("a list marker, then code, strong and emphasis",
+          html("a.md", "- `x` **b** *i*"),
+          span("O", "- ") + span("S", "`x`") + " " + span("G", "**b**") + " " + span("P", "*i*"))
+    check("snake_case is no emphasis", html("a.md", "a snake_case_name"), "a snake_case_name")
+    check("a link's text and its target", html("a.md", "[see](http://e/x)"),
+          "[" + span("B", "see") + "](" + span("N", "http://e/x") + ")")
+    check("a quote marker", html("a.md", "> said"), span("O", "&gt; ") + "said")
+    check("markdown is escaped like any file", html("a.md", "<img src=x> & y"), "&lt;img src=x&gt; &amp; y")
+    check("a fence draws in its info string's language",
+          html("a.md", "```python\ndef f(): pass\n```\nafter"),
+          span("C", "```python") + "<br>" + span("K", "def") + " " + span("F", "f") + "(): " + span("K", "pass")
+          + "<br>" + span("C", "```") + "<br>after")
+    check("a fence with no known language is all string", html("a.md", "```\n# not a heading\n```"),
+          span("C", "```") + "<br>" + span("S", "# not a heading") + "<br>" + span("C", "```"))
+    var fence = paint("a.md", "text\n```c\n/* open")
+    check("a fence left open carries into the next run, its language's state with it",
+          paint("a.md", "still */ x\n```\n# h", fence.state).html,
+          span("C", "still */") + " x<br>" + span("C", "```") + "<br>" + span("H", "# h"))
+    check("the state a run starts in is never changed by the run after it", fence.state.inner.comment, true)
 
     // The file is arbitrary text: every byte is escaped before a tag can be built from it.
     check("markup in a file is escaped, never drawn",

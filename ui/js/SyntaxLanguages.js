@@ -38,6 +38,8 @@ var WORDS = {
     sql: "select from where insert into values update set delete create table drop alter index join "
         + "left right inner outer on as and or not null is in group by order having limit offset "
         + "distinct union all primary key foreign references default begin commit rollback view",
+    docker: "FROM AS RUN CMD LABEL MAINTAINER EXPOSE ENV ADD COPY ENTRYPOINT VOLUME USER WORKDIR ARG "
+        + "ONBUILD STOPSIGNAL HEALTHCHECK SHELL",
     clike: CLIKE,
     none: ""
 }
@@ -63,6 +65,7 @@ var BUILTINS = {
     rb: "puts print p require require_relative attr_accessor attr_reader attr_writer include extend "
         + "raise lambda proc",
     sh: "echo printf cd test read eval exec trap kill",
+    docker: "echo printf cd test read eval exec trap kill",
     lua: "print pairs ipairs require type tostring tonumber setmetatable getmetatable error assert pcall "
         + "table string math",
     pl: "print printf push pop shift keys values die",
@@ -89,7 +92,7 @@ function family(comments, strings, words, flags) {
              lifetimes: f.lifetimes === true, idStart: f.idStart || "",
              ops: f.ops === undefined ? OPS : f.ops, decorators: f.decorators === true,
              kwargs: f.kwargs === true, macros: f.macros === true, attrs: f.attrs === true,
-             self: f.self || "" }
+             self: f.self || "", markdown: f.markdown === true }
 }
 
 var FAMILIES = {
@@ -108,6 +111,10 @@ var FAMILIES = {
     sql: family({ line: ["--"], block: [["/*", "*/"]] }, [DQ, SQ], "sql", { ci: true }),
     conf: family({ line: ["#", ";"] }, [DQ, SQ], "none", { ops: "=" }),
     json: family({}, [DQ], "none", { ops: "" }),
+    // Instructions are upper case by convention, so a lower-case from in a RUN line stays a word.
+    docker: family({ line: ["#"] }, [DQ, SQ], "docker", { hashWord: true, ops: "=|&<>!" }),
+    // Drawn a line at a time by ui/js/SyntaxMarkdown.js; the tables here go unused.
+    markdown: family({}, [], "none", { markdown: true, ops: "" }),
     markup: family({ block: [["<!--", "-->"]] }, [DQ], "none", { tags: true, attrs: true, ops: "" })
 }
 
@@ -115,10 +122,11 @@ var EXTENSIONS = {
     js: "js mjs cjs jsx ts tsx qml", rust: "rs", c: "c h cpp hpp cc cxx hh", go: "go",
     clike: "java kt kts swift php cs scala dart", css: "css scss less", py: "py pyi",
     rb: "rb", sh: "sh bash zsh fish", pl: "pl pm", lua: "lua", sql: "sql",
-    conf: "toml yaml yml ini conf cfg", json: "json", markup: "html htm xml svg xhtml"
+    conf: "toml yaml yml ini conf cfg", json: "json", markup: "html htm xml svg xhtml",
+    docker: "dockerfile containerfile", markdown: "md markdown mkd"
 }
 // The keywords that name a function next, so that name draws in Monokai's green.
 var DEFINERS = "def fn function func sub"
 
 var NAMES = { "PKGBUILD": "sh", ".bashrc": "sh", ".zshrc": "sh", ".profile": "sh", ".bash_profile": "sh",
-              "Makefile": "conf", "Dockerfile": "conf", "CMakeLists.txt": "conf" }
+              "Makefile": "conf", "Dockerfile": "docker", "Containerfile": "docker", "CMakeLists.txt": "conf" }
