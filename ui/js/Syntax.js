@@ -3,10 +3,12 @@
 .import "Contrast.js" as Contrast
 .import "SyntaxLanguages.js" as Languages
 
-// Syntax colour for the text previews: comments, strings, numbers and keywords, nothing more. Pure,
-// so tests/js/syntax.js runs it under qml6 with no window. The output is StyledText, and every byte
-// of the file is escaped before it reaches a tag, so a file can never inject one: StyledText would
-// otherwise fetch an <img src> the way MarkdownText does.
+// Syntax colour for the text previews, in PyCharm's Monokai: keywords, builtins, strings and their
+// escapes, numbers and constants, comments, operators, the name a function is defined under, its
+// parameters and self, and decorators. A lexer, not a parser, so each role is read off the tokens
+// around it. Pure, so tests/js/syntax.js runs it under qml6 with no window. The output is
+// StyledText, and every byte of the file is escaped before it reaches a tag, so a file can never
+// inject one: StyledText would otherwise fetch an <img src> the way MarkdownText does.
 
 // Larger files preview as plain text: the colour of a run depends on every run above it, so the
 // first paint far down a big file would scan everything before it.
@@ -54,19 +56,50 @@ function spec(key) {
     add("line", f.line)
     add("string", f.strings.map(function (s) { return s[0] }))
     if (f.tags) { parts.push("(<\\/?[A-Za-z][\\w:.-]*)"); kinds.push("tag") }
+    if (f.decorators) { parts.push("(@[A-Za-z_][\\w.]*)"); kinds.push("decorator") }
     parts.push("(\\b\\d[\\w.]*)"); kinds.push("number")
     parts.push("([" + quote(f.idStart) + "A-Za-z_$][\\w$]*)"); kinds.push("word")
-    var words = {}, list = Languages.WORDS[f.words].split(" ").concat(Languages.CONSTANTS.split(" "))
-    for (var i = 0; i < list.length; i++) if (list[i]) words[f.ci ? list[i].toLowerCase() : list[i]] = 1
-    var constants = {}, c = Languages.CONSTANTS.split(" ")
-    for (var j = 0; j < c.length; j++) constants[c[j]] = 1
+    // One sign a token, so a run of them never swallows the // or /* a comment opens with.
+    if (f.ops) { parts.push("([" + quote(f.ops) + "])"); kinds.push("op") }
+    var words = set(Languages.WORDS[f.words] + " " + Languages.CONSTANTS, f.ci)
+    var constants = set(Languages.CONSTANTS, false)
     var closes = {}
     for (var b = 0; b < f.block.length; b++) closes[f.block[b][0]] = [f.block[b][1], false, true]
     for (var s = 0; s < f.strings.length; s++) closes[f.strings[s][0]] = [f.strings[s][1], true, f.strings[s][2]]
     specs[key] = { key: key, re: new RegExp(parts.join("|"), "g"), kinds: kinds, words: words,
                    constants: constants, closes: closes, ci: f.ci, hashWord: f.hashWord,
-                   lifetimes: f.lifetimes }
+                   lifetimes: f.lifetimes, builtins: set(Languages.BUILTINS[f.words], false),
+                   selfWords: set(f.self, false), definers: set(Languages.DEFINERS, false),
+                   kwargs: f.kwargs, macros: f.macros, attrs: f.attrs }
     return specs[key]
+}
+
+function set(words, lower) {
+    var out = {}, list = String(words || "").split(" ")
+    for (var i = 0; i < list.length; i++) if (list[i]) out[lower ? list[i].toLowerCase() : list[i]] = 1
+    return out
+}
+
+// The sign before a token, past any space or line break, which is how a parameter or a keyword
+// argument is told from a name: it follows the ( or , of a list.
+function signBefore(text, at) {
+    var k = at - 1
+    while (k >= 0 && /[ \uE000\n]/.test(text.charAt(k))) k--
+    return k < 0 ? "" : text.charAt(k)
+}
+
+// Where the parameter list that opens just after a defined name closes, or -1 when no list follows
+// it. A list still open at the run's end ends with the run.
+function paramsEnd(text, from) {
+    var k = from
+    while (k < text.length && /[ \uE000]/.test(text.charAt(k))) k++
+    if (text.charAt(k) !== "(") return -1
+    for (var depth = 0; k < text.length; k++) {
+        var ch = text.charAt(k)
+        if (ch === "(") depth++
+        else if (ch === ")" && --depth === 0) return k
+    }
+    return text.length
 }
 
 function escaped(text, at) {
@@ -116,11 +149,20 @@ function layout(html) {
     return html.replace(/\uE000/g, "&nbsp;").replace(/\n/g, "<br>")
 }
 
-// The colours, each lifted to 4.5:1 on the ground it is drawn over, comments to the 3:1 the muted
-// role already carries. Hex strings in, hex strings out, so the caller passes Theme's roles.
-function colours(accent, string, number, comment, ground) {
-    return { keyword: Contrast.ensureRatio(accent, ground, 4.5), string: Contrast.ensureRatio(string, ground, 4.5),
-             number: Contrast.ensureRatio(number, ground, 4.5), comment: Contrast.ensureRatio(comment, ground, 3) }
+// PyCharm's Monokai, the operator's ruling of 2026-10-08, from its .icls and its sample picture.
+// Fixed rather than the theme's, because the scheme is the point; keywords and parameters, self
+// among them, draw italic as the picture shows them.
+var MONOKAI = { keyword: "#66d9ef", builtin: "#66d9ef", string: "#e6db74", number: "#ae81ff",
+                comment: "#75715e", operator: "#f92672", func: "#a6e22e", param: "#fd971f" }
+var ITALIC = { keyword: true, param: true }
+
+// The colours, each lifted to 4.5:1 on the ground it is drawn over, comments to 3:1. A dark theme
+// keeps Monokai's own hexes; a light one darkens them, hue kept, until they read.
+function colours(ground) {
+    var out = {}
+    for (var role in MONOKAI)
+        out[role] = Contrast.ensureRatio(MONOKAI[role], ground, role === "comment" ? 3 : 4.5)
+    return out
 }
 
 // One run of the file: { html, state }, where state is the comment or string still open at its end
@@ -130,18 +172,41 @@ function highlight(text, sp, state, paint, palette) {
     text = expandTabs(text)
     if (paint) text = hardSpaces(text)
     var out = [], i = 0, n = text.length
-    function put(colour, s) {
+    // Neighbouring text of one role is one tag, so a row of signs is not a tag a character.
+    var role = "", held = ""
+    function flush() {
+        if (!held.length) return
+        var s = escape(held)
+        if (ITALIC[role]) s = "<i>" + s + "</i>"
+        out.push(role ? '<font color="' + palette[role] + '">' + s + "</font>" : s)
+        held = ""
+    }
+    function put(r, s) {
         if (!paint || !s.length) return
-        out.push(colour ? '<font color="' + colour + '">' + escape(s) + "</font>" : escape(s))
+        if (r !== role) { flush(); role = r }
+        held += s
+    }
+    // A string's escapes draw as constants do, Monokai's \n in purple.
+    function putString(s, esc) {
+        var at = 0, e, escapes = /\\./g
+        while (esc && (e = escapes.exec(s))) {
+            put("string", s.substring(at, e.index))
+            put("number", e[0])
+            at = e.index + 2
+        }
+        put("string", s.substring(at))
     }
     function openUntil(start, from, open) {
         var r = closeAt(text, from, open)
-        put(open.comment ? palette.comment : palette.string, text.substring(start, r.at))
+        if (open.comment) put("comment", text.substring(start, r.at))
+        else putString(text.substring(start, r.at), open.esc)
         state = r.open ? open : null
         return r.at
     }
     if (state) i = openUntil(0, 0, state)
     var re = sp.re
+    // Just past a def, fn or function keyword, and where the parameter list after its name closes.
+    var defEnd = -1, params = -1
     while (i < n) {
         re.lastIndex = i
         var m = re.exec(text)
@@ -155,7 +220,7 @@ function highlight(text, sp, state, paint, palette) {
             if (sp.hashWord && m.index > 0 && !/[\s\uE000;]/.test(text.charAt(m.index - 1))) { put("", tok); continue }
             var eol = text.indexOf("\n", m.index)
             i = eol < 0 ? n : eol
-            put(palette.comment, text.substring(m.index, i))
+            put("comment", text.substring(m.index, i))
         } else if (kind === "block" || kind === "string") {
             if (kind === "string" && sp.lifetimes && tok === "'" && !/^'(\\.|[^\\'])'/.test(text.substring(m.index, m.index + 12))) {
                 put("", tok)
@@ -165,14 +230,30 @@ function highlight(text, sp, state, paint, palette) {
             i = openUntil(m.index, i, { close: c[0], esc: c[1], multi: c[2], comment: kind === "block" })
         } else if (kind === "tag") {
             put("", tok.substring(0, tok.charAt(1) === "/" ? 2 : 1))
-            put(palette.keyword, tok.substring(tok.charAt(1) === "/" ? 2 : 1))
+            put("operator", tok.substring(tok.charAt(1) === "/" ? 2 : 1))
+        } else if (kind === "decorator") {
+            put("func", tok)
         } else if (kind === "number") {
-            put(palette.number, tok)
+            put("number", tok)
+        } else if (kind === "op") {
+            put("operator", tok)
         } else {
-            var w = sp.ci ? tok.toLowerCase() : tok
-            put(sp.constants[tok] ? palette.number : sp.words[w] ? palette.keyword : "", tok)
+            var w = sp.ci ? tok.toLowerCase() : tok, sign = signBefore(text, m.index)
+            var next = text.charAt(i), after = text.charAt(i + 1), r = ""
+            if (sp.constants[tok]) r = "number"
+            else if (sp.selfWords[tok]) r = "param"
+            else if (sp.words[w]) r = "keyword"
+            else if (defEnd >= 0 && /^[ \uE000]+$/.test(text.substring(defEnd, m.index))) r = "func"
+            else if (m.index < params && /[(,*]/.test(sign)) r = "param"
+            else if (sp.kwargs && /[(,]/.test(sign) && next === "=" && after !== "=") r = "param"
+            else if (sp.attrs && next === "=") r = "func"
+            else if (sp.builtins[tok] || sp.macros && next === "!" && after !== "=") r = "builtin"
+            put(r, tok)
+            if (r === "func") params = paramsEnd(text, i)
+            defEnd = r === "keyword" && sp.definers[w] ? i : -1
         }
     }
+    flush()
     return { html: paint ? layout(out.join("")) : "", state: state }
 }
 

@@ -39,14 +39,12 @@ Item {
     readonly property bool sheet: Kinds.isSheet(root.path)
     readonly property string text: root.active && !root.sheet ? file.text() : ""
     readonly property var runs: root.tabular ? [] : TextChunks.split(root.text)
-    // Code draws in colour, ui/js/Syntax.js's four roles on the surface this pane sits on; past
+    // Code draws in ui/js/Syntax.js's Monokai, lifted to read on the surface this pane sits on; past
     // Syntax.MAX_BYTES, or for a name with no family, it stays plain text.
     readonly property var syntax: root.tabular || root.size > Syntax.MAX_BYTES ? null : Syntax.language(root.path)
     // The open comment or string each run starts in, kept per body; see Syntax.memo.
     readonly property var syntaxMemo: root.syntax ? Syntax.memo(root.runs, root.syntax) : null
-    readonly property var syntaxColours: Syntax.colours(String(Theme.color.accent), String(Theme.color.executable),
-                                                  String(Theme.color.symlink), String(Theme.color.muted),
-                                                  String(Theme.color.surface))
+    readonly property var syntaxColours: Syntax.colours(String(Theme.color.surface))
     readonly property Flickable flick: root.tabular ? table.view : textFlick
     // For ui/Ipc.qml: the drawn body's box and its text.
     readonly property Item bodyItem: root.flick

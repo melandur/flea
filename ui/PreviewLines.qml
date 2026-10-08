@@ -38,9 +38,7 @@ Item {
     // The same lines coloured, one StyledText string each, or null for a file with no family.
     readonly property var syntax: Syntax.language(root.path)
     readonly property var styled: root.syntax && !root.tabular
-        ? Syntax.lines(root.lines, root.syntax, Syntax.colours(String(Theme.color.accent), String(Theme.color.executable),
-                                                               String(Theme.color.symlink), String(Theme.color.muted),
-                                                               String(Theme.color.background)))
+        ? Syntax.lines(root.lines, root.syntax, Syntax.colours(String(Theme.color.background)))
         : null
 
     // Surfaced so the column can show the canvas's Error tile instead of an empty frame.
