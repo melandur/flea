@@ -292,6 +292,9 @@ function viewRows(state) {
         { kind: "group", label: "Sorting" },
         choice("sort.key", "Sort by", "sort", ["name", "size", "date", "kind"],
                ["Name", "Size", "Date", "Kind"], sort.key || "name"),
+        // The values are the stored boolean itself, so ViewState.changeSetting writes sort.reverse as-is.
+        choice("sort.reverse", "Order", undefined, [false, true],
+               ["Ascending", "Descending"], sort.reverse === true),
         { kind: "check", id: "foldersFirst", label: "Folders first", glyph: "folders-first", on: data.foldersFirst !== false },
         { kind: "check", id: "groupByKind", label: "Group by kind", caption: "folders, photos, files", glyph: "grid", on: data.groupByKind === true },
         { kind: "check", id: "hidden", label: "Show hidden files", glyph: "eye", on: data.hidden === true },
