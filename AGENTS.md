@@ -3920,6 +3920,45 @@ refuses `/tmp` and `/var/tmp` with "Trashing on system internal mounts is not su
 only mount on this box a trash round trip can be exercised on. Hard rule 9's guard is in the script
 itself, and the Rust tests use `TestDir`.
 
+**An archive job is not a thumbnail, so it does not get the thumbnail's CPU cap.** Reported
+2026-10-13 as "I tried to zip a file and it failed": every archive job ran through `run_boxed` under
+the same `prlimit --cpu=30` as a thumbnailer, and that 30 s is sized for one decode. Measured on this
+box, bsdtar on 1.5 GB of incompressible data: zip 22 s of CPU, tar.gz 22 s, tar.bz2 90 s, tar.xz
+451 s, tar.zst 0.4 s. So a zip past about 2 GB, a bz2 past about 500 MB and an xz past about 100 MB
+were SIGKILLed, and the operator was told "The archive tool failed", because bwrap reports the kill
+as exit 137 with nothing on stderr. Reproduced on 0.3.8 with a 2.6 GB file; the same zip, and a
+1.5 GB tar.bz2, now publish and extract byte-identical.
+
+- **compress runs with no CPU cap.** Its input is the operator's own files and its cost is their
+  size. The jail, the 2 GiB address-space cap and `--die-with-parent` all still hold.
+- **extract keeps a cap, scaled to the archive**: `CPU_SECONDS` plus one second per MiB of archive.
+  The slowest real decompressors here spend about 0.13 s per MiB of archive, so that is roughly 8x
+  headroom, and a 10 MiB bomb inflating 1000:1 still stops at about 40 s, as it did before.
+- **convert keeps the thumbnail cap**, unchanged.
+- **A kill says so**: exit 137 answers "the archive tool was stopped before it finished, out of time
+  or memory". And bsdtar's closing "Error exit delayed from previous errors" is skipped for the line
+  before it, which names the member: a folder holding one unreadable file used to report only the
+  summary. The tool's own `bsdtar: ` prefix is dropped too, so the bar reads "Can't open
+  `secret.txt': Permission denied." rather than a capitalised "Bsdtar:".
+
+**Progress is the kernel's read count, because bsdtar says nothing while it works.** A compress sums
+the regular files in the selection without following a link (`procio::selection_bytes`), an extract
+takes the archive's own size, and `run_boxed_watched` reads `rchar` from `/proc/<pid>/io` across the
+child's whole tree every 250 ms: the tool is two forks below the `prlimit` we spawn, inside bwrap's
+PID namespace, and `/proc` from outside still sees it. Measured on this box the count climbs
+steadily on a 3.3 GB zip and on its extract. The wire carries it as
+`{"t":"archiveprogress","id":N,"done":<bytes>,"total":<bytes>}`, sent only when `done` moved, and
+`ui/js/Archive.js` `progressLine` appends it to the job's own sticky line, never past 99%, because
+reading the last byte is not finishing. A tool only reads, so a reaped child's count leaves the tree
+with it; nothing reads after bsdtar exits, so nothing is lost.
+
+**7z is not offered and the `7z` tool is not used at all**, the operator's ruling of 2026-10-13.
+libarchive reads `.7z` and `.rar`, so bsdtar extracts and previews both, and `archive.rs` is one tool.
+
+corner: there is still no cancel on an archive job, so a 10 GB tar.xz runs for most of an hour with
+the progress line to show for it; closing the window ends it. Two archive jobs at once share the
+pane's one `archiveWork` line, so the second one's label is the one both progress counts draw under.
+
 ## Deliberate corners
 
 - The name arena uses u32 offsets, so it tops out at 4 GiB of names. No directory

@@ -177,6 +177,8 @@ FocusScope {
     // Which asker a pending paths reply belongs to, null meaning the clipboard, which is what every
     // reply meant before compress also had to resolve a selection wider than this pane holds.
     property var pathsPending: null
+    // The running archive job's own line, which its progress is appended to; see ui/js/Archive.js.
+    property var archiveWork: ({ text: "", extracting: false })
     // What the status bar's sticky slot is reporting, or an idle transfer; see ui/js/Ops.js.
     property var transfer: Ops.emptyTransfer()
     // Transfers the backend is holding until that one ends, oldest first; see ui/js/Transfer.js.
@@ -626,8 +628,7 @@ FocusScope {
         taildropReason: root.cursorRow && root.cursorRow.d ? "Taildrop sends files only" : wire.taildrop.reason
         archiveFormats: root.backend.archiveFormats
         canConvert: root.backend.canConvert
-        canExtract: root.cursorRow && /\.7z$/i.test(root.cursorRow.n)
-            ? root.backend.extraction.sevenZip : root.backend.extraction.archive
+        canExtract: root.backend.extraction.archive
         rowMode: root.permissionSelection() ? root.permissionSelection().p : 0
         selectionCount: Ops.targetIndices(root).length
         openWithApps: menuActions.openWithApps

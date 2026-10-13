@@ -31,10 +31,17 @@ function run(check) {
     check("and with no directory name to use, under a plain one",
           Archive.archiveStem(["a.txt", "b.txt"], ""), "archive")
 
-    // The submenu is exactly what the backend probed, so a box with no 7zip never offers .7z.
+    // The submenu is exactly what the backend probed, never a fixed list.
     check("the submenu is the probed table and never a fixed list",
           Archive.formatEntries(["zip", "tar.zst"]).map(function (e) { return e.id + "=" + e.label }).join("|"),
           "zip=.zip|tar.zst=.tar.zst")
+    check("progress says how far through the input the job is",
+          Archive.progressLine("Compressing 3 items to .zip", 1100000000, 2600000000),
+          "Compressing 3 items to .zip, 42% (1.1 GB of 2.6 GB)")
+    check("and never 100%, because the done line is what says it finished",
+          Archive.progressLine("Extracting a.zip", 500, 500), "Extracting a.zip, 99% (500 B of 500 B)")
+    check("with no total yet the line is the work alone",
+          Archive.progressLine("Extracting a.zip", 0, 0), "Extracting a.zip")
     check("an empty table offers nothing at all",
           Archive.formatEntries([]).length, 0)
 

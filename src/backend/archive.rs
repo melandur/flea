@@ -1,19 +1,18 @@
 // Which archive formats this box can actually write and read, probed once at startup, and the argv
-// each tool needs. The jobs themselves are archiveops.rs and reading an index is archivelist.rs.
-use crate::backend::archivespec::{seven_spec, tar_spec, ListSpec};
+// each job needs. One tool does all of it: bsdtar, whose libarchive also reads .7z and .rar, so no
+// second archiver is needed for either. The jobs themselves are archiveops.rs and reading an index is
+// archivelist.rs.
+use crate::backend::archivespec::{tar_spec, ListSpec};
 use std::path::Path;
 
 const BSDTAR: &str = "bsdtar";
-const SEVENZIP: &str = "7z";
 
 // The formats bsdtar writes on this box, in the order the submenu offers them.
 const TAR_FORMATS: &[&str] = &["zip", "tar", "tar.gz", "tar.bz2", "tar.xz", "tar.zst"];
-const SEVENZIP_FORMAT: &str = "7z";
 
 pub struct Formats {
     names: Vec<String>,
     have_bsdtar: bool,
-    have_7z: bool,
 }
 
 fn on_path(prog: &str) -> bool {
@@ -25,21 +24,14 @@ fn on_path(prog: &str) -> bool {
 
 impl Formats {
     pub fn probe() -> Formats {
-        Formats::from_tools(on_path(BSDTAR), on_path(SEVENZIP))
+        Formats::from_tools(on_path(BSDTAR))
     }
 
-    // Nothing writes rar here: WinRAR's own tool is the only thing on Linux that does, it is not free
-    // software and it is in no Arch repository, so the compress submenu cannot offer it. Reading one
-    // is separate and needs neither that tool nor a flag, see extract_argv below.
-    pub fn from_tools(have_bsdtar: bool, have_7z: bool) -> Formats {
-        let mut names = Vec::new();
-        if have_bsdtar {
-            names.extend(TAR_FORMATS.iter().map(|s| s.to_string()));
-        }
-        if have_7z {
-            names.push(SEVENZIP_FORMAT.to_string());
-        }
-        Formats { names, have_bsdtar, have_7z }
+    // Nothing writes rar or 7z here: rar needs WinRAR's nonfree tool, and 7z is not offered because
+    // nobody asked for it. Reading either is libarchive's, see extract_argv below.
+    pub fn from_tools(have_bsdtar: bool) -> Formats {
+        let names = if have_bsdtar { TAR_FORMATS.iter().map(|s| s.to_string()).collect() } else { Vec::new() };
+        Formats { names, have_bsdtar }
     }
 
     // Exactly the table, which is what the compress submenu draws; an empty one self-hides the entry.
@@ -51,8 +43,14 @@ impl Formats {
         self.names.iter().any(|n| n == format)
     }
 
+    // Whether anything can read an archive at all, which is what the Extract row asks.
+    pub fn can_extract(&self) -> bool {
+        self.have_bsdtar
+    }
+
     // bsdtar's -a picks the compression from the destination's own extension, so one argv covers
-    // every tar flavour and zip; 7z is its own tool and its own shape.
+    // every tar flavour and zip. -v names each member on stderr as it is added, which is how a
+    // compress reports progress; see archivework.rs.
     // corner: bsdtar reads -C positionally, so it has to precede the names it applies to. Putting it
     // after them archives nothing, prints "Cannot stat" per name, and still leaves an empty archive.
     pub fn compress_argv(&self, format: &str, dest: &Path, parent: &Path, names: &[String]) -> Option<Vec<String>> {
@@ -60,15 +58,6 @@ impl Formats {
             return None;
         }
         let mut a: Vec<String> = Vec::with_capacity(names.len() + 7);
-        if format == SEVENZIP_FORMAT {
-            a.push(SEVENZIP.to_string());
-            a.push("a".to_string());
-            a.push("-bd".to_string());
-            a.push(dest.to_string_lossy().to_string());
-            // 7z stores the basename of an absolute path, so it needs no working-directory flag.
-            a.extend(names.iter().map(|n| parent.join(n).to_string_lossy().to_string()));
-            return Some(a);
-        }
         a.push(BSDTAR.to_string());
         a.push("-a".to_string());
         a.push("-c".to_string());
@@ -84,24 +73,9 @@ impl Formats {
         Some(a)
     }
 
-    // Extraction is chosen by what the archive is, not by what the caller says it is.
+    // Extraction is the same tool whatever the archive is: libarchive reads zip, every tar flavour,
+    // 7z and rar, and recognises the format from the bytes rather than the name.
     pub fn extract_argv(&self, archive: &Path, dest: &Path) -> Option<Vec<String>> {
-        let name = archive.to_string_lossy().to_lowercase();
-        // A rar is read by 7z where it is installed, whose rar and rar5 readers are the reference
-        // ones, and by libarchive otherwise; neither needs the nonfree tool that writes them.
-        if name.ends_with(".7z") || (name.ends_with(".rar") && self.have_7z) {
-            if !self.have_7z {
-                return None;
-            }
-            return Some(vec![
-                SEVENZIP.to_string(),
-                "x".to_string(),
-                "-bd".to_string(),
-                "-y".to_string(),
-                archive.to_string_lossy().to_string(),
-                format!("-o{}", dest.to_string_lossy()),
-            ]);
-        }
         if !self.have_bsdtar {
             return None;
         }
@@ -116,24 +90,10 @@ impl Formats {
             dest.to_string_lossy().to_string(),
         ])
     }
-}
 
-impl Formats {
-    // The argv that lists an archive without extracting a byte of it.
+    // The argv that lists an archive without extracting a byte of it, by the same tool that extracts
+    // it, so a name in the preview is a name the extract will actually write.
     pub fn list_argv(&self, archive: &Path) -> Option<(Vec<String>, ListSpec)> {
-        let name = archive.to_string_lossy().to_lowercase();
-        // The same choice extract_argv makes, so an index and the extract that follows it are read
-        // by one tool and a name in the preview is a name the extract will actually write.
-        if name.ends_with(".7z") || (name.ends_with(".rar") && self.have_7z) {
-            if !self.have_7z {
-                return None;
-            }
-            return Some((
-                vec![SEVENZIP.to_string(), "l".to_string(), "-ba".to_string(),
-                     archive.to_string_lossy().to_string()],
-                seven_spec(),
-            ));
-        }
         if !self.have_bsdtar {
             return None;
         }
@@ -151,48 +111,36 @@ mod tests {
 
     #[test]
     fn the_table_is_what_is_installed_and_never_a_fixed_list() {
-        let both = Formats::from_tools(true, true);
-        assert_eq!(both.names(), &["zip", "tar", "tar.gz", "tar.bz2", "tar.xz", "tar.zst", "7z"]);
-        let no_seven = Formats::from_tools(true, false);
-        assert!(!no_seven.offers("7z"), "a box without 7zip must never offer .7z");
-        assert!(no_seven.offers("tar.zst"));
-        let nothing = Formats::from_tools(false, false);
+        let tar = Formats::from_tools(true);
+        assert_eq!(tar.names(), &["zip", "tar", "tar.gz", "tar.bz2", "tar.xz", "tar.zst"]);
+        assert!(!tar.offers("7z"), "7z is never offered as something to write");
+        assert!(!tar.offers("rar"), "and neither is rar");
+        let nothing = Formats::from_tools(false);
         assert!(nothing.names().is_empty(), "with no tool at all the whole entry self-hides");
+        assert!(!nothing.can_extract());
     }
 
-    // Flea reads rar and writes none. 7z's own rar and rar5 readers are the reference ones, so they
-    // are preferred where 7z is installed; libarchive reads both too and is the fallback.
+    // 7z and rar are read, never written, and by the one tool every other archive is read by.
     #[test]
-    fn a_rar_is_read_by_7z_where_it_is_installed_and_by_libarchive_where_it_is_not() {
-        let both = Formats::from_tools(true, true);
-        let seven = both.extract_argv(Path::new("/x/holiday.rar"), Path::new("/dest")).unwrap();
-        assert_eq!(seven[0], "7z");
-        let (listed, _) = both.list_argv(Path::new("/x/holiday.rar")).unwrap();
-        assert_eq!(listed[0], "7z", "the index and the extract must agree on the tool");
-        let tar_only = Formats::from_tools(true, false);
-        let fallback = tar_only.extract_argv(Path::new("/x/holiday.rar"), Path::new("/dest")).unwrap();
-        assert_eq!(fallback[0], "bsdtar");
-        let (fallback_list, _) = tar_only.list_argv(Path::new("/x/holiday.rar")).unwrap();
-        assert_eq!(fallback_list[0], "bsdtar");
-        // Upper case reaches the same reader: the name is lowercased before it is matched.
-        assert_eq!(both.extract_argv(Path::new("/x/HOLIDAY.RAR"), Path::new("/d")).unwrap()[0], "7z");
-        // No tool at all reads nothing, rather than building an argv for a program that is absent.
-        assert!(Formats::from_tools(false, false).extract_argv(Path::new("/x/a.rar"), Path::new("/d")).is_none());
-        // And rar is never offered as something to write, on any box.
-        assert!(!both.offers("rar"));
-        assert!(!both.names().iter().any(|n| n == "rar"));
+    fn a_7z_and_a_rar_are_read_by_bsdtar() {
+        let f = Formats::from_tools(true);
+        for name in ["/x/holiday.rar", "/x/HOLIDAY.RAR", "/x/a.7z"] {
+            assert_eq!(f.extract_argv(Path::new(name), Path::new("/d")).unwrap()[0], "bsdtar");
+            assert_eq!(f.list_argv(Path::new(name)).unwrap().0[0], "bsdtar");
+        }
+        assert!(Formats::from_tools(false).extract_argv(Path::new("/x/a.rar"), Path::new("/d")).is_none());
     }
 
     #[test]
     fn a_format_the_table_does_not_offer_builds_no_argv_at_all() {
-        let f = Formats::from_tools(true, false);
+        let f = Formats::from_tools(true);
         assert!(f.compress_argv("7z", Path::new("/x/out.7z"), Path::new("/src"), &["a".to_string()]).is_none());
         assert!(f.compress_argv("rar", Path::new("/x/out.rar"), Path::new("/src"), &["a".to_string()]).is_none());
     }
 
     #[test]
     fn bsdtar_lets_the_destination_extension_choose_the_compression() {
-        let f = Formats::from_tools(true, true);
+        let f = Formats::from_tools(true);
         let a = f.compress_argv("tar.zst", Path::new("/x/out.tar.zst"), Path::new("/src"),
                                 &["a.txt".to_string(), "b".to_string()]).unwrap();
         assert_eq!(a[0], "bsdtar");
@@ -208,7 +156,7 @@ mod tests {
 
     #[test]
     fn a_member_name_that_looks_like_an_option_sits_after_the_terminator() {
-        let f = Formats::from_tools(true, true);
+        let f = Formats::from_tools(true);
         let a = f
             .compress_argv("tar", Path::new("/x/out.tar"), Path::new("/src"),
                            &["--use-compress-program=sh".to_string(), "ok.txt".to_string()])
@@ -216,52 +164,17 @@ mod tests {
         let term = a.iter().position(|s| s == "--").expect("a -- terminator before the names");
         let bad = a.iter().position(|s| s == "--use-compress-program=sh").unwrap();
         assert!(term < bad, "a dash-leading member must sit after the -- terminator");
-        // 7z stores absolute paths, so its members can never be read as options and it needs no --.
-        let seven = f
-            .compress_argv("7z", Path::new("/x/out.7z"), Path::new("/src"), &["--evil".to_string()])
-            .unwrap();
-        assert!(!seven.iter().any(|s| s == "--"));
-        assert_eq!(seven.last().unwrap(), "/src/--evil");
     }
 
     #[test]
-    fn seven_zip_is_its_own_tool_and_its_own_shape() {
-        let f = Formats::from_tools(true, true);
-        let a = f.compress_argv("7z", Path::new("/x/out.7z"), Path::new("/src"), &["a.txt".to_string()]).unwrap();
-        assert_eq!(a[0], "7z");
-        assert_eq!(a[1], "a");
-        // 7z takes absolute sources and stores their basenames, so it carries no -C at all.
-        assert_eq!(a.last().unwrap(), "/src/a.txt");
-        assert!(!a.iter().any(|s| s == "-C"));
-    }
-
-    #[test]
-    fn the_listing_argv_names_the_right_tool_and_column_for_each_archive() {
-        let f = Formats::from_tools(true, true);
-        let (seven, spec) = f.list_argv(Path::new("/x/a.7z")).unwrap();
-        assert_eq!(seven[0], "7z");
-        assert_eq!(spec.size_column, seven_spec().size_column);
-        assert!(spec.name_after_double_space, "7z leaves its packed column blank, so fields cannot locate the name");
+    fn the_listing_and_the_extract_are_the_same_tool() {
+        let f = Formats::from_tools(true);
         let (tar, spec) = f.list_argv(Path::new("/x/a.tar.zst")).unwrap();
         assert_eq!(tar[0], "bsdtar");
         assert_eq!(spec.size_column, tar_spec().size_column);
         assert_eq!(spec.name_after_fields, tar_spec().name_after_fields);
-        assert!(!spec.name_after_double_space, "bsdtar's fields are fixed, so the name is found by counting them");
-        assert!(Formats::from_tools(false, false).list_argv(Path::new("/x/a.zip")).is_none());
+        let x = f.extract_argv(Path::new("/x/a.tar.zst"), Path::new("/out")).unwrap();
+        assert!(x.contains(&"-C".to_string()));
+        assert!(Formats::from_tools(false).list_argv(Path::new("/x/a.zip")).is_none());
     }
-
-    #[test]
-    fn extraction_is_chosen_by_what_the_archive_is() {
-        let f = Formats::from_tools(true, true);
-        let seven = f.extract_argv(Path::new("/x/a.7z"), Path::new("/out")).unwrap();
-        assert_eq!(seven[0], "7z");
-        assert!(seven.iter().any(|s| s == "-o/out"));
-        let tar = f.extract_argv(Path::new("/x/a.tar.zst"), Path::new("/out")).unwrap();
-        assert_eq!(tar[0], "bsdtar");
-        assert!(tar.contains(&"-C".to_string()));
-        // A .7z on a box with no 7zip cannot be extracted, and says so by building nothing.
-        let no_seven = Formats::from_tools(true, false);
-        assert!(no_seven.extract_argv(Path::new("/x/a.7z"), Path::new("/out")).is_none());
-    }
-
 }

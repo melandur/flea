@@ -55,6 +55,7 @@ Item {
     // hidden is the flag the request carried, echoed by the backend: two clients peek this wire, so path alone does not say whose reply this is.
     signal peeked(string path, bool hidden, int total, var rows, bool readFailed, int mode)
     signal archiveStarted(int id)
+    signal archiveProgress(int id, real done, real total)
     signal archiveDone(int id, bool ok, bool verified, string err)
     signal convertChecked(var message)
     signal convertStarted(int id, int requestId, string source)
@@ -63,10 +64,10 @@ Item {
     signal quitReady()
 
     // Capabilities arrive at launch and refresh at explicit menu and provider-action entry.
-    // The compress submenu is exactly this list, so a box with no 7zip never shows .7z.
+    // The compress submenu is exactly this list, the formats bsdtar writes on this box.
     property var archiveFormats: []
     property bool canConvert: false
-    property var extraction: ({archive: false, sevenZip: false})
+    property var extraction: ({archive: false})
     property var providers: ({})
     property int formatsToken: 0
 

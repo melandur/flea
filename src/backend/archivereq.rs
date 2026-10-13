@@ -22,6 +22,13 @@ pub fn archivestarted_line(id: usize) -> String {
     format!(r#"{{"t":"archivestarted","id":{}}}"#, id)
 }
 
+// Sample output: {"t":"archiveprogress","id":13,"done":1100000000,"total":2600000000}
+// done is bytes the tool has read and total the bytes it will read, so done never passes total and
+// done equal to total still means the tool is finishing; only archivedone says it has.
+pub fn archiveprogress_line(id: usize, done: u64, total: u64) -> String {
+    format!(r#"{{"t":"archiveprogress","id":{},"done":{},"total":{}}}"#, id, done, total)
+}
+
 // verified is false only when an extract could not read the archive's own index, so it could not
 // confirm the tool produced what the index named. The operator is told which kind of success it was.
 pub fn archivedone_line(id: usize, ok: bool, verified: bool, err: &str) -> String {
@@ -59,23 +66,32 @@ fn collision_message(dest: &std::path::Path) -> String {
 // Sample output: {"t":"formats","archive":["zip","tar","tar.zst"],"convert":true}
 pub fn formats_line(formats: &Formats, can_convert: bool) -> String {
     let names: Vec<String> = formats.names().iter().map(|n| format!(r#""{}""#, escape(n))).collect();
-    format!(r#"{{"t":"formats","archive":[{}],"convert":{},"extract":{{"archive":{},"sevenZip":{}}}}}"#,
-        names.join(","), can_convert, formats.offers("tar"), formats.offers("7z"))
+    format!(r#"{{"t":"formats","archive":[{}],"convert":{},"extract":{{"archive":{}}}}}"#,
+        names.join(","), can_convert, formats.can_extract())
 }
 
 pub(crate) fn run_archive(id: usize, compressing: bool, paths: Vec<String>, format: String,
                    archive: PathBuf, dest: PathBuf, formats: &Formats, tx: Sender<OpMsg>, selection: Option<Vec<Selected>>) {
+    // A line only when the count moved, so a tool stalled on a slow disk adds nothing to the wire.
+    let mut said = None;
+    let progress_tx = tx.clone();
+    let mut on_progress = |done: u64, total: u64| {
+        if said != Some(done) {
+            said = Some(done);
+            let _ = progress_tx.send(OpMsg::Meta { line: archiveprogress_line(id, done, total) });
+        }
+    };
     let sources: Vec<PathBuf> = if compressing { paths.iter().map(PathBuf::from).collect() } else { vec![archive.clone()] };
     let result = if let Err(error) = validate_sources(selection.as_deref(), &sources) {
         Err(op_err("archive", "", &error))
     } else if compressing {
         // A compress has nothing to verify against: it writes the archive rather than reading one.
         match split_paths(&paths) {
-            Some((parent, names)) => compress(formats, &parent, &names, &format, &dest).map(|()| true),
+            Some((parent, names)) => compress(formats, &parent, &names, &format, &dest, &mut on_progress).map(|()| true),
             None => Err(op_err("archive", "", "a compress takes absolute paths from one directory")),
         }
     } else {
-        extract(formats, &archive, &dest)
+        extract(formats, &archive, &dest, &mut on_progress)
     };
     let line = match result {
         Ok(verified) => archivedone_line(id, true, verified, ""),
@@ -167,6 +183,7 @@ mod tests {
     #[test]
     fn every_line_matches_the_shape_the_operations_design_names() {
         assert_eq!(archivestarted_line(13), r#"{"t":"archivestarted","id":13}"#);
+        assert_eq!(archiveprogress_line(13, 1100, 2600), r#"{"t":"archiveprogress","id":13,"done":1100,"total":2600}"#);
         assert_eq!(archivedone_line(13, true, true, ""),
                    r#"{"t":"archivedone","id":13,"ok":true,"verified":true,"err":""}"#);
         assert_eq!(archivedone_line(13, true, false, ""),
@@ -177,14 +194,14 @@ mod tests {
             convertdone_line(15, 7, "/home/gm/photo.png", true, "/home/gm/photo.jpg", "", false),
             r#"{"t":"convertdone","id":15,"requestId":7,"source":"/home/gm/photo.png","ok":true,"path":"/home/gm/photo.jpg","err":"","collision":false}"#
         );
-        let f = Formats::from_tools(true, false);
+        let f = Formats::from_tools(true);
         assert_eq!(
             formats_line(&f, true),
-            r#"{"t":"formats","archive":["zip","tar","tar.gz","tar.bz2","tar.xz","tar.zst"],"convert":true,"extract":{"archive":true,"sevenZip":false}}"#
+            r#"{"t":"formats","archive":["zip","tar","tar.gz","tar.bz2","tar.xz","tar.zst"],"convert":true,"extract":{"archive":true}}"#
         );
         assert_eq!(
-            formats_line(&Formats::from_tools(false, false), false),
-            r#"{"t":"formats","archive":[],"convert":false,"extract":{"archive":false,"sevenZip":false}}"#
+            formats_line(&Formats::from_tools(false), false),
+            r#"{"t":"formats","archive":[],"convert":false,"extract":{"archive":false}}"#
         );
     }
 
@@ -199,22 +216,22 @@ mod tests {
     #[test]
     fn a_destination_already_there_is_refused_before_any_tool_runs() {
         let d = TestDir::new("archrefuse");
-        let f = Formats::from_tools(true, true);
+        let f = Formats::from_tools(true);
         d.file("out.zip", "already here");
-        let e = compress(&f, d.path(), &["a.txt".to_string()], "zip", &d.join("out.zip")).unwrap_err();
+        let e = compress(&f, d.path(), &["a.txt".to_string()], "zip", &d.join("out.zip"), &mut |_, _| {}).unwrap_err();
         assert!(e.msg.contains("already exists"));
         assert_eq!(std::fs::read_to_string(d.join("out.zip")).unwrap(), "already here");
 
         d.dir("out");
-        let e = extract(&f, &d.join("x.zip"), &d.join("out")).unwrap_err();
+        let e = extract(&f, &d.join("x.zip"), &d.join("out"), &mut |_, _| {}).unwrap_err();
         assert!(e.msg.contains("already exists"), "merging into a directory in use is the surprise this rules out");
     }
 
     #[test]
     fn a_format_no_tool_offers_is_a_named_error_rather_than_a_silent_failure() {
         let d = TestDir::new("archnotool");
-        let none = Formats::from_tools(false, false);
-        let e = compress(&none, d.path(), &["a.txt".to_string()], "zip", &d.join("out.zip")).unwrap_err();
+        let none = Formats::from_tools(false);
+        let e = compress(&none, d.path(), &["a.txt".to_string()], "zip", &d.join("out.zip"), &mut |_, _| {}).unwrap_err();
         assert!(e.msg.contains("no tool"), "got {}", e.msg);
     }
 

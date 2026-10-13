@@ -1,11 +1,12 @@
 .pragma library
+.import "Format.js" as Format
 
 // Which rows get an Extract, and what a new archive is called. The backend never sends an is-archive
 // flag: the client is given the icon name and never the MIME type, so this is the whole mechanism.
 
-// Longest form first, so ".tar.gz" is matched before ".gz" could be. Flea reads rar and cannot write
-// one, so .rar is here, where Extract is decided, and never in the compress submenu, which is the
-// table src/backend/archive.rs probed.
+// Longest form first, so ".tar.gz" is matched before ".gz" could be. Flea reads 7z and rar and writes
+// neither, so both are here, where Extract is decided, and never in the compress submenu, which is
+// the table src/backend/archive.rs probed.
 var EXTENSIONS = [".tar.zst", ".tar.bz2", ".tar.gz", ".tar.xz", ".tgz", ".tar", ".zip", ".7z", ".rar"]
 
 function isArchive(name) {
@@ -44,8 +45,20 @@ function stripExtension(name) {
     return cut > 0 ? text.substring(0, cut) : text
 }
 
+// The status line while an archive job runs: what it is doing, then how far through its input. The
+// backend counts bytes the tool has read, and reading the last byte is not finishing, so this never
+// says 100%; the done line is what says it finished.
+// Sample: "Compressing 3 items to .zip, 42% (1.1 GB of 2.6 GB)"
+function progressLine(work, done, total) {
+    if (!(total > 0)) {
+        return work
+    }
+    var percent = Math.min(99, Math.floor(done * 100 / total))
+    return work + ", " + percent + "% (" + Format.size(done) + " of " + Format.size(total) + ")"
+}
+
 // The compress submenu is exactly the table the backend probed, never a fixed list, so a box with
-// no 7zip installed simply never offers .7z.
+// no bsdtar offers nothing at all.
 function formatEntries(formats) {
     var out = []
     for (var i = 0; i < formats.length; i++) {

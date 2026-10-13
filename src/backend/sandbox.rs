@@ -5,7 +5,7 @@ const BWRAP: &str = "bwrap";
 // bwrap has no rlimit option, so stock prlimit carries them; see AGENTS.md "Thumbnail sandbox".
 const PRLIMIT: &str = "prlimit";
 // A 1080p decode is well under a second of CPU here, so 30 s is a runaway, not a slow file.
-const CPU_SECONDS: u32 = 30;
+pub const CPU_SECONDS: u64 = 30;
 // Issue #17 reports glycin exhausting 1 GiB of address space on a large ICC-tagged JPEG and aborting, which this box does not reproduce, so the cap is 2 GiB: the smallest value the ticket records as working, still finite, and virtual rather than resident. What actually consumed it is the arena reservation capped above, not the image.
 const ADDRESS_SPACE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
@@ -73,10 +73,19 @@ fn available_on(path: &str) -> bool {
 
 // The input is read-only, the one path the caller names is the only writable one, and nothing else is shared.
 pub fn wrap(inner: &[String], input: &Path, out: &Path) -> Vec<String> {
+    wrap_cpu(inner, input, out, Some(CPU_SECONDS))
+}
+
+// The same jail with the CPU cap chosen by the caller, or none. CPU_SECONDS is sized for one
+// thumbnail, and an archive job's cost scales with the bytes it is given: a 2.6 GB zip was killed at
+// 30 s and reported as "the archive tool failed". The address-space cap and the binds never vary.
+pub fn wrap_cpu(inner: &[String], input: &Path, out: &Path, cpu_seconds: Option<u64>) -> Vec<String> {
     let head_and_binds = 10;
     let mut a: Vec<String> = Vec::with_capacity(inner.len() + BWRAP_FLAGS.len() + head_and_binds);
     a.push(PRLIMIT.to_string());
-    a.push(format!("--cpu={}", CPU_SECONDS));
+    if let Some(cpu) = cpu_seconds {
+        a.push(format!("--cpu={}", cpu));
+    }
     a.push(format!("--as={}", ADDRESS_SPACE_BYTES));
     a.push(BWRAP.to_string());
     for flag in BWRAP_FLAGS {
@@ -213,6 +222,21 @@ print("over=" + reserve(OVER_MIB))
         let prlimit_at = got.iter().position(|a| a == "prlimit").unwrap();
         let bwrap_at = got.iter().position(|a| a == "bwrap").unwrap();
         assert!(prlimit_at < bwrap_at);
+    }
+
+    // An archive job's cost is its size, so compress runs with no CPU cap at all; everything else
+    // about the jail, the address-space cap included, must be identical either way.
+    #[test]
+    fn an_uncapped_wrap_drops_only_the_cpu_limit() {
+        let capped = wrap(&inner(), Path::new("/in/a.mp4"), Path::new("/out"));
+        let uncapped = wrap_cpu(&inner(), Path::new("/in/a.mp4"), Path::new("/out"), None);
+        assert!(capped.iter().any(|a| a == "--cpu=30"), "the thumbnail cap is unchanged: {:?}", capped);
+        assert!(!uncapped.iter().any(|a| a.starts_with("--cpu")), "no cap means no --cpu: {:?}", uncapped);
+        assert!(uncapped.iter().any(|a| a == TWO_GIB));
+        let without: Vec<&String> = capped.iter().filter(|a| !a.starts_with("--cpu")).collect();
+        assert_eq!(without, uncapped.iter().collect::<Vec<_>>());
+        let chosen = wrap_cpu(&inner(), Path::new("/in/a.mp4"), Path::new("/out"), Some(95));
+        assert!(chosen.iter().any(|a| a == "--cpu=95"));
     }
 
     #[test]

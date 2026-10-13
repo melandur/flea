@@ -3,20 +3,24 @@
 // archivereq.rs's job, the staging and the jail are archivework.rs's, and reading an index is
 // archivelist.rs's.
 use crate::backend::archive::Formats;
-use crate::backend::archivework::{archive_produced_count, is_empty_dir, run_boxed, Work};
+use crate::backend::archivework::{archive_produced_count, is_empty_dir, run_boxed, run_boxed_watched, Work};
+use crate::backend::procio::selection_bytes;
 use crate::backend::convert;
+use crate::backend::sandbox;
 use crate::backend::ops::rename_noreplace;
 use crate::backend::opsreq::op_err;
 use crate::error::{from_io, FleaError};
 use std::path::{Path, PathBuf};
 
 // One archive out of a selection that all shares a parent, which is what a listing selection is.
+// on_progress hears (bytes read, bytes to read) while the tool runs; see run_boxed_watched.
 pub fn compress(
     formats: &Formats,
     parent: &Path,
     names: &[String],
     format: &str,
     dest: &Path,
+    on_progress: &mut dyn FnMut(u64, u64),
 ) -> Result<(), FleaError> {
     if dest.symlink_metadata().is_ok() {
         return Err(op_err("archive", &dest.to_string_lossy(), "that destination already exists"));
@@ -27,7 +31,13 @@ pub fn compress(
         Some(a) => a,
         None => return Err(op_err("archive", format, "this box offers no tool for that format")),
     };
-    run_boxed("archive", inner, parent, &work.dir)?;
+    // No CPU cap: the input is the operator's own files, and the cost is their size. Measured here
+    // on 1.5 GB of incompressible data, zip and tar.gz spent 22 s of CPU, tar.bz2 90 s and tar.xz
+    // 451 s, so the thumbnail cap killed every zip past about 2 GB. The jail and its address-space
+    // cap still hold, and --die-with-parent still ends the job with the backend.
+    let total = selection_bytes(parent, names);
+    let mut read = |done: u64| on_progress(done.min(total), total);
+    run_boxed_watched("archive", inner, parent, &work.dir, None, Some(&mut read))?;
     if staged.symlink_metadata().is_err() {
         return Err(op_err("archive", format, "the archive tool wrote nothing"));
     }
@@ -39,7 +49,9 @@ pub fn compress(
 // Ok(true) is a verified success and Ok(false) one this could not check, which is a real difference
 // to the operator: three rounds of this branch went into an empty directory published as a success,
 // and publishing an unverified one as an ordinary success is a quieter version of the same thing.
-pub fn extract(formats: &Formats, archive: &Path, dest: &Path) -> Result<bool, FleaError> {
+// The total for an extract is the archive's own size, because that is what the tool reads.
+pub fn extract(formats: &Formats, archive: &Path, dest: &Path,
+               on_progress: &mut dyn FnMut(u64, u64)) -> Result<bool, FleaError> {
     if dest.symlink_metadata().is_ok() {
         return Err(op_err("archive", &dest.to_string_lossy(), "that destination already exists"));
     }
@@ -53,7 +65,9 @@ pub fn extract(formats: &Formats, archive: &Path, dest: &Path) -> Result<bool, F
     };
     // Measured on this box: bsdtar exits 1 on a .. member and de-fangs an absolute one, printing
     // "Removing leading '/'" and extracting it relative. Neither escapes the staging directory.
-    run_boxed("archive", inner, archive, &work.dir)?;
+    let total = std::fs::metadata(archive).map(|m| m.len()).unwrap_or(0);
+    let mut read = |done: u64| on_progress(done.min(total), total);
+    run_boxed_watched("archive", inner, archive, &work.dir, Some(extract_cpu_seconds(archive)), Some(&mut read))?;
     // compress and convert stat a path Flea never creates, so their existence check is a real test.
     // This one creates its own staging directory, so the same shape always passes. Two archives
     // legally extract to nothing: an empty one, and one whose only member is the archive root, which
@@ -85,6 +99,18 @@ pub fn extract(formats: &Formats, archive: &Path, dest: &Path) -> Result<bool, F
     Ok(verified)
 }
 
+// An archive is untrusted input, so an extract keeps a cap, scaled to the archive's own size so a
+// legitimate one is never cut short. The slowest real decompressors measured here spend about 0.13 s
+// of CPU per MiB of archive (bz2 and xz on text), so one second per MiB is roughly 8x headroom, while
+// a bomb still stops: a 10 MiB stream that inflates 1000:1 gets 40 s, about what it got before.
+const EXTRACT_CPU_PER_MIB: u64 = 1;
+const MIB: u64 = 1024 * 1024;
+
+fn extract_cpu_seconds(archive: &Path) -> u64 {
+    let size = std::fs::metadata(archive).map(|m| m.len()).unwrap_or(0);
+    sandbox::CPU_SECONDS + size.div_ceil(MIB) * EXTRACT_CPU_PER_MIB
+}
+
 pub fn convert_one(input: &Path, dest: &Path, strip: bool) -> Result<(), FleaError> {
     if dest.symlink_metadata().is_ok() {
         return Err(op_err("convert", &dest.to_string_lossy(), "that destination already exists"));
@@ -97,7 +123,7 @@ pub fn convert_one(input: &Path, dest: &Path, strip: bool) -> Result<(), FleaErr
     let work = Work::new(parent, "cvt")?;
     let name = dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
     let staged = work.dir.join(&name);
-    run_boxed("convert", convert::argv(input, &staged, strip), input, &work.dir)?;
+    run_boxed("convert", convert::argv(input, &staged, strip), input, &work.dir, Some(sandbox::CPU_SECONDS))?;
     if staged.symlink_metadata().is_err() {
         return Err(op_err("convert", &name, "the converter wrote nothing"));
     }
@@ -143,7 +169,7 @@ mod tests {
     fn only_the_archive_root_extracts_to_nothing_while_nested_directories_do_not() {
         if crate::backend::sandboxprobe::skipped() { return; }
         let d = TestDir::new("archdotonly");
-        let formats = Formats::from_tools(true, true);
+        let formats = Formats::from_tools(true);
         d.dir("emptysrc");
         let archive = d.join("dotonly.tar");
         let built = std::process::Command::new("bsdtar")
@@ -156,7 +182,7 @@ mod tests {
         assert_eq!(archive_produced_count(&formats, &archive), Some(0),
                    "the root is the only member, so nothing should appear in the destination");
         let dest = d.join("out");
-        extract(&formats, &archive, &dest).expect("a root-only archive extracts legally");
+        extract(&formats, &archive, &dest, &mut |_, _| {}).expect("a root-only archive extracts legally");
         assert!(dest.is_dir(), "and its destination is published rather than refused");
 
         // The root's other spelling, which bsdtar writes for `-C dir ./.`. This exact archive
@@ -169,7 +195,7 @@ mod tests {
         if made_edot.map(|s| s.success()).unwrap_or(false) {
             assert_eq!(archive_produced_count(&formats, &edot), Some(0),
                        "././ is the root as well, so it produces nothing either");
-            extract(&formats, &edot, &d.join("edotout")).expect("and it extracts legally too");
+            extract(&formats, &edot, &d.join("edotout"), &mut |_, _| {}).expect("and it extracts legally too");
         }
 
         // The case this test was named for and did not cover: directories that are NOT the root.
@@ -185,7 +211,7 @@ mod tests {
             assert!(archive_produced_count(&formats, &nested).unwrap_or(0) > 0,
                     "nested directories are destination entries, so an empty result is a failure");
             let nest_dest = d.join("nestout");
-            extract(&formats, &nested, &nest_dest).expect("it extracts");
+            extract(&formats, &nested, &nest_dest, &mut |_, _| {}).expect("it extracts");
             assert!(std::fs::read_dir(&nest_dest).unwrap().count() > 0,
                     "and the destination really does receive them");
         }
@@ -195,7 +221,7 @@ mod tests {
     fn an_empty_archive_extracts_to_an_empty_directory_and_that_is_success() {
         if crate::backend::sandboxprobe::skipped() { return; }
         let d = TestDir::new("archempty");
-        let formats = Formats::from_tools(true, true);
+        let formats = Formats::from_tools(true);
         let empty = d.join("empty.tar");
         let made = std::process::Command::new("bsdtar")
             .args(["-c", "-f", &empty.to_string_lossy(), "-T", "/dev/null"])
@@ -204,7 +230,7 @@ mod tests {
             return;
         }
         let dest = d.join("out");
-        extract(&formats, &empty, &dest).expect("an empty archive is a legal archive");
+        extract(&formats, &empty, &dest, &mut |_, _| {}).expect("an empty archive is a legal archive");
         assert!(dest.is_dir(), "and its destination is published, empty");
         assert_eq!(std::fs::read_dir(&dest).unwrap().count(), 0);
     }
@@ -213,7 +239,7 @@ mod tests {
     fn the_emptiness_check_reads_the_destination_and_the_index_separately() {
         if crate::backend::sandboxprobe::skipped() { return; }
         let d = TestDir::new("archemptyparts");
-        let formats = Formats::from_tools(true, true);
+        let formats = Formats::from_tools(true);
         d.dir("nothing");
         assert!(is_empty_dir(&d.join("nothing")), "a directory with no entries is empty");
         assert!(is_empty_dir(&d.join("never-existed")), "and so is one that cannot be read");
@@ -249,7 +275,7 @@ mod tests {
     fn a_tool_that_exits_zero_writing_nothing_is_caught_by_the_predicate() {
         if crate::backend::sandboxprobe::skipped() { return; }
         let d = TestDir::new("archzerowrite");
-        let formats = Formats::from_tools(true, true);
+        let formats = Formats::from_tools(true);
         // A real archive holding one member, so the index disagrees with an empty destination.
         d.dir("src");
         d.file("src/a.txt", "body");
@@ -267,7 +293,7 @@ mod tests {
         let staged = work.dir.join("out");
         std::fs::create_dir(&staged).expect("staged");
         // Through prlimit and bwrap, exactly as a real listing tool runs.
-        run_boxed("archive", vec!["/usr/bin/true".to_string()], &archive, &work.dir)
+        run_boxed("archive", vec!["/usr/bin/true".to_string()], &archive, &work.dir, None)
             .expect("/usr/bin/true exits 0");
         assert!(is_empty_dir(&staged), "and it wrote nothing, which is the whole point of it");
         // The predicate extract applies to those two facts.
@@ -290,13 +316,13 @@ mod tests {
             let work2 = Work::new(d.path(), "ext").expect("work");
             let staged2 = work2.dir.join("out");
             std::fs::create_dir(&staged2).expect("staged");
-            run_boxed("archive", vec!["/usr/bin/true".to_string()], &dirs, &work2.dir).expect("exits 0");
+            run_boxed("archive", vec!["/usr/bin/true".to_string()], &dirs, &work2.dir, None).expect("exits 0");
             assert!(is_empty_dir(&staged2) && archive_produced_count(&formats, &dirs).unwrap_or(0) > 0,
                     "so a tool that wrote nothing for it is a failure, not a verified success");
         }
 
         // The other arm, for completeness: a tool that exits non-zero is refused before the check.
-        assert!(run_boxed("archive", vec!["/usr/bin/false".to_string()], &archive, &work.dir).is_err(),
+        assert!(run_boxed("archive", vec!["/usr/bin/false".to_string()], &archive, &work.dir, None).is_err(),
                 "run_boxed reads the status, so the non-zero arm never reaches the predicate");
     }
 
@@ -309,21 +335,49 @@ mod tests {
         let d = TestDir::new("archwho");
         let work = Work::new(d.path(), "who").expect("work directory");
         let quiet = vec!["/usr/bin/false".to_string()];
-        let converting = run_boxed("convert", quiet.clone(), d.path(), &work.dir).unwrap_err();
+        let converting = run_boxed("convert", quiet.clone(), d.path(), &work.dir, None).unwrap_err();
         assert_eq!(converting.where_, "convert", "an image conversion says so");
         assert!(converting.msg.contains("convert") && !converting.msg.contains("archive"),
                 "and its wording does too: {}", converting.msg);
-        let archiving = run_boxed("archive", quiet, d.path(), &work.dir).unwrap_err();
+        let archiving = run_boxed("archive", quiet, d.path(), &work.dir, None).unwrap_err();
         assert_eq!(archiving.where_, "archive", "and an archive still says archive");
+    }
+
+    // A zip of a 2.6 GB file came back "the archive tool failed": the jail killed it at the 30 s
+    // thumbnail cap and said nothing about why. A real jailed spin of 1.5 s of CPU against a 1 s cap
+    // proves the cap reaches the kernel and that the kill is named; the same spin with no cap, which
+    // is what compress passes, runs to the end.
+    #[test]
+    fn a_job_killed_at_its_cpu_cap_says_so_and_an_uncapped_one_finishes() {
+        if crate::backend::sandboxprobe::skipped() { return; }
+        let d = TestDir::new("archcpu");
+        let spin = vec!["/usr/bin/python3".to_string(), "-c".to_string(),
+            "import time\nt = time.process_time()\nwhile time.process_time() - t < 1.5: pass".to_string()];
+        let work = Work::new(d.path(), "cpu").expect("work");
+        let killed = run_boxed("archive", spin.clone(), d.path(), &work.dir, Some(1)).unwrap_err();
+        assert!(killed.msg.contains("stopped before it finished"), "got {}", killed.msg);
+        run_boxed("archive", spin, d.path(), &work.dir, None).expect("no cap lets a long job finish");
+    }
+
+    #[test]
+    fn an_extract_cap_grows_with_the_archive_and_never_drops_below_the_floor() {
+        let d = TestDir::new("archcap");
+        let small = d.file("small.zip", "x");
+        assert_eq!(extract_cpu_seconds(&small), sandbox::CPU_SECONDS + 1);
+        assert_eq!(extract_cpu_seconds(&d.join("missing.zip")), sandbox::CPU_SECONDS);
+        let big = d.join("big.zip");
+        std::fs::File::create(&big).unwrap().set_len(3 * 1024 * MIB).unwrap();
+        assert_eq!(extract_cpu_seconds(&big), sandbox::CPU_SECONDS + 3 * 1024,
+                   "a 3 GiB archive gets an hour, not the thumbnail's 30 s");
     }
 
     #[test]
     fn a_file_that_is_not_an_archive_publishes_no_destination() {
         let d = TestDir::new("archnotone");
-        let formats = Formats::from_tools(true, true);
+        let formats = Formats::from_tools(true);
         let not_an_archive = d.file("notreally.tar", "this is not an archive at all");
         let dest = d.join("out");
-        assert!(extract(&formats, &not_an_archive, &dest).is_err());
+        assert!(extract(&formats, &not_an_archive, &dest, &mut |_, _| {}).is_err());
         assert!(!dest.exists(), "no destination is published for a job that produced nothing");
     }
 

@@ -31,7 +31,6 @@ makedepends=('cargo')
 # Both packages own /usr/bin/flea, so pacman refuses the pair rather than leaving one half-installed.
 conflicts=('flea-git')
 optdepends=('libarchive: archive listing and extraction'
-            '7zip: 7z archive support'
             'imagemagick: image conversion'
             'tailscale: Taildrop sharing'
             'ffmpeg: media metadata in the preview column'

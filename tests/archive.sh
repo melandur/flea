@@ -59,20 +59,11 @@ check "and the convert tool is reported" "1" "$(printf '%s' "$formats" | grep -c
 echo "  $formats"
 stop_backend
 
-seven_zip_installed=0
-if command -v 7z >/dev/null 2>&1; then
-  seven_zip_installed=1
-fi
-seven_zip_advertised=$(printf '%s' "$formats" | grep -c '"7z"')
-check "7z availability matches the advertised format" "$seven_zip_installed" "$seven_zip_advertised"
+# 7z is read and never written: nothing offers it as a compress format, whatever is installed.
+check "7z is never offered as a compress format" "0" "$(printf '%s' "$formats" | grep -c '"7z"')"
 
-# tar.zst and zip are required; exercise optional 7z exactly when the live backend offers it.
-round_trip_formats="tar.zst zip"
-if [ "$seven_zip_advertised" = 1 ]; then
-  round_trip_formats="$round_trip_formats 7z"
-else
-  echo "--- 7z is unavailable; optional round trip skipped ---"
-fi
+# Every format the submenu offers, each round tripped.
+round_trip_formats="zip tar tar.gz tar.bz2 tar.xz tar.zst"
 
 for format in $round_trip_formats; do
   echo "--- compress and extract $format ---"
@@ -105,6 +96,17 @@ await '"t":"archivedone"' || fail=1
 check "a rar extracted without error" "1" "$(seen '"t":"archivedone","id":1,"ok":true')"
 check "and its index was readable, so the extract was verified" "1" "$(seen '"id":1,"ok":true,"verified":true')"
 check "the rar round trip kept the file" "hello from a rar" "$(cat "$D/back-rar/hello.txt" 2>/dev/null)"
+stop_backend
+
+# A .7z is extracted by the same bsdtar as everything else; libarchive writes one for the fixture.
+echo "--- a 7z extracts through bsdtar ---"
+start_backend
+bsdtar --format 7zip -c -f "$D/pack.7z" -C "$D/src" a.txt sub 2>/dev/null \
+  || { echo "FAIL the 7z fixture could not be built"; fail=1; }
+send "{\"c\":\"archive\",\"op\":\"extract\",\"path\":\"$D/pack.7z\",\"dest\":\"$D/back-7z\"}"
+await '"t":"archivedone"' || fail=1
+check "a 7z extracted and was verified" "1" "$(seen '"id":1,"ok":true,"verified":true')"
+check "the 7z round trip kept the file" "beta" "$(cat "$D/back-7z/sub/b.txt" 2>/dev/null)"
 stop_backend
 
 echo "--- a destination already there is refused, both directions ---"
@@ -227,8 +229,8 @@ echo "  $odd"
 stop_backend
 
 # The count is documented as exact, so the one input that could inflate it is checked rather than
-# assumed: a member whose name holds a newline. Neither tool emits it raw, bsdtar escapes it to a
-# literal backslash-n and 7z substitutes an underscore, so one member stays one line in both. This
+# assumed: a member whose name holds a newline. bsdtar never emits it raw, it escapes it to a
+# literal backslash-n, so one member stays one line. This
 # test exists to catch that changing under us, because the wire calls the number exact.
 echo "--- a newline in a member name does not become two entries ---"
 mkdir -p "$D/nl/src"

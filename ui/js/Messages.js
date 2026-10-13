@@ -75,11 +75,13 @@ function route(root, message) {
     } else if (message.t === "formats") {
         root.archiveFormats = message.archive || []
         root.canConvert = message.convert === true
-        root.extraction = message.extract || ({archive: false, sevenZip: false})
+        root.extraction = message.extract || ({archive: false})
         root.providers = message.providers || ({})
         root.formatsResult(message)
     } else if (message.t === "archivestarted") {
         root.archiveStarted(message.id)
+    } else if (message.t === "archiveprogress") {
+        root.archiveProgress(message.id, message.done || 0, message.total || 0)
     } else if (message.t === "archivedone") {
         root.archiveDone(message.id, message.ok, message.verified !== false, message.err || "")
     } else if (message.t === "convertchecked") {

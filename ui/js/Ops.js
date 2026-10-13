@@ -203,10 +203,11 @@ function clipResolved(pane, list) {
 }
 
 // Two kinds of success, said apart: an extract whose archive index could not be read was published
-// without being checked against it, and the operator is the one who decides whether to care.
-function archiveDoneLine(verified) {
-    return verified ? "Archive written."
-                    : "Extracted. The archive index could not be read, so this was not verified."
+// without being checked against it, and the operator is the one who decides whether to care. Only an
+// extract is ever unverified, and a verified one used to say "Archive written." as well.
+function archiveDoneLine(verified, extracting) {
+    if (!verified) return "Extracted. The archive index could not be read, so this was not verified."
+    return extracting ? "Extracted." : "Archive written."
 }
 
 // forceMove is movePaste, which moves even a copy. A move spends the clipboard once the backend takes
@@ -271,7 +272,8 @@ function compressResolved(pane, list, format, menuId) {
     }
     var stem = Archive.archiveStem(names, leaf(pane.path))
     pane.backend.compress(list, pane.join(pane.path, stem + "." + format), format, menuId)
-    pane.sticky("Compressing " + items(list.length) + " to ." + format)
+    pane.archiveWork = { text: "Compressing " + items(list.length) + " to ." + format, extracting: false }
+    pane.sticky(pane.archiveWork.text)
 }
 
 // One paths reply, two possible askers. The clipboard is the default because it is what every reply
@@ -294,7 +296,8 @@ function extract(pane, menuId) {
     }
     var path = pane.join(pane.path, row.n)
     pane.backend.extract(path, pane.join(pane.path, Archive.extractDir(row.n)), menuId)
-    pane.sticky("Extracting " + row.n)
+    pane.archiveWork = { text: "Extracting " + row.n, extracting: true }
+    pane.sticky(pane.archiveWork.text)
 }
 
 // A directory has nothing to convert, so the popup never opens on one.

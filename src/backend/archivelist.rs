@@ -117,26 +117,16 @@ pub fn clear_counts(c: &mut Contents) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backend::archivespec::{seven_spec, tar_spec};
+    use crate::backend::archivespec::tar_spec;
 
-    // Real output, captured on this box from bsdtar -tvf and 7z l -ba against a fixture holding a
-    // directory, a nested directory and a name with spaces in it.
+    // Real output, captured on this box from bsdtar -tvf against a fixture holding a directory, a
+    // nested directory and a name with spaces in it.
     const TAR_LISTING: &str = "\
 drwxr-xr-x  0 gm     gm          0 Sep  1 12:10 ./
 -rw-r--r--  0 gm     gm          2 Sep  1 12:10 ./name with spaces.txt
 -rw-r--r--  0 gm     gm          1 Sep  1 12:10 ./a.txt
 drwxr-xr-x  0 gm     gm          0 Sep  1 12:10 ./sub/
 -rw-r--r--  0 gm     gm          3 Sep  1 12:10 ./sub/b.txt
-";
-
-    // The packed column is blank for a solid-block member, which is why the name cannot be found by
-    // counting fields here the way it is for bsdtar.
-    const SEVEN_LISTING: &str = "\
-2026-09-01 12:10:26 D....            0            0  arcfmt
-2026-09-01 12:10:26 D....            0            0  arcfmt/sub
-2026-09-01 12:10:26 ....A            1           10  arcfmt/a.txt
-2026-09-01 12:10:26 ....A            2               arcfmt/name with spaces.txt
-2026-09-01 12:10:26 ....A            3               arcfmt/sub/b.txt
 ";
 
     fn parse(text: &str, spec: &ListSpec) -> Contents {
@@ -154,18 +144,6 @@ drwxr-xr-x  0 gm     gm          0 Sep  1 12:10 ./sub/
         assert_eq!(c.names[0].is_dir, true, "the mode column is what says directory");
         assert_eq!(c.names[1].is_dir, false);
         assert_eq!(c.names[3].is_dir, true);
-    }
-
-    #[test]
-    fn a_7z_listing_gives_the_same_shape_despite_its_blank_packed_column() {
-        let c = parse(SEVEN_LISTING, &seven_spec());
-        assert_eq!(c.entries, 5);
-        assert_eq!(c.unpacked, 6);
-        let names: Vec<&str> = c.names.iter().map(|e| e.name.as_str()).collect();
-        assert_eq!(names, vec!["arcfmt", "arcfmt/sub", "arcfmt/a.txt",
-                              "arcfmt/name with spaces.txt", "arcfmt/sub/b.txt"]);
-        assert_eq!(c.names[0].is_dir, true, "the attribute column is what says directory");
-        assert_eq!(c.names[2].is_dir, false);
     }
 
     // BufRead::lines() answers Err on a filename that is not UTF-8, and breaking there reported a
@@ -349,18 +327,6 @@ drwxr-xr-x  0 gm     gm          0 Sep  1 12:10 ./sub/
         let d = parse(dirs, &tar_spec());
         assert_eq!((d.entries, d.produced_entries), (4, 3),
                    "nested directories are destination entries even though they are directories");
-
-        // 7z emits no root member at all, measured on this box: from inside a directory it lists
-        // "a", "b", "f.txt" and naming one it lists "src", "src/a", where the top name is itself a
-        // destination entry. So every row produces one and the root exclusion never fires here.
-        let seven = parse(SEVEN_LISTING, &seven_spec());
-        assert_eq!((seven.entries, seven.produced_entries), (5, 5));
-        let seven_from_inside = "2026-09-01 16:13:05 D....            0            0  a\n\
-                                 2026-09-01 16:13:05 D....            0            0  b\n\
-                                 2026-09-01 16:13:05 ....A            1            5  f.txt\n";
-        let inside = parse(seven_from_inside, &seven_spec());
-        assert_eq!((inside.entries, inside.produced_entries), (3, 3),
-                   "no root to exclude, so the count is every member");
 
         // The root has more than one spelling. bsdtar writes "././" for `tar -c -C dir ./.`, measured
         // on this box, and a predicate that trimmed one trailing slash read it as "./." and refused a

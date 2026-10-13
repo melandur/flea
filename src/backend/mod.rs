@@ -6,6 +6,7 @@ pub mod archiveops;
 pub mod archivespec;
 pub mod archivereq;
 pub mod archivework;
+pub mod procio;
 pub mod mime;
 pub mod fsinfo;
 pub mod icons;

@@ -6,7 +6,9 @@ use crate::backend::archivelist::parse_reader;
 use crate::backend::opsreq::op_err;
 use crate::error::{from_io, FleaError};
 use std::path::{Path, PathBuf};
+use crate::backend::procio::tree_rchar;
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 // A private directory beside the destination, so the rename that follows never crosses a filesystem.
 const WORK_PREFIX: &str = ".flea-work-";
@@ -60,27 +62,91 @@ impl Drop for Work {
 // what names the operation this jail is running, because the same jail runs the archive tools and
 // the image converter: reporting every one of them as "archive" told an operator converting a PNG
 // that the archive tool had failed.
-pub fn run_boxed(what: &str, inner: Vec<String>, read_only: &Path, writable: &Path) -> Result<(), FleaError> {
+// cpu_seconds is the job's own CPU cap, or None for none at all; see the callers in archiveops.rs.
+pub fn run_boxed(what: &str, inner: Vec<String>, read_only: &Path, writable: &Path,
+                 cpu_seconds: Option<u64>) -> Result<(), FleaError> {
+    run_boxed_watched(what, inner, read_only, writable, cpu_seconds, None)
+}
+
+// How often a running job is asked how far it has read, and how often that is reported. The wait
+// polls faster than it reports so a small job is not held a whole report interval after it ends.
+const POLL: Duration = Duration::from_millis(50);
+const REPORT: Duration = Duration::from_millis(250);
+
+// The same job, with on_read told the bytes the jailed tool has read so far every REPORT while it
+// runs. That is the whole progress mechanism: bsdtar says nothing while it works.
+pub fn run_boxed_watched(what: &str, inner: Vec<String>, read_only: &Path, writable: &Path,
+                         cpu_seconds: Option<u64>, mut on_read: Option<&mut dyn FnMut(u64)>) -> Result<(), FleaError> {
     // Fail closed: the jail is the only containment for these tools, so a missing bwrap or prlimit
     // refuses the job rather than running it unsandboxed, the same rule thumbs.rs already follows.
     if !sandbox::available() {
         let tool = inner.first().map_or("", |s| s.as_str());
         return Err(op_err(what, tool, "the sandbox is unavailable: bwrap or prlimit is not on PATH"));
     }
-    let full = sandbox::wrap(&inner, read_only, writable);
-    let out = Command::new(&full[0])
+    let full = sandbox::wrap_cpu(&inner, read_only, writable, cpu_seconds);
+    let mut child = Command::new(&full[0])
         .args(&full[1..])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .output()
+        .stderr(std::process::Stdio::piped())
+        .spawn()
         .map_err(|e| from_io(what, &full[0], &e))?;
-    if out.status.success() {
+    // Drained on its own thread: a tool that fills the pipe while nobody reads it would block forever.
+    let drain = child.stderr.take().map(|mut err| std::thread::spawn(move || {
+        let mut text = String::new();
+        let _ = std::io::Read::read_to_string(&mut err, &mut text);
+        text
+    }));
+    let mut last = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {}
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(from_io(what, &full[0], &e));
+            }
+        }
+        if let Some(report) = on_read.as_mut() {
+            if last.elapsed() >= REPORT {
+                last = Instant::now();
+                report(tree_rchar(child.id()));
+            }
+        }
+        std::thread::sleep(POLL);
+    };
+    let text = drain.and_then(|t| t.join().ok()).unwrap_or_default();
+    if status.success() {
         return Ok(());
     }
-    let text = String::from_utf8_lossy(&out.stderr);
-    let fallback = format!("the {} tool failed", what);
-    Err(op_err(what, "", text.lines().last().unwrap_or(&fallback)))
+    // bwrap reports a child killed by signal n as exit 128 + n, so a SIGKILL from a jail limit
+    // arrives as 137 with nothing on stderr; "failed" read as a fault in the file when it was not.
+    let fallback = if status.code() == Some(KILLED_EXIT) {
+        format!("the {} tool was stopped before it finished, out of time or memory", what)
+    } else {
+        format!("the {} tool failed", what)
+    };
+    Err(op_err(what, "", cause_line(&text).unwrap_or(&fallback)))
 }
+
+// bsdtar keeps going past a member it cannot read and ends with this line, so the last line alone
+// told the operator nothing; the line naming the member is the one before it.
+// Sample input: "bsdtar: secret.txt: Can't open: Permission denied\nbsdtar: Error exit delayed from previous errors"
+const BSDTAR_SUMMARY: &str = "Error exit delayed from previous errors";
+
+// The tool's own "bsdtar: " prefix is dropped, because the status bar capitalises the sentence and
+// "Bsdtar: Can't open..." names a program the operator never chose to run.
+const BSDTAR_PREFIX: &str = "bsdtar: ";
+
+fn cause_line(stderr: &str) -> Option<&str> {
+    stderr.lines().rev()
+        .find(|l| !l.trim().is_empty() && !l.contains(BSDTAR_SUMMARY))
+        .map(|l| l.strip_prefix(BSDTAR_PREFIX).unwrap_or(l))
+}
+
+// 128 + SIGKILL, which is how bwrap reports a child the kernel killed at a prlimit cap.
+const KILLED_EXIT: i32 = 137;
 
 
 pub fn is_empty_dir(dir: &Path) -> bool {
@@ -140,6 +206,16 @@ mod tests {
             assert_eq!(kept.parent().unwrap(), d.path());
         }
         assert!(!kept.exists(), "the work directory goes with the job that made it");
+    }
+
+    #[test]
+    fn the_cause_is_the_line_naming_the_member_and_not_the_summary_after_it() {
+        let text = "bsdtar: secret.txt: Can't open: Permission denied\nbsdtar: Error exit delayed from previous errors\n";
+        assert_eq!(cause_line(text), Some("secret.txt: Can't open: Permission denied"));
+        assert_eq!(cause_line("bsdtar: Error exit delayed from previous errors\n"), None,
+                   "a summary alone names nothing, so the caller's own sentence stands");
+        assert_eq!(cause_line("7z: one line\n"), Some("7z: one line"));
+        assert_eq!(cause_line(""), None);
     }
 
     #[test]

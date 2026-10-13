@@ -1,5 +1,6 @@
 import QtQuick
 import "." as Flea
+import "js/Archive.js" as Archive
 import "js/DirSizes.js" as DirSizes
 import "js/Errors.js" as Errors
 import "js/Anchor.js" as Anchor
@@ -406,9 +407,13 @@ Item {
 
         // A success nobody could check must not read as one that was checked, so the unverified
         // extract says so in the same slot rather than in a dialog.
+        function onArchiveProgress(id, done, total) {
+            pane.sticky(Archive.progressLine(pane.archiveWork.text, done, total))
+        }
+
         function onArchiveDone(id, ok, verified, err) {
             pane.sticky("")
-            pane.message(ok ? Ops.archiveDoneLine(verified) : Errors.sentence("archive", err), !ok)
+            pane.message(ok ? Ops.archiveDoneLine(verified, pane.archiveWork.extracting) : Errors.sentence("archive", err), !ok)
             pane.refresh("")
         }
 

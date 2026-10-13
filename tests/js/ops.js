@@ -20,9 +20,11 @@ function run(check) {
     check("an absent validated cursor path is refused", JSON.stringify(messages), JSON.stringify([["Cursor source was not validated; reopen the menu.", true]]))
     check("missing validation cannot fall back to a live cursor file", sent.length, 1)
     // Two kinds of success, and the operator has to be able to tell them apart.
-    check("a verified extract says so plainly", Ops.archiveDoneLine(true), "Archive written.")
+    check("a written archive says so plainly", Ops.archiveDoneLine(true, false), "Archive written.")
+    check("a verified extract says it extracted, not that it wrote an archive",
+          Ops.archiveDoneLine(true, true), "Extracted.")
     check("and an unverified one says what was not checked",
-          Ops.archiveDoneLine(false),
+          Ops.archiveDoneLine(false, true),
           "Extracted. The archive index could not be read, so this was not verified.")
 
     check("one item is singular and two are not",
