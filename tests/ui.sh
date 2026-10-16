@@ -7461,6 +7461,11 @@ case_dualsort() {
     seed_ui_state "$state" "$(jq -cn --arg left "$dir/left" --arg right "$dir/right" \
         '{view:"dual",keys:"default",sort:{key:"name",reverse:false},dual:{paths:[$left,$right],focus:0}}')"
     launch "$dir/left"
+    # A stored split is not how a window opens: a launch is always one pane, and Ctrl+T is the way in.
+    menus_expect dualState '(.active | not)' 'a stored split launches as one pane'
+    click_chrome dual
+    # Opening the split hands the keyboard to the new pane; the checks below start on the primary.
+    key -k Tab >/dev/null
     menus_expect dualState '.active and .focused == 0 and all(.panes[]; .total == 80 and (.loading | not))' 'both dual listings start independently'
     dual_sort_wait name:asc file-00.txt
     key -k End >/dev/null; key v >/dev/null

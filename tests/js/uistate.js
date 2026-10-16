@@ -56,6 +56,18 @@ function run(check) {
     check("and the pane is told to say so", UiState.fromFile("{\"columns\":[\"name\"],}").unreadable, true)
     check("a document that is not an object is the same", UiState.fromFile("[1,2]").unreadable, true)
     check("no file at all is a first launch and says nothing", UiState.fromFile("").unreadable, false)
+
+    // A split left open in another window is not how this one opens: it lands on the view the split
+    // was entered from, or the list when that word is missing or one a pane cannot draw.
+    check("a stored split opens as the view it was entered from",
+          UiState.singlePane({ view: "dual", dual: { from: "grid", focus: 1 } }).view, "grid")
+    check("and keeps the rest of the dual group",
+          UiState.singlePane({ view: "dual", dual: { from: "grid", focus: 1 } }).dual.focus, 1)
+    check("a split with no from opens as the list", UiState.singlePane({ view: "dual" }).view, "list")
+    check("a split whose from is itself opens as the list",
+          UiState.singlePane({ view: "dual", dual: { from: "dual" } }).view, "list")
+    check("a single view is left alone", UiState.singlePane({ view: "columns" }).view, "columns")
+    check("and so is no view at all", UiState.singlePane({}).view, undefined)
     var favouritesDraft = { view: "columns", places: { sidebarWidth: 256, favourites: [{ label: "Before", path: "/before" }] } }
     var refresh = UiState.refreshedFavourites(favouritesDraft, '{"view":"grid","places":{"sidebarWidth":160,"favourites":[17,{"label":"New","path":"/new"},{"label":"New","path":"/new"}]}}')
     check("external favourites preserve invalid and duplicate originals", JSON.stringify(refresh.state.places.favourites), '[17,{"label":"New","path":"/new"},{"label":"New","path":"/new"}]')

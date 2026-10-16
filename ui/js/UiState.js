@@ -43,6 +43,18 @@ function favouritesAfter(records, operation) {
     return next
 }
 
+// A window always opens on one pane. ui.json is shared, so a split left open in one window is what
+// every later launch reads, and a second Flea opening split because the first one is split is not
+// what the operator asked for: "make it always start with one column as default view". The stored
+// "dual" reads here as the view the split was entered from, the same word Ctrl+T leaves it on, and
+// only this window's copy changes; the file keeps it until this window writes a view of its own.
+function singlePane(state) {
+    if (state.view !== "dual")
+        return state
+    var from = (state.dual || {}).from
+    return withKey(state, "view", ["list", "columns", "grid"].indexOf(from) >= 0 ? from : "list")
+}
+
 // A copy of the document with one top-level key replaced, and the nested version of the same. QML
 // notifies on assignment and not on a mutation, so every writer rebuilds rather than reaching in;
 // the nested one merges into the group beside it, because a whole-group assignment would take the

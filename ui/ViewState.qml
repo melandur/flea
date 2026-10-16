@@ -327,7 +327,7 @@ QtObject {
 
     function load(text) {
         var read = UiState.fromFile(text)
-        root.state = read.state
+        root.state = UiState.singlePane(read.state)
         if (read.unreadable)
             root.unreadable = true
     }
