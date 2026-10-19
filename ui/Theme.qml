@@ -4,6 +4,8 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import qs.Commons
+// Qualified, because Qt 6.12 exports a QtQuick Color singleton that shadows the bare name.
+import qs.Commons as Commons
 import "js/Columns.js" as Columns
 import "js/Contrast.js" as Contrast
 import "js/FileTypes.js" as FileTypes
@@ -68,7 +70,7 @@ Singleton {
     property bool reducedMotion: Quickshell.env("FLEA_REDUCED_MOTION") === "1"
 
     // The only literal colours in the UI. Color models five roles; surface, symlink and executable
-    // have no counterpart, and the other two are read here before Color.loadColors has run.
+    // have no counterpart, and the other two are read here before Commons.Color.loadColors has run.
     readonly property var fallbackColor: ({
         background: "#101315",
         surface: "#181825",
@@ -83,17 +85,17 @@ Singleton {
     readonly property var catalogColors: Themes.colorsOf(root.themeId)
 
     readonly property QtObject color: QtObject {
-        readonly property color background: root.catalogColors ? root.catalogColors.background : Color.background
-        readonly property color foreground: root.catalogColors ? root.catalogColors.foreground : Color.foreground
-        property color muted: Qt.darker(Color.foreground, 1.4)
-        readonly property color accent: root.catalogColors ? root.catalogColors.accent : Color.accent
-        property color error: Color.urgent
+        readonly property color background: root.catalogColors ? root.catalogColors.background : Commons.Color.background
+        readonly property color foreground: root.catalogColors ? root.catalogColors.foreground : Commons.Color.foreground
+        property color muted: Qt.darker(Commons.Color.foreground, 1.4)
+        readonly property color accent: root.catalogColors ? root.catalogColors.accent : Commons.Color.accent
+        property color error: Commons.Color.urgent
         property color surface: root.fallbackColor.surface
         property color symlink: root.fallbackColor.symlink
         property color executable: root.fallbackColor.executable
         // The accent as a frame rather than as ink: on a card's own surface a frame is a graphical
         // object, so it is lifted to 3:1 there the way symlink and executable are lifted on the list.
-        property color accentFrame: Color.accent
+        property color accentFrame: Commons.Color.accent
     }
 
     readonly property QtObject font: QtObject {
@@ -300,10 +302,10 @@ Singleton {
         // switch had already stored a catalog one. Reproduced on the box, 2026-09-18.
         body = Themes.following(root.themeId) ? body : Themes.paletteBody(root.themeId);
         root.markColors = ({});
-        Color.loadColors(body);
-        var roles = Palette.roles(body, root.fallbackColor, String(Color.accent), String(Color.urgent),
-                                  Color.urgent.hsvSaturation, String(Color.foreground),
-                                  String(Qt.darker(Color.foreground, 1.4)));
+        Commons.Color.loadColors(body);
+        var roles = Palette.roles(body, root.fallbackColor, String(Commons.Color.accent), String(Commons.Color.urgent),
+                                  Commons.Color.urgent.hsvSaturation, String(Commons.Color.foreground),
+                                  String(Qt.darker(Commons.Color.foreground, 1.4)));
         root.color.surface = roles.surface;
         root.color.muted = roles.muted;
         root.color.accentFrame = roles.accentFrame;
@@ -344,14 +346,14 @@ Singleton {
         Component.onCompleted: root.applyColors(colorsFile.text())
     }
 
-    // Color.loadShell refreshes Style's whole token scale, so the type ladder flips with the theme.
+    // Commons.Color.loadShell refreshes Style's whole token scale, so the type ladder flips with the theme.
     FileView {
         id: shellFile
         path: root.stateDir + "/theme/shell.toml"
         blockLoading: true
         printErrors: false
-        onLoaded: Color.loadShell(text())
-        onLoadFailed: Color.loadShell("")
+        onLoaded: Commons.Color.loadShell(text())
+        onLoadFailed: Commons.Color.loadShell("")
     }
 
     // omarchy-theme-set rm -rf's and mv's the theme directory, so an inotify watch on a file inside
