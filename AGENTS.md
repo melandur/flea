@@ -1157,6 +1157,9 @@ this coverage needed no new entry there.
   snapshot carries a cursor and a selection only across a switch that re-lists nothing, because an
   index names a row and a re-read can put a different file behind the same number.
 - `ui/js/Trash.js` is the dd pair's arm-and-fire policy, split out of `Focus.js` at its cap.
+- `ui/js/QueryLine.js` is what the search's and the filter's query lines share, the typed-character
+  rule and the system clipboard, and `ui/js/SearchKeys.js` the keys that reach the search without
+  its chord, split out of `Search.js` at its cap; see "No type-ahead, and trash is a pair".
 - `ui/js/TextSize.js` is the Display section's text size: the seven stops the SettingsScale board
   documents, 9, 10, 11, 12, 14, 16 and 20 px, the two modes it names, and the sentence a chord
   announces. `ui/ViewState.qml` stores `display.textSize` as `{"mode":"system"}` or `{"mode":N}`,
@@ -4230,9 +4233,42 @@ chord from both views against a logging `FLEA_BIN`.
 
 Removed in v0.1.3 for issue 7. The type-ahead was the fallback for a printable key that
 `keys.toml` did not bind, so it only ever worked for the letters nothing else had claimed:
-typing `Vid` toggled the selection on `v`, jumped on `i`, and trashed the row on `d`. An
-unbound letter now answers `Press / to filter this listing by name.`, which is the filter
-that already narrows the held rows without a walk.
+typing `Vid` toggled the selection on `v`, jumped on `i`, and trashed the row on `d`.
+
+**Typing searches now, the operator's ruling of 2026-10-28**, and it is safe where the old
+jump was not because the bare letters have since left the table: only `m`, `,` and `?` are
+still bound. `ui/js/SearchKeys.js` `typeAhead` opens the query line over this folder with an
+unbound printable key already in it, exactly as Ctrl+F followed by that key would; a bound
+key keeps its meaning. On the results `resumeKey` hands Backspace and every printable key the
+listing does not bind back to the line, so typing and the arrows interleave, while Space, `m`,
+`,` and `?` keep their meaning there, so a result can still be marked and given a menu.
+Right is in `ui/js/Focus.js` `LEAVES_LINE`: it commits the line and browses in, so a folder is
+entered and `Nav.open`'s `Search.leave` ends the search there, and a file is previewed. The
+filter's line shares that list, so Right there enters or previews the row the filter kept.
+**On the search's line Right waits for the walk**: `SearchKeys.commitFor` refuses it with a
+sentence while the walk of this exact query is running or has not gone out yet, because until
+`ranked` has run row 0 is no row at all or only the first match found, not the best one.
+
+**Which key is a typed character is `ui/js/QueryLine.js` `printable`, for both lines and for
+the search's entry keys alike.** There were three predicates and they disagreed: Qt reports
+the Delete key's text as DEL, U+007F, which every `>= " "` test accepted, so Delete on the
+results was typed into the query instead of trashing the result. `printable` refuses DEL and a
+Ctrl or Meta chord and allows Alt, because some layouts reach printable characters through it.
+
+**The clipboard reaches both query lines**, `QueryLine.clipKey`. Neither line is an editor, so
+Qt's own clipboard keys never applied: while a line holds the caret, Ctrl+V and Shift+Insert
+type the clipboard in, and Ctrl+C and Ctrl+Insert copy the query out through `ui/Opener.qml`
+`copyText`, the same `wl-copy` Copy Path uses, which drops a copy while one is still running.
+A paste loses a trailing line break, has an inner one or a tab turned into a space, loses any
+other control character and keeps its spaces, a leading one included, and stops at 255
+characters, the longest a name can be. The read is `Opener.pasteText`, which is
+`Quickshell.clipboardText`, measured on this box to return what `wl-copy` had just set. Off the
+line, on the results included, Ctrl+C and Ctrl+V stay the file copy and paste.
+`tests/js/focus-lines.js` drives every case here through `Focus.handleKey`. `tests/ui.sh`'s `open`
+case still asserts the old sentence on an unbound `q`; that case already presses the removed bare
+`l` and is one of the suites the key cut left to rewrite.
+`tests/ui.sh`'s `open` case still asserts the old sentence on an unbound `q`; that case
+already presses the removed bare `l` and is one of the suites the key cut left to rewrite.
 
 Bare `d` is `trashArm`, not `trash`: `ui/js/Trash.js` owns the pair, the first press arms and
 says so, a second inside `Trash.ARM_MS` trashes, and `Focus.handleKey` clears

@@ -89,4 +89,10 @@ Item {
         id: copier
     }
 
+    // The other direction, for a query line's Ctrl+V: Qt's own clipboard, which the focused window
+    // can read synchronously on Wayland.
+    function pasteText() {
+        return Quickshell.clipboardText
+    }
+
 }

@@ -8,8 +8,10 @@
 .import "Mounts.js" as Mounts
 .import "Ops.js" as Ops
 .import "PreviewKeys.js" as PreviewKeys
+.import "QueryLine.js" as QueryLine
 .import "RailKeys.js" as RailKeys
 .import "Search.js" as Search
+.import "SearchKeys.js" as SearchKeys
 .import "Sort.js" as Sort
 .import "Trash.js" as Trash
 .import "Tabs.js" as Tabs
@@ -207,14 +209,14 @@ function shareBrowserAct(action, root) {
     }
 }
 
-// The cursor keys and only those, resolved through the generated table rather than through a second
-// list of key codes, which is how issue 28's Home, End and page keys came with issue 12 for free. A
-// printable character is excluded before the lookup, or j and k would leave the line instead of
-// being typed into it.
-var LEAVES_LINE = ["cursorDown", "cursorUp", "cursorFirst", "cursorLast", "pageDown", "pageUp"]
+// The cursor keys and Right, resolved through the generated table rather than through a second
+// list of key codes, which is how issue 28's Home, End and page keys came with issue 12 for free.
+// Right commits and then browses in: a folder among the results, or among the rows a filter kept,
+// is entered, and a file is previewed. A printable character is excluded before the lookup.
+var LEAVES_LINE = ["cursorDown", "cursorUp", "cursorFirst", "cursorLast", "pageDown", "pageUp", "pageForward"]
 
 function leavesLine(event) {
-    if (event.text.length === 1 && event.text >= " ")
+    if (QueryLine.printable(event))
         return false
     return LEAVES_LINE.indexOf(Keymap.lookup(event.key, event.text, event.modifiers)) >= 0
 }
@@ -252,8 +254,11 @@ function handleKey(event, root, sidebar) {
     // its debounced live walk already put up, walking only if the debounce had not fired yet.
     if ((root.searchMode === Search.TYPING || root.filterTyping) && leavesLine(event)) {
         if (root.filterTyping) Filter.commit(root)
-        else Search.run(root)
+        else if (!SearchKeys.commitFor(root, Keymap.lookup(event.key, event.text, event.modifiers))) return true
     }
+    var line = root.searchMode === Search.TYPING ? Search : root.filterTyping ? Filter : null
+    if (line && QueryLine.clipKey(event, root, line === Search ? root.searchQuery : root.filterQuery,
+                             function (text) { line.typed(root, text) })) return true
     // The query line owns every key while it has the caret, the same way the rename field does above.
     if (root.searchMode === Search.TYPING) {
         return Search.typeKey(event, root)
@@ -283,6 +288,7 @@ function handleKey(event, root, sidebar) {
         shareBrowserAct(action, root)
         return true
     }
+    if (SearchKeys.resumeKey(event, root)) return true
     if (action === "focusNext" || action === "focusPrevious") {
         if (root.dualMode && root.focusView === LIST) root.switchPane()
         else root.focusView = next(root.focusView, sidebar || root.railAvailable)
@@ -330,11 +336,6 @@ function handleKey(event, root, sidebar) {
         if (action.length > 0) root.act(action)
         return true
     }
-    // An unbound printable key used to jump to a name, which only half worked because most letters
-    // are bound, and taught a habit that reached d and trashed the row. It names the filter instead.
-    if (root.shown === null && event.text.length === 1 && event.text >= " ") {
-        root.message("Press / to filter this listing by name.", false)
-        return true
-    }
-    return false
+    // An unbound printable key starts the search with itself; the letters that trashed a row are gone.
+    return SearchKeys.typeAhead(event, root)
 }

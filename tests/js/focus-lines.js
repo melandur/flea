@@ -125,6 +125,127 @@ function run(check) {
     check("and commits the search's walk exactly once, the way the down arrow does",
           committed.join("|"), "results:1")
 
+    // The operator's ruling of 2026-10-28: Right on the line commits and browses in, so a folder
+    // among the results is entered, the search ends there, and nothing is walked a second time.
+    var entering = queryPane()
+    entering.searchMode = "typing"
+    entering.searchQuery = "scr"
+    entering.searchFrom = "/d"
+    entering.searchWalked = "here:scr"
+    entering.openCursor = function () { entering.opened = entering.rowFor(entering.cursorIndex).n }
+    Focus.handleKey(key(Qt.Key_Right, ""), entering, noRail())
+    check("right on the search's line opens the folder under the cursor without a second walk",
+          entering.opened + "|" + entering.walked.length, "Screens|0")
+    // Until the walk of this exact query has ranked, row 0 is no row or only the first one found.
+    function early(running, walked) {
+        var p = queryPane()
+        p.searchMode = "typing"
+        p.searchQuery = "scr"
+        p.searchFrom = "/d"
+        p.searchWalked = walked
+        p.searchRunning = running
+        p.openCursor = function () { p.opened = "yes" }
+        Focus.handleKey(key(Qt.Key_Right, ""), p, noRail())
+        return (p.opened || "no") + "|" + p.searchMode + "|" + p.walked.length + "|" + p.said
+    }
+    var held = "no|typing|0|Still searching; Right opens a result once the search is done."
+    check("and while that walk still runs right opens nothing and says why", early(true, "here:scr"), held)
+    check("nor before the debounce has walked the query typed", early(false, "here:sc"), held)
+    var filtered = queryPane()
+    filtered.filterTyping = true
+    filtered.filterQuery = "scr"
+    filtered.refresh()
+    filtered.openCursor = function () { filtered.opened = filtered.rowFor(filtered.cursorIndex).n }
+    Focus.handleKey(key(Qt.Key_Right, ""), filtered, noRail())
+    check("right on the filter's line enters the folder under the cursor the same way",
+          filtered.opened + "|" + filtered.filterTyping, "Screens|false")
+
+    // And typing reaches the search with no chord first: an unbound printable key opens the line
+    // with itself in it, a bound one keeps its own meaning, and the results hand typing back.
+    var straight = queryPane()
+    Focus.handleKey(key(Qt.Key_S, "s"), straight, noRail())
+    check("an unbound letter in the listing starts a search of this folder with it",
+          straight.searchMode + "|" + straight.searchQuery + "|" + straight.searchDeep, "typing|s|false")
+    var bound = queryPane()
+    bound.openCursorMenu = function () { return true }
+    Focus.handleKey(key(Qt.Key_M, "m"), bound, noRail())
+    check("and a bound letter is not typed into one", bound.searchMode, "")
+    var resumed = queryPane()
+    resumed.searchMode = "results"
+    resumed.searchQuery = "scr"
+    Focus.handleKey(key(Qt.Key_E, "e"), resumed, noRail())
+    check("on the results an unbound printable key goes back to the line",
+          resumed.searchMode + "|" + resumed.searchQuery, "typing|scre")
+    var menuOn = queryPane()
+    menuOn.searchMode = "results"
+    menuOn.searchQuery = "scr"
+    menuOn.openCursorMenu = function () { menuOn.menued = true; return true }
+    Focus.handleKey(key(Qt.Key_M, "m"), menuOn, noRail())
+    check("while m still raises the menu on a result rather than being typed",
+          menuOn.searchMode + "|" + menuOn.searchQuery + "|" + menuOn.menued, "results|scr|true")
+    var deleting = queryPane()
+    deleting.searchMode = "results"
+    deleting.searchQuery = "scr"
+    var did = []
+    deleting.act = function (action) { did.push(action) }
+    Focus.handleKey(key(Qt.Key_Delete, "\u007f"), deleting, noRail())
+    check("and Delete, whose text is DEL, still trashes the result",
+          deleting.searchMode + "|" + deleting.searchQuery + "|" + did.join(","), "results|scr|trash")
+    var onLine = queryPane()
+    onLine.searchMode = "typing"
+    onLine.searchQuery = "scr"
+    Focus.handleKey(key(Qt.Key_Delete, "\u007f"), onLine, noRail())
+    check("and on the line itself DEL is never typed into the query", onLine.searchQuery, "scr")
+    var shortened = queryPane()
+    shortened.searchMode = "results"
+    shortened.searchQuery = "scr"
+    Focus.handleKey(key(Qt.Key_Backspace, ""), shortened, noRail())
+    check("and backspace shortens the query rather than leaving the results",
+          shortened.searchMode + "|" + shortened.searchQuery, "typing|sc")
+
+    // Copy and paste on a query line, the same day's ruling: the clipboard is typed in as one line
+    // and the query copied out, while off the line the chords stay the file copy and paste.
+    function clip(code, mods) { return { key: code, text: "", modifiers: mods } }
+    function clipPane() {
+        var p = queryPane()
+        p.copied = []
+        p.paste = "scr\nipts\n"
+        p.opener = { pasteText: function () { return p.paste }, copyText: function (t) { p.copied.push(t) } }
+        return p
+    }
+    var pasting = clipPane()
+    pasting.searchMode = "typing"
+    pasting.searchQuery = "a "
+    Focus.handleKey(clip(Qt.Key_V, Qt.ControlModifier), pasting, noRail())
+    check("ctrl+v on the search's line types the clipboard in as one line",
+          pasting.searchMode + "|" + pasting.searchQuery, "typing|a scr ipts")
+    var copying = clipPane()
+    copying.searchMode = "typing"
+    copying.searchQuery = "scr"
+    Focus.handleKey(clip(Qt.Key_C, Qt.ControlModifier), copying, noRail())
+    check("ctrl+c on it copies the query and leaves the line up",
+          copying.copied.join(",") + "|" + copying.searchMode, "scr|typing")
+    Focus.handleKey(clip(Qt.Key_Insert, Qt.ControlModifier), copying, noRail())
+    check("and ctrl+insert copies it the same way", copying.copied.join(","), "scr,scr")
+    var spaced = clipPane()
+    spaced.searchMode = "typing"
+    spaced.searchQuery = "q"
+    spaced.paste = " report\r\n"
+    Focus.handleKey(clip(Qt.Key_V, Qt.ControlModifier), spaced, noRail())
+    check("a pasted leading space is kept and only the trailing line break goes", spaced.searchQuery, "q report")
+    var narrowPaste = clipPane()
+    narrowPaste.filterTyping = true
+    narrowPaste.filterQuery = ""
+    Focus.handleKey(clip(Qt.Key_Insert, Qt.ShiftModifier), narrowPaste, noRail())
+    check("shift+insert pastes into the filter's line the same way", narrowPaste.filterQuery, "scr ipts")
+    var offLine = clipPane()
+    offLine.searchMode = "results"
+    offLine.searchQuery = "scr"
+    var clipped = []
+    offLine.act = function (action) { clipped.push(action) }
+    Focus.handleKey(clip(Qt.Key_C, Qt.ControlModifier), offLine, noRail())
+    check("and on the results ctrl+c is still the file copy", clipped.join(",") + "|" + offLine.copied.length, "copy|0")
+
     // Tab on the search's query line flips the depth, and it was driven straight into
     // Search.typeKey. Nothing said Focus.handleKey routes Qt.Key_Tab there rather than resolving it
     // through Keymap to focusNext, which is what the very same key means one state away.

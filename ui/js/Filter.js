@@ -2,6 +2,7 @@
 
 .import "Format.js" as Format
 .import "Match.js" as Match
+.import "QueryLine.js" as QueryLine
 .import "Thumbs.js" as Thumbs
 
 // The filter narrows the listing already on screen: no walk, no round trip, and every row it keeps
@@ -245,7 +246,7 @@ function typeKey(event, pane) {
         backspace(pane)
         return true
     }
-    if (event.text.length === 1 && event.text >= " ") {
+    if (QueryLine.printable(event)) {
         typed(pane, event.text)
         return true
     }

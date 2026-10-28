@@ -2,6 +2,7 @@
 
 .import "DirSizes.js" as DirSizes
 .import "Format.js" as Format
+.import "QueryLine.js" as QueryLine
 .import "Thumbs.js" as Thumbs
 
 // The subtree search's behaviour, taking ui/Pane.qml's root the way Focus.js does; Pane holds the
@@ -164,7 +165,7 @@ function typeKey(event, root) {
         schedule(root)
         return true
     }
-    if (event.text.length === 1 && event.text >= " ") {
+    if (QueryLine.printable(event)) {
         typed(root, event.text)
         return true
     }
