@@ -702,14 +702,27 @@ fact_labels() {
 }
 
 # Walks the cursor to a row by name, from the top, so no case depends on an index the sort could move.
+# The arrows and nothing else: g and j left the key table, and an unbound letter now opens a search.
+# The row is found among the delegates on screen first and reached in one run of presses; a row
+# past them is reached by stepping down, which scrolls it in, the way the old walk always did.
 seek_row_named() {
-    local want="$1" i n
+    local want="$1" i n at=-1 here step
     n=$(ipc total)
-    [[ "$n" =~ ^[0-9]+$ ]] && (( n > 40 )) || n=40
-    key g >/dev/null
+    [[ "$n" =~ ^[0-9]+$ ]] || n=40
+    for i in $(seq 0 $(( (n < 40 ? n : 40) - 1 ))); do
+        [[ "$(ipc rowAt "$i")" == "$want|"* ]] && { at=$i; break; }
+    done
+    if (( at >= 0 )); then
+        here=$(ipc cursor)
+        step=Down
+        (( at < here )) && step=Up
+        for i in $(seq 1 $(( at > here ? at - here : here - at ))); do
+            key -k "$step" >/dev/null
+        done
+    fi
     for i in $(seq 1 "$n"); do
         [[ "$(ipc rowAt "$(ipc cursor)")" == "$want|"* ]] && return 0
-        key j >/dev/null
+        key -k Down >/dev/null
     done
     fail "could not put the cursor on $want"
 }
@@ -1302,32 +1315,35 @@ case_open() {
     # Measured row order: bin, subdir, broken, linkdir, linkfile, opened.log, sample.zip, target.txt.
     wait_listing 8
 
-    # Bare l enters a real directory and stays silent when its empty listing has no row.
+    # Right enters a real directory and stays silent when its empty listing has no row. Bare l was
+    # this key until the table was cut back to the arrows, and Left is what Backspace was.
     seek_row_named subdir
-    key l >/dev/null
+    key -k Right >/dev/null
     wait_path "$dir/subdir"
     omarchy-drive wait ipc -p "$flea_ui" flea state empty --timeout 10 >/dev/null \
         || fail "open: subdir never reached its empty listing, state is $(ipc state)"
-    [[ ! -s "$opened" ]] || fail "l on a directory handed $(cat "$opened") to $open_handoff open"
+    [[ ! -s "$opened" ]] || fail "Right on a directory handed $(cat "$opened") to $open_handoff open"
     [[ -z "$(ipc lastMessage)" ]] || fail "open: entering the empty subdir said $(ipc lastMessage)"
-    key l >/dev/null
+    key -k Right >/dev/null
     settle
-    [[ -z "$(ipc lastMessage)" ]] || fail "open: l on an empty directory said $(ipc lastMessage)"
-    key q >/dev/null
+    [[ -z "$(ipc lastMessage)" ]] || fail "open: Right on an empty directory said $(ipc lastMessage)"
+    # The negative control: a key that does speak over an empty listing, read the same way, so the
+    # silence above is the product's and not a status line this run cannot read.
+    key m >/dev/null
     settle
-    [[ "$(ipc lastMessage)" == "Press / to filter this listing by name." ]] \
-        || fail "open: unbound q said $(ipc lastMessage), so the empty-row l check has no negative control"
+    [[ "$(ipc lastMessage)" == "No row under the cursor to open a menu on." ]] \
+        || fail "open: m on an empty listing said $(ipc lastMessage), so the empty-row Right check has no negative control"
 
-    # Bare l enters a symlink to a directory without handing it to the opener.
-    key -k Backspace >/dev/null
+    # Right enters a symlink to a directory without handing it to the opener.
+    key -k Left >/dev/null
     wait_path "$dir"
     seek_row_named linkdir
-    key l >/dev/null
+    key -k Right >/dev/null
     wait_path "$dir/linkdir"
-    [[ ! -s "$opened" ]] || fail "l on a symlink directory handed $(cat "$opened") to $open_handoff open"
+    [[ ! -s "$opened" ]] || fail "Right on a symlink directory handed $(cat "$opened") to $open_handoff open"
 
     # Return on a symlink to a directory keeps its existing navigation and opener coverage.
-    key -k Backspace >/dev/null
+    key -k Left >/dev/null
     wait_path "$dir"
     seek_row_named linkdir
     key -k Return >/dev/null
@@ -1335,7 +1351,7 @@ case_open() {
     [[ ! -s "$opened" ]] || fail "Enter on a symlink directory handed $(cat "$opened") to $open_handoff open"
 
     # Return on a symlink to a file still resolves and opens its target.
-    key -k Backspace >/dev/null
+    key -k Left >/dev/null
     wait_path "$dir"
     seek_row_named linkfile
     settle
@@ -1351,9 +1367,7 @@ case_open() {
     [[ "$(ipc path)" == "$dir" ]] || fail "Enter on a file left the directory for $(ipc path)"
 
     # A broken symlink is one sentence and nothing else.
-    key g >/dev/null
-    key -k Down >/dev/null
-    key -k Down >/dev/null
+    seek_row_named broken
     settle
     [[ "$(ipc rowAt "$(ipc cursor)")" == "broken|"* ]] || fail "the cursor is on $(ipc rowAt "$(ipc cursor)"), not broken"
     key -k Return >/dev/null
@@ -1378,6 +1392,26 @@ case_open() {
     key -k Escape >/dev/null
     settle
     [[ "$(ipc previewOpen)" == "false" ]] || fail "Escape left the archive preview open"
+
+    # Typing searches with no chord first, and Right on a folder among the results enters it and
+    # ends the search there; "sub" matches subdir alone in this fixture, so row 0 is the folder.
+    key s >/dev/null
+    key u >/dev/null
+    key b >/dev/null
+    omarchy-drive wait ipc -p "$flea_ui" flea total 1 --timeout 10 >/dev/null \
+        || fail "open: typing sub put up $(ipc total) results, state $(ipc keyDeliveryState)"
+    for _attempt in $(seq 1 100); do
+        [[ "$(ipc keyDeliveryState | jq -r '.searchRunning')" == false ]] && break
+        sleep 0.05
+    done
+    [[ "$(ipc keyDeliveryState | jq -r '.searchMode + ":" + .searchQuery')" == "typing:sub" ]] \
+        || fail "open: typed letters did not reach the search line, state $(ipc keyDeliveryState)"
+    key -k Right >/dev/null
+    wait_path "$dir/subdir"
+    [[ "$(ipc keyDeliveryState | jq -r '.searchMode')" == "" ]] \
+        || fail "open: entering a result folder left the search up, state $(ipc keyDeliveryState)"
+    [[ "$(grep -c OPENED "$opened")" == "1" ]] \
+        || fail "open: Right on a result folder handed $(cat "$opened") to $open_handoff open"
 }
 
 # PR 34's terminal route. Nothing else in this suite reaches it: before this case, openTerminal,
