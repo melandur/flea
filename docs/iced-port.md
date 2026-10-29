@@ -317,8 +317,26 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      position with the press and tracking the pointer would rebuild the view on every motion.
      `tests/iced-headless.sh` drives it: Right swallowed while it is up, Escape closing it,
      Duplicate, the hidden row both ways and Ctrl+B, 33 checks in all.
-   - **8b**, the dialog rows: Open with, Properties, Permissions, Convert, New File, Compress and
-     Extract, Delete permanently, Move to and Copy to, Run script.
+   - **8b-i, the dialog cards (done, driven headless and against the real backend).**
+     `actioncard.rs` ports ui/MenuActionDialog.qml, ui/TrashConfirm.qml and ui/PermissionsDialog.qml
+     as one state machine: Properties, New File, Move to, Copy to, Delete permanently and
+     Permissions. Every row but New File and Permissions first sends `menuaction snapshot` naming
+     the menu's rows and the cursor, and goes on only on its answer; Move to and Copy to validate the
+     destination and then send `transfer` with the `menuId`, so the captured sources move, before
+     the close that expires them; Delete permanently reviews, opens the destructive strip with
+     Cancel focused, checks the set every 2.5 s as TrashConfirm does, reviews again on a changed set
+     or a stale delete, and only Tab off Cancel and Enter sends the token; Permissions inspects the
+     path, edits the octal mode or flips a bit, and applies. A created file and an applying mode
+     hold the card until they answer, and a running deletion holds the slot for the next card.
+     Ctrl+M opens New File. `card_live_tests.rs` drives every card through the real `flea --backend`
+     with FLEA_BIN set, reading the disk after each, and a mutation of the transfer's `menuId` turns
+     it red; `tests/iced-headless.sh` seeds an empty `menu.hidden` so every row is reachable and
+     drives Properties, Ctrl+M and both ways out of the confirmation, 37 checks. **Deliberate
+     deviations:** the check boxes are pointer-only, the octal field being the keyboard's way to
+     the same bits, because iced's check box takes no focus; the survivors of a partial permanent
+     deletion are not re-selected through the batched `locate` this crate does not send yet; and a
+     re-review that finds nothing left says so and closes rather than asking to delete 0 items.
+   - **8b-ii**, the rest of the dialog rows: Open with, Compress, Extract, Convert and Run script.
    - **8c**, the send rows: the shelf, Taildrop, LocalSend, Dropbox and the share link.
    - **8d**, tabs, the trash view, the grid and columns views, the stored display settings
      (density, columns, text size), the key sheet and the filter.

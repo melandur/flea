@@ -88,7 +88,8 @@ const UNPROBED: &[&str] = &["compress", "extract", "convert", "runScript", "addT
 // The rows this build performs; every other row that survives is offered and says it is not here.
 pub const PORTED: &[&str] = &[
     "open", "newFolder", "cut", "copy", "paste", "duplicate", "rename", "selectAll", "trash", "openTerminal", "copypath",
-    "addFavourite", "sort", "toggleHidden", "settings",
+    "addFavourite", "sort", "toggleHidden", "settings", "properties", "newFile", "deletePermanently", "moveTo", "copyTo",
+    "permissions",
 ];
 
 // Sort.ORDERS with Menu.js SORT_LABELS: only an order the backend produces is ever offered.

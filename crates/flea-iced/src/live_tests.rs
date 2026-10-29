@@ -9,11 +9,11 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
-struct Live {
+pub(crate) struct Live {
     child: Child,
-    stdin: ChildStdin,
-    lines: Receiver<String>,
-    pane: Pane,
+    pub(crate) stdin: ChildStdin,
+    pub(crate) lines: Receiver<String>,
+    pub(crate) pane: Pane,
     sent: Vec<Request>,
     settles: Vec<u64>,
     decodes: Vec<String>,
@@ -24,7 +24,7 @@ impl Live {
         Live::start_with(bin, &[])
     }
 
-    fn start_with(bin: &str, env: &[(&str, &std::path::Path)]) -> Live {
+    pub(crate) fn start_with(bin: &str, env: &[(&str, &std::path::Path)]) -> Live {
         let mut cmd = Command::new(bin);
         cmd.arg("--backend").stdin(Stdio::piped()).stdout(Stdio::piped());
         for (k, v) in env {
@@ -44,7 +44,7 @@ impl Live {
         Live { child, stdin, lines, pane: Pane::new(false, 20), sent: vec![], settles: vec![], decodes: vec![] }
     }
 
-    fn run(&mut self, effects: Vec<Effect>) {
+    pub(crate) fn run(&mut self, effects: Vec<Effect>) {
         for e in effects {
             match e {
                 Effect::Send(r) => {
@@ -64,7 +64,7 @@ impl Live {
     }
 
     // Feed replies into the pane until `done` holds, carrying out every Send it asks for.
-    fn until(&mut self, what: &str, done: impl Fn(&Pane) -> bool) {
+    pub(crate) fn until(&mut self, what: &str, done: impl Fn(&Pane) -> bool) {
         let deadline = Instant::now() + Duration::from_secs(10);
         while !done(&self.pane) {
             let left = deadline.saturating_duration_since(Instant::now());
@@ -81,7 +81,7 @@ impl Live {
         }
     }
 
-    fn names(&self) -> Vec<String> {
+    pub(crate) fn names(&self) -> Vec<String> {
         self.pane.rows.iter().map(|r| r.n.clone()).collect()
     }
 }

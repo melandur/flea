@@ -25,6 +25,9 @@ impl Flea {
         if std::env::var_os("FLEA_ICED_TRACE").is_some_and(|v| !v.is_empty()) {
             eprintln!("flea-iced: key {key:?} {modifiers:?} repeat={repeat} text={text:?}");
         }
+        if let Some(task) = self.action_key(&key) {
+            return task;
+        }
         // The context menu takes every key while it is up, Tab included, as its keyCatcher does.
         if self.menu.is_some() {
             return self.menu_key(&key);
@@ -134,8 +137,8 @@ impl Flea {
             (Key::Character("k"), true) => self.pane.sort_chord("size"),
             (Key::Character("l"), true) => self.pane.sort_chord("mtime"),
             (Key::Character("t"), true) => return self.toggle_split(),
-            // Ctrl+M is New File, whose name dialog is stage 8b's.
-            (Key::Character("m"), true) => return self.say("New File is not in this build yet.".into()),
+            // Ctrl+M is New File, the menu row's own card.
+            (Key::Character("m"), true) => return self.open_action(crate::actioncard::Kind::NewFile),
             _ => return Task::none(),
         };
         self.run(effects)

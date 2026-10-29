@@ -58,6 +58,9 @@ pub enum Reply {
     // A chooser check's answer, src/backend/picker.rs response(): the reviewed marks and how many
     // left, or the save target it reviewed, or why not.
     Picker(PickerReply),
+    // A menuaction answer other than installed, and a permissions answer, for actioncard.rs.
+    MenuAction(Value),
+    Permissions(Value),
     Other,
 }
 
@@ -141,6 +144,9 @@ pub fn parse(line: &str) -> Option<Reply> {
                 Err(field("error"))
             },
         },
+        // Every other menuaction op and the permissions service: the card reads them whole.
+        "menuaction" => Reply::MenuAction(v.clone()),
+        "permissions" => Reply::Permissions(v.clone()),
         "peeked" => Reply::Peeked {
             path: field("path"),
             hidden: flag("hidden"),
@@ -232,6 +238,8 @@ pub enum Request {
     PickerSave { id: u64, folder: String, name: String },
     PickerReview { id: u64, review: u64 },
     PickerClose,
+    // actioncard.rs builds its own menuaction, newfile, permissions and menuId transfer lines.
+    Json(Value),
     Quit,
 }
 
@@ -281,6 +289,7 @@ impl Request {
             Request::PickerSave { id, folder, name } => json!({"c": "picker", "op": "save", "id": id, "folder": folder, "name": name}),
             Request::PickerReview { id, review } => json!({"c": "picker", "op": "review", "id": id, "review": review}),
             Request::PickerClose => json!({"c": "picker", "op": "close"}),
+            Request::Json(v) => v.clone(),
             Request::Quit => json!({"c": "quit"}),
         };
         format!("{v}\n")

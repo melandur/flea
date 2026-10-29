@@ -244,6 +244,12 @@ impl Flea {
             "copypath" => return self.copy_path(),
             "addFavourite" => return self.menu_favourite(m.kind),
             "settings" => return self.open_panel(),
+            "properties" => return self.open_action(crate::actioncard::Kind::Properties),
+            "newFile" => return self.open_action(crate::actioncard::Kind::NewFile),
+            "deletePermanently" => return self.open_action(crate::actioncard::Kind::Delete),
+            "moveTo" => return self.open_action(crate::actioncard::Kind::MoveTo),
+            "copyTo" => return self.open_action(crate::actioncard::Kind::CopyTo),
+            "permissions" => return self.open_action(crate::actioncard::Kind::Permissions),
             _ => vec![],
         };
         self.run(effects)

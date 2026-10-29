@@ -1,7 +1,10 @@
 // Flea's window in iced: the listing pane and the write operations over the unchanged `flea --backend`.
 // Everything the QML tree does that is not here yet says so rather than doing nothing.
+mod actioncard;
 mod backend;
 mod boot;
+mod cardshell;
+mod cardview;
 mod chrome;
 mod contrast;
 mod devices;
@@ -13,6 +16,8 @@ mod form;
 mod format;
 #[cfg(test)]
 mod live_tests;
+#[cfg(test)]
+mod card_live_tests;
 mod marks;
 mod media;
 mod menu;
@@ -123,6 +128,9 @@ struct Flea {
     panel: settingspanel::Panel,
     menu: Option<menushell::ListMenu>,
     opening_terminal: bool,
+    // The menu's dialog row on screen, or the deletion it started while that runs; one at a time.
+    card: Option<actioncard::Card>,
+    card_ids: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -189,6 +197,7 @@ enum Message {
     CloseRequested,
     QuitDeadline,
     Menu(menushell::Msg),
+    Action(cardshell::Msg),
 }
 
 impl Flea {
@@ -265,6 +274,7 @@ impl Flea {
             Message::FavouriteSaved(result) => self.favourite_saved(result),
             Message::Dialog(msg) => self.dialog_message(msg),
             Message::Menu(msg) => self.menu_message(msg),
+            Message::Action(msg) => self.action_message(msg),
             m @ (Message::PanelLoaded(..)
             | Message::PanelSaved(_)
             | Message::PanelClose

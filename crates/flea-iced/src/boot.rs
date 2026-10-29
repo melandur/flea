@@ -74,6 +74,8 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         panel: Default::default(),
         menu: None,
         opening_terminal: false,
+        card: None,
+        card_ids: 0,
         backend_key: 0,
         side: 0,
         other: None,

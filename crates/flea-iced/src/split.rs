@@ -192,6 +192,8 @@ impl Flea {
                 self.catalogue_answered(id, apps);
                 Task::none()
             }
+            Event::Reply(Reply::MenuAction(v)) if key == self.backend_key => self.action_reply(&v, false),
+            Event::Reply(Reply::Permissions(v)) if key == self.backend_key => self.action_reply(&v, true),
             Event::Reply(reply @ Reply::Meta { .. }) if key == self.backend_key => {
                 self.meta_answered(reply);
                 Task::none()

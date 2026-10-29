@@ -107,6 +107,9 @@ top() { for _ in 1 2 3 4 5; do k -k Up -k Up -k Up -k Up -k Up -k Up -k Up -k Up
 exists() { [ -e "$1" ] && echo yes || echo no; }
 ctrl() { k -M ctrl -k "$1" -m ctrl; }
 
+# Nothing hidden in the menu, so every dialog row is reachable from the keyboard below.
+XDG_STATE_HOME="$D/state" "$BIN" --ui-state '{"menu":{"hidden":[]}}' > /dev/null || { echo "iced-headless.sh: the state seed was refused" >&2; exit 1; }
+
 # The window. Return is never pressed on a file here: it runs the desktop's handler, which opened a
 # terminal inside the test compositor the first time.
 launch "$T"
@@ -164,15 +167,27 @@ n=$(mark); k m; k -k Escape; ctrl n; sleep 1
 check "Escape closes the menu, so Ctrl+N is answered" 1 "$(since "$n" | grep -c '"c":"mkdir"')"
 k -k Escape; ctrl z; sleep 1
 # The file menu here is Open, Open with, Cut, Copy, Paste (the copy above is still held), then
-# Duplicate: five Downs. Show hidden files is the last row, and Down holds at the end.
+# Duplicate: five Downs. Show hidden files is the last row, and Down holds at the end, so twenty
+# Downs land on it whatever sits between.
 top; k -k Down -k Down; k m; k -k Down -k Down -k Down -k Down -k Down; k -k Return; sleep 1
 check "the menu's Duplicate copies the cursor row" yes "$(exists "$T/note-02 copy.txt")"
-k m; for _ in 1 2 3 4 5 6 7 8 9 10; do k -k Down; done; k -k Return; sleep 1
+k m; for _ in $(seq 20); do k -k Down; done; k -k Return; sleep 1
 check "the menu's last row shows hidden files" true "$(jq -r .hidden "$D/state/flea/ui.json")"
-k m; for _ in 1 2 3 4 5 6 7 8 9 10; do k -k Down; done; k -k Return; sleep 1
+k m; for _ in $(seq 20); do k -k Down; done; k -k Return; sleep 1
 check "and the same row, relabelled, hides them" false "$(jq -r .hidden "$D/state/flea/ui.json")"
 top; ctrl b; sleep 1
 check "Ctrl+B copies the cursor row's path" "$T/alpha" "$(WAYLAND_DISPLAY=$SOCK timeout 3 wl-paste -n 2> /dev/null)"
+# The dialog rows, nothing hidden: Trash, Delete permanently, then Open in terminal, Move to, Copy
+# to and Properties, so Delete permanently is eight Downs and Properties twelve.
+top; k -k Down -k Down; n=$(mark); k m; for _ in $(seq 12); do k -k Down; done; k -k Return; sleep 1; shot properties
+k -k Escape; sleep 0.5
+check "Properties snapshots, asks, and Escape closes it" "1 1 1" "$(since "$n" | grep -c '"op":"snapshot"') $(since "$n" | grep -c '"op":"properties"') $(since "$n" | grep -c '"op":"close"')"
+ctrl m; ctrl a; k made.txt; k -k Return; sleep 1
+check "Ctrl+M's card creates the file" yes "$(exists "$T/made.txt")"
+k m; for _ in $(seq 8); do k -k Down; done; k -k Return; sleep 1; shot delete; k -k Return; sleep 1
+check "Enter on the confirmation's first focus cancels" yes "$(exists "$T/made.txt")"
+k m; for _ in $(seq 8); do k -k Down; done; k -k Return; sleep 1; k -k Tab; k -k Return; sleep 1
+check "Tab to Delete and Enter deletes it from disk" no "$(exists "$T/made.txt")"
 k -k Tab; k -k Down -k Down; shot rail; k -k Tab
 n=$(mark); backend=$(pgrep -P "$APP" -x flea)
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
