@@ -5670,3 +5670,10 @@ key press fires a compositor bind, so `omarchy-drive hotkey --global super w` is
 on the ACTIVE window, so assert the active window is the one the run launched before sending it, and
 never call `hl.dsp.window.close()` with no argument: it returns `ok` rather than printing a signature
 and acts on whatever is active, which may be a window you did not open.
+
+## The iced port
+
+The window is being rewritten in Rust with iced, staged, operator's ruling of 2026-10-29.
+`docs/iced-port.md` holds the decisions and the stage list; read it before touching
+`crates/flea-iced`. Until its last stage lands, `ui/` is still the shipped front end and every rule
+above about it still applies.
