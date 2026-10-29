@@ -3,9 +3,8 @@
 // row's own availability rule, and the stored hidden set as the only visibility state. Toolkit free,
 // so every rule here is a unit test rather than a window.
 //
-// The archive, convert and script rows are probed (Facts), and absent when the probe finds nothing,
-// as the QML's are. The shelf and the three send providers are not probed in this build, so they are
-// absent until stage 8c does; that is the same rule, applied to a probe that has not run.
+// The archive, convert, script and send rows are probed (Facts), and absent when the probe finds
+// nothing, as the QML's are; a send row whose service answered no is greyed and drawn red instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     File,
@@ -30,6 +29,17 @@ pub struct Facts {
     pub row_is_image: bool,
     // ~/.config/flea/scripts as (id, label), sorted, read when the menu opens.
     pub scripts: Vec<(String, String)>,
+    // The send rows' services, asked again whenever a menu opens; a row is greyed while they answer.
+    pub providers_refreshing: bool,
+    pub taildrop_installed: bool,
+    pub taildrop_peers: Vec<(String, String)>,
+    pub localsend_installed: bool,
+    pub localsend_checking: bool,
+    pub localsend_peers: Vec<(String, String)>,
+    pub dropbox_installed: bool,
+    // The account folder, only once its status said it is up; and whether the cursor row is inside it.
+    pub dropbox_ready: bool,
+    pub row_in_dropbox: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,6 +51,8 @@ pub struct Entry {
     pub disabled: bool,
     pub danger: bool,
     pub hint: &'static str,
+    // A greyed row that is grey because its service refused, not because it is checking: drawn red.
+    pub errored: bool,
     // A flyout's rows as (id, label): Sort by's orders, Compress's formats, Run script's scripts.
     pub sub: Vec<(String, String)>,
 }
@@ -90,14 +102,13 @@ const INVENTORY: &[(&str, &str, &str, &str, &str, &str)] = &[
     ("emptyTrash", "Empty Trash", "trash", "T", "empty", ""),
 ];
 
-// The capability-probed rows, absent until a later stage probes them (docs/iced-port.md stage 8).
-const UNPROBED: &[&str] = &["addToShelf", "taildrop", "localsend", "dropbox", "sharelink"];
 
 // The rows this build performs; every other row that survives is offered and says it is not here.
 pub const PORTED: &[&str] = &[
     "open", "newFolder", "cut", "copy", "paste", "duplicate", "rename", "selectAll", "trash", "openTerminal", "copypath",
     "addFavourite", "sort", "toggleHidden", "settings", "properties", "newFile", "deletePermanently", "moveTo", "copyTo",
-    "permissions", "openWith", "compress", "extract", "convert", "runScript",
+    "permissions", "openWith", "compress", "extract", "convert", "runScript", "addToShelf", "taildrop", "localsend",
+    "dropbox", "sharelink",
 ];
 
 // Sort.ORDERS with Menu.js SORT_LABELS: only an order the backend produces is ever offered.
@@ -128,7 +139,7 @@ pub fn entries(kind: Kind, f: &Facts, hidden: &[String]) -> Vec<Item> {
             continue;
         }
         let action = if action.is_empty() { id } else { action };
-        let mut e = Entry { id, action, label, glyph, disabled: false, danger: false, hint: "", sub: vec![] };
+        let mut e = Entry { id, action, label, glyph, disabled: false, danger: false, hint: "", errored: false, sub: vec![] };
         if !available(&mut e, f, kind) {
             continue;
         }
@@ -142,9 +153,6 @@ pub fn entries(kind: Kind, f: &Facts, hidden: &[String]) -> Vec<Item> {
 }
 
 fn available(e: &mut Entry, f: &Facts, kind: Kind) -> bool {
-    if UNPROBED.contains(&e.action) {
-        return false;
-    }
     let one = f.targets == 1;
     match e.action {
         "addFavourite" if kind == Kind::File => e.disabled = !one || f.row_mode & S_IFMT != S_IFDIR,
@@ -164,6 +172,25 @@ fn available(e: &mut Entry, f: &Facts, kind: Kind) -> bool {
         "compress" => e.sub = f.archive_formats.iter().map(|x| (x.clone(), format!(".{x}"))).collect(),
         "extract" if !(f.row_is_archive && f.can_extract && one) => return false,
         "convert" if !(f.row_is_image && f.can_convert && one) => return false,
+        "addToShelf" => e.glyph = "flea",
+        "taildrop" if !f.taildrop_installed => return false,
+        "taildrop" => {
+            e.sub = f.taildrop_peers.clone();
+            e.disabled = f.providers_refreshing || e.sub.is_empty();
+            e.errored = e.disabled && !f.providers_refreshing;
+        }
+        "localsend" if !f.localsend_installed => return false,
+        "localsend" => {
+            e.sub = f.localsend_peers.clone();
+            e.disabled = f.localsend_checking || e.sub.is_empty();
+            e.errored = e.disabled && !f.localsend_checking;
+        }
+        // Move to Dropbox outside the account folder, Copy Share Link inside it, never both.
+        "dropbox" | "sharelink" if !f.dropbox_installed || (e.action == "dropbox") == f.row_in_dropbox => return false,
+        "dropbox" | "sharelink" => {
+            e.disabled = f.providers_refreshing || !f.dropbox_ready;
+            e.errored = e.disabled && !f.providers_refreshing;
+        }
         // The label flips with the state; MenuRow draws no checkmark.
         "toggleHidden" if f.show_hidden => {
             e.label = "Hide hidden files";

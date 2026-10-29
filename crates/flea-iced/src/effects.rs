@@ -70,6 +70,18 @@ impl Flea {
         self.run(effects)
     }
 
+    pub(crate) fn say(&mut self, text: String) -> Task<Message> {
+        self.show(text, false)
+    }
+
+    // The status bar's one transient slot, cleared after MESSAGE_MS unless a newer line took it.
+    pub(crate) fn show(&mut self, text: String, alert: bool) -> Task<Message> {
+        self.message_gen += 1;
+        let gen = self.message_gen;
+        self.message = Some((text, gen, alert));
+        Task::perform(sleep(Duration::from_millis(pane::MESSAGE_MS)), move |_| Message::Expired(gen))
+    }
+
     // ui/Opener.qml: one `flea --open` at a time, and a second press while it runs says so.
     fn open_file(&mut self, path: String) -> Task<Message> {
         if self.opening {

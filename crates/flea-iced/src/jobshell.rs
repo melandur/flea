@@ -46,13 +46,17 @@ impl Flea {
         if self.pane.selection.is_empty() { vec![self.pane.cursor] } else { self.pane.selection.iter().copied().collect() }
     }
 
-    // A row that acts at once: compress:<format>, extract, convert or runScript:<id>.
+    // A row that acts at once: compress:<format>, extract, convert, runScript:<id> or a send row.
     pub(crate) fn activate_row(&mut self, action: String) -> Task<Message> {
+        self.activate_to(action, None)
+    }
+
+    pub(crate) fn activate_to(&mut self, action: String, dest: Option<String>) -> Task<Message> {
         if self.jobs.activation.is_some() {
             return self.say("The last menu action is still being checked.".into());
         }
         self.card_ids += 1;
-        let (a, snapshot) = Activation::open(self.card_ids, &action, &self.menu_targets(), self.pane.cursor);
+        let (a, snapshot) = Activation::to(self.card_ids, &action, &self.menu_targets(), self.pane.cursor, dest);
         self.jobs.activation = Some(a);
         self.send_json(snapshot)
     }
@@ -104,6 +108,9 @@ impl Flea {
     }
 
     fn activated(&mut self, action: &str, menu_id: u64, paths: Vec<String>) -> Task<Message> {
+        if action == "addToShelf" || action == "dropbox" || action == "sharelink" || action.starts_with("taildrop:") || action.starts_with("localsend:") {
+            return self.send_activated(action, menu_id, paths);
+        }
         let row = self.pane.row_at(self.pane.cursor).cloned();
         if let Some(format) = action.strip_prefix("compress:") {
             // Ops.compressResolved: one row under its own name, several under the folder's.
@@ -149,13 +156,15 @@ impl Flea {
         let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
         let ok = v.get("ok") == Some(&json!(true));
         match t {
+            "localsendpeers" | "localsendsent" => self.localsend_answered(v),
             "formats" => {
+                let providers = self.providers_answered(v);
                 self.jobs.formats = Formats {
                     archive: v.get("archive").and_then(Value::as_array).into_iter().flatten().filter_map(|f| f.as_str().map(String::from)).collect(),
                     convert: v.get("convert") == Some(&json!(true)),
                     extract: v.pointer("/extract/archive") == Some(&json!(true)),
                 };
-                Task::none()
+                providers
             }
             "archiveprogress" => {
                 if let Some((work, _)) = &self.pane.ops.archive {

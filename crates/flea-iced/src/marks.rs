@@ -98,6 +98,9 @@ pub fn handle(mark: &'static str, colour: Color) -> svg::Handle {
             .entry((mark, rgba))
             .or_insert_with(|| {
                 let [r, g, b, _] = rgba;
+                if let Some(doc) = crate::brands::svg(mark, &format!("#{r:02x}{g:02x}{b:02x}")) {
+                    return svg::Handle::from_memory(doc.into_bytes());
+                }
                 let body = format!(
                     r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#{r:02x}{g:02x}{b:02x}" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="{}"/></svg>"##,
                     path_for(mark)

@@ -35,6 +35,8 @@ pub struct Prefs {
     pub theme_id: String,
     // menu.hidden, the Menus section's whole visibility state, read by menu::entries alone.
     pub menu_hidden: Vec<String>,
+    // shelf.enabled: the shelf's own switch, which is what the menu's shelf row follows.
+    pub shelf_enabled: bool,
 }
 
 impl Default for Prefs {
@@ -68,6 +70,7 @@ impl Default for Prefs {
             menu_hidden: ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copypath"]
                 .map(String::from)
                 .to_vec(),
+            shelf_enabled: false,
         }
     }
 }
@@ -114,6 +117,7 @@ impl Prefs {
                 Some(a) => a.iter().filter_map(|x| x.as_str().map(String::from)).collect(),
                 None => d.menu_hidden,
             },
+            shelf_enabled: v.pointer("/shelf/enabled").and_then(Value::as_bool) == Some(true),
         }
     }
 

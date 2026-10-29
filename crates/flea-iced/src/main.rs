@@ -5,6 +5,7 @@ mod activation;
 mod archives;
 mod backend;
 mod boot;
+mod brands;
 mod cardshell;
 mod cardview;
 mod convertcard;
@@ -27,6 +28,7 @@ mod card_live_tests;
 mod marks;
 mod media;
 mod menu;
+mod menufacts;
 mod menushell;
 mod menuview;
 mod metrics;
@@ -47,6 +49,7 @@ mod places_rows;
 mod pdf;
 mod picker;
 mod prefs;
+mod providers;
 mod preview;
 mod previewshell;
 mod previewview;
@@ -57,6 +60,7 @@ mod railshell;
 mod railview;
 mod scripts;
 mod search;
+mod sendshell;
 mod searchkeys;
 mod sentence;
 mod settings;
@@ -86,7 +90,7 @@ use iced::{window, Font, Subscription, Task};
 use pane::Pane;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tasks::{blocking, decode, sleep};
 use theme::Palette;
 pub(crate) use metrics::*;
@@ -140,6 +144,7 @@ struct Flea {
     card: Option<actioncard::Card>,
     card_ids: u64,
     jobs: jobshell::Jobs,
+    sends: sendshell::Sends,
 }
 
 #[derive(Debug, Clone)]
@@ -208,20 +213,10 @@ enum Message {
     Menu(menushell::Msg),
     Action(cardshell::Msg),
     Job(jobkeys::Msg),
+    Send(sendshell::Msg),
 }
 
 impl Flea {
-    fn say(&mut self, text: String) -> Task<Message> {
-        self.show(text, false)
-    }
-
-    fn show(&mut self, text: String, alert: bool) -> Task<Message> {
-        self.message_gen += 1;
-        let gen = self.message_gen;
-        self.message = Some((text, gen, alert));
-        Task::perform(sleep(Duration::from_millis(pane::MESSAGE_MS)), move |_| Message::Expired(gen))
-    }
-
     // Every input ends by asking whether the watched re-read it was holding can now be paid.
     fn update(&mut self, message: Message) -> Task<Message> {
         let task = self.handle(message);
@@ -276,6 +271,7 @@ impl Flea {
             Message::Menu(msg) => self.menu_message(msg),
             Message::Action(msg) => self.action_message(msg),
             Message::Job(msg) => self.job_message(msg),
+            Message::Send(msg) => self.send_message(msg),
             m @ (Message::PanelLoaded(..)
             | Message::PanelSaved(_)
             | Message::PanelClose

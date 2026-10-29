@@ -1,7 +1,7 @@
 // The listing's context menu in the window, as ui/ContextMenu.qml and ui/PaneMenuActions.qml hold
 // it: opened by a right click, m, the Menu key or Shift+F10, stepped by the arrows, and every chosen
 // row dispatched to the pane operation the same key already reaches. menu.rs decides what it holds.
-use crate::menu::{self, Facts, Item, Kind};
+use crate::menu::{self, Item, Kind};
 use crate::pane::join;
 use crate::{blocking, Flea, Message, ROW_H};
 use iced::keyboard::{key::Named, Key};
@@ -113,22 +113,9 @@ impl Flea {
 
     fn open_menu(&mut self, kind: Kind, row: Option<usize>) -> Task<Message> {
         self.close_menu();
-        let cursor_row = self.pane.row_at(self.pane.cursor);
-        let facts = Facts {
-            path: self.pane.path.clone(),
-            targets: if kind == Kind::File { self.pane.selection.len().max(1) } else { 0 },
-            row_mode: cursor_row.map(|r| r.p).unwrap_or(0),
-            clipboard: self.pane.ops.clipboard.as_ref().is_some_and(|c| !c.paths.is_empty()),
-            show_hidden: self.pane.hidden,
-            archive_formats: self.jobs.formats.archive.clone(),
-            can_extract: self.jobs.formats.extract,
-            can_convert: self.jobs.formats.convert,
-            row_is_archive: cursor_row.is_some_and(|r| !r.d && crate::archives::is_archive(&r.n)),
-            row_is_image: cursor_row.is_some_and(|r| r.i == "image-x-generic"),
-            // Read when a menu opens rather than watched, as ui/Scripts.qml does.
-            scripts: if kind == Kind::File { crate::scripts::list() } else { vec![] },
-        };
-        let items = menu::entries(kind, &facts, &self.prefs.menu_hidden);
+        // A file menu asks every send row's service again; the rows grey until they answer.
+        let asked = if kind == Kind::File { self.refresh_sends() } else { self.ask_formats() };
+        let items = menu::entries(kind, &self.menu_facts(kind), &self.effective_hidden());
         let Some(cursor) = menu::first(&items) else { return Task::none() };
         // Under the row's bottom-left like the rail's, or under the last row over empty space. A
         // right click opens there too: iced reports no pointer position with the press itself.
@@ -145,7 +132,7 @@ impl Flea {
         self.menu = Some(ListMenu { kind, items, cursor, flyout: false, sub_cursor: 0, x, y, path: self.pane.path.clone(), names: self.targets() });
         self.pane.menu_open = true;
         // Asked again on every menu, so a tool installed while the window was open counts next time.
-        self.ask_formats()
+        asked
     }
 
     pub(crate) fn close_menu(&mut self) {
@@ -231,7 +218,7 @@ impl Flea {
                 let effects = self.pane.sort_column(&id);
                 self.run(effects)
             }
-            "compress" | "runScript" => self.activate_row(format!("{action}:{id}")),
+            "compress" | "runScript" | "taildrop" | "localsend" => self.activate_row(format!("{action}:{id}")),
             _ => Task::none(),
         }
     }
@@ -267,7 +254,8 @@ impl Flea {
             "copyTo" => return self.open_action(crate::actioncard::Kind::CopyTo),
             "permissions" => return self.open_action(crate::actioncard::Kind::Permissions),
             "openWith" => return self.open_with_row(),
-            "extract" | "convert" => return self.activate_row(action.to_string()),
+            "extract" | "convert" | "addToShelf" => return self.activate_row(action.to_string()),
+            "dropbox" | "sharelink" => return self.activate_to(action.to_string(), Some(self.sends.dropbox_path.clone())),
             _ => vec![],
         };
         self.run(effects)

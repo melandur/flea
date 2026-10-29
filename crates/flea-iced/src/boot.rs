@@ -77,6 +77,7 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         card: None,
         card_ids: 0,
         jobs: Default::default(),
+        sends: Default::default(),
         backend_key: 0,
         side: 0,
         other: None,

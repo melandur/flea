@@ -71,7 +71,8 @@ impl Flea {
 
     fn menu_line<'a>(&self, e: &Entry, label: String, chosen: bool, flyout: bool) -> Element<'a, Message> {
         let p = self.palette;
-        let ink = if e.disabled { p.muted } else if e.danger { p.error } else { p.foreground };
+        // MenuRow: a row greyed because its service refused draws red, so it reads as an answer.
+        let ink = if e.errored { p.error } else if e.disabled { p.muted } else if e.danger { p.error } else { p.foreground };
         let mut line = row![svg(marks::handle(e.glyph, ink)).width(MARK).height(MARK), text(label).color(ink).width(Length::Fill)]
             .spacing(10)
             .align_y(iced::Center);

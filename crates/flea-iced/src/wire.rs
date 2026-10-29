@@ -148,7 +148,7 @@ pub fn parse(line: &str) -> Option<Reply> {
         },
         // Every other menuaction op and the permissions service: the card reads them whole.
         "menuaction" => Reply::MenuAction(v.clone()),
-        "formats" | "archivestarted" | "archiveprogress" | "archivedone" | "convertstarted" | "convertchecked" | "convertdone" => Reply::Job(v.clone()),
+        "formats" | "localsendpeers" | "localsendsent" | "archivestarted" | "archiveprogress" | "archivedone" | "convertstarted" | "convertchecked" | "convertdone" => Reply::Job(v.clone()),
         "permissions" => Reply::Permissions(v.clone()),
         "peeked" => Reply::Peeked {
             path: field("path"),

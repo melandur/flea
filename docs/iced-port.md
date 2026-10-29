@@ -360,6 +360,30 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      at the cost of pasting into the search. A script runs without a timeout, as ui/Scripts.qml's
      `Process` does, but on a worker thread, so a script that never exits ties up one thread and not
      the window.
-   - **8c**, the send rows: the shelf, Taildrop, LocalSend, Dropbox and the share link.
+   - **8c, the send rows (done; the services that leave the box are unit tested, not driven).**
+     `providers.rs` ports ui/js/Taildrop.js, ui/js/Dropbox.js and ui/js/LocalSend.js: the providers
+     block of the `formats` answer, the Dropbox account folder and the status whose exit code lies,
+     `tailscale status --json`'s online Taildrop targets without Mullvad relays, LocalSend's device
+     ids that pin the address, and every sentence. `sendshell.rs` asks every service again when a
+     file menu opens, as ContextMenu's onSnapshotRequested does: the providers, `tailscale status`
+     under a 15 s bound, `dropbox-cli status` under 4 s, and LocalSend's devices when the list is
+     older than 15 s and the row is not hidden (discovery announces the box). The rows grey while
+     they answer and are rebuilt as each one does, with `menufacts.rs` keeping the cursor on its
+     action. A row refused by its service is drawn red. `brands.rs` draws the Tailscale, Dropbox,
+     LocalSend and Flea marks as TailscaleMark.qml and the others do. Add to shelf runs `flea shelf
+     add`, the shelf row following `shelf.enabled`; Taildrop runs the OEM send script detached;
+     LocalSend asks the backend; Move to Dropbox and Copy Share Link capture the account folder
+     with `providerDestination` between the snapshot and the activation, and the move names rows
+     and the `menuId`. `card_live_tests.rs` drives Move to Dropbox through the real backend into a
+     stand-in account folder, a mutation that skips the capture turns it red, and the refusal of a
+     folder that is not a directory is asserted by its sentence; `tests/iced-headless.sh` drives
+     Add to shelf into the sandbox's own pile, 42 checks. **Not driven, deliberately:** Taildrop is
+     not installed here, LocalSend's discovery and send announce the box on the LAN, and a share
+     link makes a real one on the account, so those three are covered by the parsers' and the
+     menu's unit tests. The headless run hides their rows, and sets `shelf.enabled` in the file
+     itself, because the patch path runs `omarchy plugin enable` on the operator's real bar.
+     **Deliberate deviation:** QML asks the services a second time just before validating a chosen
+     Taildrop, Dropbox or share link row; this asks once, when the menu opens, and the backend's
+     own destination check and the send script's own report stand behind that.
    - **8d**, tabs, the trash view, the grid and columns views, the stored display settings
      (density, columns, text size), the key sheet and the filter.

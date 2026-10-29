@@ -18,9 +18,10 @@ fn file(targets: usize, mode: u32) -> Facts {
     Facts { path: "/home/u".into(), targets, row_mode: mode, ..Default::default() }
 }
 
-// uischema.rs DEFAULT's menu.hidden, the set a first run reads.
+// uischema.rs DEFAULT's menu.hidden, the set a first run reads, with "shelf" as the shell adds it
+// while shelf.enabled is off (ViewState.menuHidden).
 fn shipped() -> Vec<String> {
-    ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copypath"].map(String::from).to_vec()
+    ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copypath", "shelf"].map(String::from).to_vec()
 }
 
 #[test]
@@ -101,7 +102,7 @@ fn a_camera_mount_offers_no_trash_and_the_two_destroyers_are_marked() {
 #[test]
 fn the_probed_rows_follow_their_probe_and_the_unprobed_ones_stay_absent() {
     let items = ids(&entries(Kind::File, &file(1, 0o100644), &[]));
-    for id in ["compress", "extract", "convert", "runScript", "shelf", "taildrop", "localsend", "dropbox", "sharelink"] {
+    for id in ["compress", "extract", "convert", "runScript", "taildrop", "localsend", "dropbox", "sharelink"] {
         assert!(!items.contains(&id), "{id}");
     }
     let mut f = file(1, 0o100644);
@@ -121,9 +122,39 @@ fn the_probed_rows_follow_their_probe_and_the_unprobed_ones_stay_absent() {
     f.targets = 2;
     let items = ids(&entries(Kind::File, &f, &[]));
     assert!(!items.contains(&"extract") && !items.contains(&"convert") && items.contains(&"compress"));
-    for id in ["shelf", "taildrop", "localsend", "dropbox", "sharelink"] {
+    for id in ["taildrop", "localsend", "dropbox", "sharelink"] {
         assert!(!items.contains(&id), "{id}");
     }
+}
+
+#[test]
+fn the_send_rows_follow_their_services_and_are_red_only_when_one_said_no() {
+    let mut f = file(1, 0o100644);
+    f.taildrop_installed = true;
+    f.localsend_installed = true;
+    f.dropbox_installed = true;
+    f.providers_refreshing = true;
+    f.localsend_checking = true;
+    let items = entries(Kind::File, &f, &[]);
+    for id in ["taildrop", "localsend", "dropbox"] {
+        assert!(row(&items, id).disabled && !row(&items, id).errored, "{id} while checking");
+    }
+    assert_eq!((row(&items, "shelf").glyph, row(&items, "taildrop").glyph, row(&items, "dropbox").glyph), ("flea", "tailscale", "dropbox"));
+    assert!(!ids(&items).contains(&"sharelink"));
+    f.providers_refreshing = false;
+    f.localsend_checking = false;
+    let items = entries(Kind::File, &f, &[]);
+    for id in ["taildrop", "localsend", "dropbox"] {
+        assert!(row(&items, id).disabled && row(&items, id).errored, "{id} with nothing to offer");
+    }
+    f.taildrop_peers = vec![("k1".into(), "laptop".into())];
+    f.localsend_peers = vec![("1.2.3.4 Phone".into(), "Phone".into())];
+    f.dropbox_ready = true;
+    f.row_in_dropbox = true;
+    let items = entries(Kind::File, &f, &[]);
+    assert_eq!(row(&items, "taildrop").sub, f.taildrop_peers);
+    assert!(!row(&items, "taildrop").disabled && !row(&items, "localsend").disabled && !row(&items, "sharelink").disabled);
+    assert!(!ids(&items).contains(&"dropbox"));
 }
 
 #[test]

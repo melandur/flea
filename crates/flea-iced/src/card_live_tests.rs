@@ -146,7 +146,7 @@ fn send(live: &mut Live, v: serde_json::Value) {
 // The snapshot and activate exchange, through activation.rs, to the paths the backend vouched for.
 fn activate(live: &mut Live, id: u64, action: &str, rows: &[usize]) -> Vec<String> {
     use crate::activation::{Activation, Step};
-    let (mut a, snapshot) = Activation::open(id, action, rows, rows[0]);
+    let (mut a, snapshot) = Activation::to(id, action, rows, rows[0], None);
     send(live, snapshot);
     loop {
         let v = wait_line(live, action, |v| v["t"] == "menuaction" && v["id"] == id);
@@ -238,6 +238,60 @@ fn the_job_rows_round_trip_through_the_real_backend() {
     assert!(card.error.is_empty(), "{}", card.error);
     assert_eq!(card.name(), "a.txt");
     assert!(!card.installed.is_empty() && !card.kind.is_empty());
+    drop(live);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// Move to Dropbox against the real backend, with a stand-in account folder: the destination is
+// captured between the snapshot and the activation, and the move names rows and the menuId.
+#[test]
+fn move_to_dropbox_captures_its_destination_and_moves_the_rows() {
+    use crate::activation::{Activation, Step};
+    let Some(bin) = std::env::var("FLEA_BIN").ok().filter(|b| !b.is_empty()) else {
+        eprintln!("live: FLEA_BIN is not set, so the Dropbox round trip was skipped");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("flea-iced-dropbox-{}", std::process::id()));
+    let (dir, account) = (root.join("dir"), root.join("Dropbox"));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::create_dir_all(&account).unwrap();
+    std::fs::write(dir.join("a.txt"), b"alpha").unwrap();
+    let (dir_s, account_s) = (dir.to_str().unwrap().to_string(), account.to_str().unwrap().to_string());
+    let mut live = Live::start_with(&bin, &[]);
+    let out = live.pane.open(dir_s.clone(), None);
+    live.run(out);
+    live.until("the listing", |p| p.listed_once && !p.list_in_flight());
+
+    // A destination that is not a directory is refused at the capture, and nothing moves.
+    let (mut bad, snapshot) = Activation::to(7, "dropbox", &[0], 0, Some(format!("{dir_s}/a.txt")));
+    send(&mut live, snapshot);
+    let refused = loop {
+        let v = wait_line(&mut live, "the refusal", |v| v["t"] == "menuaction" && v["id"] == 7);
+        match bad.receive(&v) {
+            Step::Send(next) => send(&mut live, next),
+            Step::Refused(why) => break why,
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+    };
+    assert_eq!(refused, "Dropbox account folder is not a directory.");
+
+    let (mut a, snapshot) = Activation::to(8, "dropbox", &[0], 0, Some(account_s.clone()));
+    send(&mut live, snapshot);
+    loop {
+        let v = wait_line(&mut live, "the activation", |v| v["t"] == "menuaction" && v["id"] == 8);
+        match a.receive(&v) {
+            Step::Send(next) => send(&mut live, next),
+            Step::Done { action, .. } => {
+                assert_eq!(action, "dropbox");
+                break;
+            }
+            other => panic!("expected the activation, got {other:?}"),
+        }
+    }
+    send(&mut live, serde_json::json!({"c": "transfer", "op": "move", "rows": [0], "dest": account_s, "menuId": 8}));
+    let done = wait_line(&mut live, "the move", |v| v["t"] == "transferdone");
+    assert_eq!(done["ok"], 1, "{done}");
+    assert!(!dir.join("a.txt").exists() && account.join("a.txt").is_file());
     drop(live);
     let _ = std::fs::remove_dir_all(&root);
 }
