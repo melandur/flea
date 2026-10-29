@@ -12,7 +12,7 @@ name = "flea-iced"
 path = "src/main.rs"
 
 [dependencies]
-iced = { version = "0.14", features = ["tokio", "image", "svg"] }
+iced = { version = "0.14", features = ["tokio", "image", "svg", "advanced"] }
 # Decodes a cache PNG to the icon slot off the UI thread, the job QML gave Image.sourceSize.
 image = { version = "0.25", default-features = false, features = ["png"] }
 # Stage 5b, the operator's choice of 2026-10-29: poppler-glib renders a PDF page into a cairo

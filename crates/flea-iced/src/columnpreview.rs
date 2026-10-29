@@ -235,7 +235,7 @@ impl Flea {
         }
         if matches!(st, State::Text | State::Code) {
             if let Some(s) = surface {
-                layers.push(lines_layer(s, st == State::Code, p));
+                layers.push(lines_layer(s, st == State::Code, p, loaded.map_or("", |l| l.path.as_str())));
             }
         }
         if let (State::Archive, Some(m)) = (st, meta) {
@@ -307,16 +307,25 @@ fn kind_stack<'a>(marks_: &[&'static str], ink: Color) -> Element<'a, Message> {
 }
 
 // PreviewLines: verbatim for text, a muted number gutter for code, the first records for a table.
-fn lines_layer<'a>(s: &Surface, numbered: bool, p: crate::theme::Palette) -> Element<'a, Message> {
+fn lines_layer<'a>(s: &Surface, numbered: bool, p: crate::theme::Palette, path: &str) -> Element<'a, Message> {
     let mut col = Column::new();
     match s {
         Surface::Lines { lines, .. } => {
+            // A name with a family draws in Monokai on the frame's ground, an open comment carried down.
+            let styled = crate::syntax::language(path).map(|spec| crate::syntaxview::lines(lines, spec, crate::syntaxview::colours(p.background), p.foreground));
             for (i, l) in lines.iter().enumerate() {
                 let mut line = row![];
                 if numbered {
                     line = line.push(text((i + 1).to_string()).size(CAPTION).color(Color { a: 0.6, ..p.muted }).width(16.0).align_x(iced::Right));
                 }
-                line = line.push(text(format!("  {l}")).size(CAPTION).color(p.foreground).wrapping(text::Wrapping::None));
+                line = match styled.as_ref().and_then(|s| s.get(i)) {
+                    Some(spans) => {
+                        let mut all = vec![iced::widget::text::Span::new("  ")];
+                        all.extend(spans.iter().cloned());
+                        line.push(iced::widget::rich_text(all).size(CAPTION).wrapping(text::Wrapping::None))
+                    }
+                    None => line.push(text(format!("  {l}")).size(CAPTION).color(p.foreground).wrapping(text::Wrapping::None)),
+                };
                 col = col.push(line);
             }
         }

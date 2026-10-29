@@ -267,6 +267,7 @@ mkdir -p "$T/media"
 magick -size 400x300 xc:white -fill red -draw "rectangle 40,40 360,260" xc:white "$T/media/a-doc.pdf"
 gst-launch-1.0 -q videotestsrc num-buffers=50 pattern=ball ! video/x-raw,width=320,height=240,framerate=25/1 \
     ! videoconvert ! jpegenc ! matroskamux ! filesink location="$T/media/b-clip.mkv" > /dev/null
+printf '// one comment\nfn main() {\n    let x: u8 = 42; /* open\n    still */\n    println!("hi {}", x);\n}\n' > "$T/media/c-code.rs"
 launch "$T/media"; sleep 1; shot columns-pdf
 check "a PDF in the column builds no player" 0 "$(grep -c libgstplayback "/proc/$APP/maps")"
 # The toolbar's next chevron, then maximize, which opens the overlay on the column's page; Escape.
@@ -278,6 +279,9 @@ check "nor does moving onto a clip" 0 "$(grep -c libgstplayback "/proc/$APP/maps
 WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 1158 353
 sleep 1.5; shot columns-play
 check "a press of play builds one and plays" yes "$(grep -q libgstplayback "/proc/$APP/maps" && echo yes || echo no)"
+# Source draws in Monokai: the column's first lines, then the overlay's editor over the same file.
+k -k Down; sleep 1; shot columns-code
+k -k Right; sleep 1; shot overlay-code; k -k Escape; sleep 0.5
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 # The chooser below counts rows in the tree, so the folder goes with the window.
 rm -rf "$T/media"

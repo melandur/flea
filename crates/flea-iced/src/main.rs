@@ -77,6 +77,10 @@ mod settingsapply;
 mod settingspanel;
 mod settingsview;
 mod split;
+mod syntax;
+mod syntaxlang;
+mod syntaxmd;
+mod syntaxview;
 mod subs;
 #[cfg(test)]
 mod testexec;

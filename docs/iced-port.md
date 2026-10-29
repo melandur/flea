@@ -137,7 +137,7 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      through the jail. **Readings of the source over the prose:** Space only ever expands, which is
      what `PreviewKeys.act` does, although AGENTS.md says it also returns to inset. **Deviations:** a
      table's header row scrolls with its records so its columns stay aligned sideways, where QML pins
-     it; text is drawn without syntax colours until `ui/js/Syntax.js` is ported as its own step.
+     it. Syntax colours arrived in 8d-ii-b-4.
    - **5b, PDF and media (done, not yet seen on screen).** The operator chose poppler-glib and
      GStreamer on 2026-10-29, both already installed on an Omarchy box. `pdf.rs` keeps one worker
      thread holding the open document, because poppler's objects stay on the thread that made them
@@ -470,11 +470,25 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      the private sway (which has no pointer device, and ydotool would click on the desktop instead):
      the PDF draws page 1 of 2 with Pages 2, next turns to 2 / 2, maximize opens the overlay there,
      and GStreamer's playbin is not loaded by a PDF or by moving onto a clip and is loaded by a
-     press of play, 52 checks. **Not yet:** ui/js/Syntax.js's colours, for the overlay and the column
-     alike, as their own step; and the column's own keys, which only focusPreview reaches and the
+     press of play, 52 checks. **Not yet:** the column's own keys, which only focusPreview reaches and the
      Default preset binds nothing to, so the column is pointer-only here as it is in QML. **Seen in
      passing, not this stage's:** the overlay draws a page that fits its frame at the left rather
      than centred.
+   - **8d-ii-b-4, syntax colours (done).** `syntaxlang.rs` is ui/js/SyntaxLanguages.js's tables,
+     `syntax.rs` ui/js/Syntax.js's lexer and `syntaxmd.rs` ui/js/SyntaxMarkdown.js, its regular
+     expressions spelled out by hand beside their patterns; `syntaxview.rs` is ui/js/SyntaxStyle.js,
+     PyCharm's Monokai lifted to 4.5:1 on its ground (comments 3:1), keywords and parameters italic,
+     headings and strong text bold. Where the JavaScript built StyledText and escaped every byte,
+     this answers byte ranges and roles, so nothing from a file is ever markup. The overlay's text
+     editor is coloured through iced's Highlighter, which keeps each line's starting state so a
+     changed line restarts from the one above, on the overlay's surface and up to `MAX_BYTES`; the
+     column's first lines are rich text on the frame's ground with tabs expanded to their stops, an
+     open comment carried down as Syntax.lines does. tests/js/syntax.js is ported case for case,
+     with the escaping and hard-space cases dropped because there is nothing to escape, and the
+     headless suite screenshots a Rust file in both. iced's `advanced` feature is on for the
+     Highlighter trait; it adds no crate. **Deviation:** the overlay colours a line at a time where
+     the JavaScript coloured 4 KB runs, and a run carried a parameter list across its own line
+     breaks, so a list's later lines draw their names plain here; a comment or string still carries.
    - **8d-iii**, the trash view.
    - **8d-iv**, tabs with the Places menu, and the stored display settings (density, columns, text
      size).

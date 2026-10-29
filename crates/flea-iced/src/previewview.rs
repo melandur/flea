@@ -64,7 +64,17 @@ impl Flea {
                 }
                 match &self.surfaces.text {
                     // No on_action: the editor is read-only, and its buffer shapes only what is shown.
-                    Some((_, content)) => text_editor(content).size(TEXT_PX).height(Length::Fill).into(),
+                    Some((_, content)) => {
+                        let editor = text_editor(content).size(TEXT_PX).height(Length::Fill);
+                        // Code draws in Monokai lifted to the surface; past MAX_BYTES or with no family, plain.
+                        match crate::syntax::language(&self.preview.path).filter(|_| self.preview.size <= crate::syntax::MAX_BYTES) {
+                            Some(spec) => {
+                                let settings = crate::syntaxview::Settings { spec, colours: crate::syntaxview::colours(p.surface) };
+                                editor.highlight_with::<crate::syntaxview::Monokai>(settings, crate::syntaxview::format).into()
+                            }
+                            None => editor.into(),
+                        }
+                    }
                     None => space().height(Length::Fill).into(),
                 }
             }
