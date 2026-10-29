@@ -301,6 +301,21 @@ for row in "${ENTRANT_ROWS[@]}"; do
       printf '%-10s %-4s source %s (%s), release binary built %s, %s bytes\n' \
         "$id" "$kind" "$sha" "$dirty" "$built" "$size" >> "$OUT"
       ;;
+    flea-iced)
+      # The same tree's iced front end, so the same sha; its own release binary is what was benched.
+      sha=$(git -C "$FLEA_REPO" rev-parse --short HEAD 2>/dev/null)
+      dirty=clean
+      [ -z "$(git -C "$FLEA_REPO" status --porcelain -- src crates/flea-iced tools Cargo.toml Cargo.lock 2>/dev/null)" ] || dirty=DIRTY
+      iced=${FLEA_ICED_BIN:-$FLEA_REPO/crates/flea-iced/target/release/flea-iced}
+      if [ -x "$iced" ]; then
+        built=$(date -Is -r "$iced")
+        size=$(stat -c %s "$iced")
+      else
+        built=absent; size=0
+      fi
+      printf '%-10s %-4s source %s (%s), iced release binary built %s, %s bytes, backend %s\n' \
+        "$id" "$kind" "$sha" "$dirty" "$built" "$size" "$FLEA_BIN" >> "$OUT"
+      ;;
     strata)
       # The one unpackaged rival. A tag is what a user installs, so the tag is what the row records
       # and a bare sha is called out as not being a release.

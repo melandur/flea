@@ -16,7 +16,13 @@ read -r -s SUDO_PW || true
 [ -n "${SUDO_PW:-}" ] || { printf 'FAIL: no sudo password arrived on stdin\n' >&2; exit 1; }
 
 export PATH="$HOME/.local/bin:$PATH"
-eval "$(omarchy-drive env)"
+# omarchy-drive env exports the session's display variables for a run started over ssh; a run started
+# in the session already has them, and a box without the tool is refused only if it has neither.
+if command -v omarchy-drive > /dev/null; then
+  eval "$(omarchy-drive env)"
+else
+  [ -n "${WAYLAND_DISPLAY:-}" ] || { printf 'FAIL: no omarchy-drive and no WAYLAND_DISPLAY, so no entrant could open a window\n' >&2; exit 1; }
+fi
 # omarchy-drive env omits the Qt platform theme, so without this the field benches a Flea that resolves no icon.
 export QT_QPA_PLATFORMTHEME="$(systemctl --user show-environment | grep '^QT_QPA_PLATFORMTHEME=' | cut -d= -f2-)"
 # Omarchy sets this with hl.env in envs.lua, so it reaches a Hyprland-launched client and is not in
@@ -36,6 +42,9 @@ EXPECT_FILES=${EXPECT_FILES:-100000}
 DROP_THUMBS=${DROP_THUMBS:-no}
 export FLEA_UI="$FLEA_REPO/ui"
 export FLEA_BIN="$FLEA_REPO/target/release/flea"
+# The iced front end, crates/flea-iced, launched through the same flea --gui and its FLEA_FRONTEND
+# seam, so it gets the same launcher, the same prctl and the same backend binary the QML window gets.
+export FLEA_ICED_BIN="$FLEA_REPO/crates/flea-iced/target/release/flea-iced"
 # Strata is built from source rather than packaged, so its path is a variable and not a PATH lookup.
 STRATA_BIN=${STRATA_BIN:-$HOME/Work/strata/target/release/strata}
 # The one entrant here that persists no thumbnail. strata renders each one in a sandboxed helper
@@ -475,6 +484,7 @@ kill_entrant() {
 # Fields: comm|token, in kill order, so clean_bench and the start-up refusal read one list and cannot drift apart.
 declare -a KILL_TARGETS=(
   "qs|$FLEA_UI"
+  "flea-iced|"
   "flea|--backend"
   # The bracket's terminal, matched by the class this run gives it: a bare kitty target would name
   # every terminal the operator has open.
@@ -512,6 +522,7 @@ declare -a KILL_TARGETS=(
 kill_comms_for() {
   case $1 in
     flea) printf 'qs\nflea\n' ;;
+    flea-iced) printf 'flea-iced\nflea\n' ;;
     superfile) printf 'spf\n' ;;
     *) printf '%s\n' "$1" ;;
   esac
@@ -700,7 +711,7 @@ run_one() {
     preview_ms=$PREVIEW_MS
   fi
 
-  if [ "$id" = "flea" ]; then
+  if [ "$id" = "flea" ] || [ "$id" = "flea-iced" ]; then
     pids_for flea --backend
     if [ ${#PIDS[@]} -ge 1 ] && pss_kb "${PIDS[0]}"; then child_pss=$PSS_KB; fi
   fi
@@ -789,6 +800,8 @@ declare -a ENTRANTS=(
   # than by instruction; the moment a package installs /usr/share/flea/ui that branch is checked
   # second and wins, and the run would launch this tree's binary against the installed shell.
   "flea|gui|com.thisisgm.flea|qs|$FLEA_UI|flea|--backend|FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI setsid nohup $FLEA_BIN --gui $FIXTURE"
+  # The same backend helper, under the iced window instead of qs; skipped when its release build is absent.
+  "flea-iced|gui|com.thisisgm.flea.iced|flea-iced||flea|--backend|FLEA_FRONTEND=iced FLEA_ICED_BIN=$FLEA_ICED_BIN FLEA_BIN=$FLEA_BIN setsid nohup $FLEA_BIN --gui $FIXTURE"
   "nautilus|gui|org.gnome.Nautilus|nautilus||||setsid nohup nautilus --new-window $FIXTURE"
   "thunar|gui|thunar|thunar||||setsid nohup thunar $FIXTURE"
   "pcmanfm|gui|pcmanfm|pcmanfm||||setsid nohup pcmanfm $FIXTURE"
@@ -828,6 +841,10 @@ fi
 [ -x "$FLEA_BIN" ] || fail "$FLEA_BIN is missing, so run cargo build --release before benching"
 stale_src=$(find "$FLEA_REPO/src" "$FLEA_REPO/Cargo.toml" "$FLEA_REPO/Cargo.lock" -newer "$FLEA_BIN" -print -quit)
 [ -z "$stale_src" ] || fail "$stale_src is newer than $FLEA_BIN, so this run would bench a stale build"
+if [ -x "$FLEA_ICED_BIN" ]; then
+  stale_src=$(find "$FLEA_REPO/crates/flea-iced/src" "$FLEA_REPO/crates/flea-iced/Cargo.toml" "$FLEA_REPO/crates/flea-iced/Cargo.lock" -newer "$FLEA_ICED_BIN" -print -quit)
+  [ -z "$stale_src" ] || fail "$stale_src is newer than $FLEA_ICED_BIN, so this run would bench a stale build"
+fi
 
 # What was benched, written beside the numbers before the first one is taken: a timing figure with
 # no version behind it is not citable, and a run that produced numbers without this is wasted.
@@ -862,6 +879,8 @@ for RUN_INDEX in $(seq 1 "$RUNS"); do
     # An absent entrant is named and skipped, never silently dropped from the table, see hard rule 7.
     if [ "$id" = strata ]; then
       [ -x "$STRATA_BIN" ] || { printf 'SKIP: strata is not built at %s\n' "$STRATA_BIN" >&2; continue; }
+    elif [ "$id" = flea-iced ]; then
+      [ -x "$FLEA_ICED_BIN" ] || { printf 'SKIP: flea-iced is not built at %s\n' "$FLEA_ICED_BIN" >&2; continue; }
     else
       command -v "$comm" >/dev/null 2>&1 || { printf 'SKIP: %s is not installed\n' "$id" >&2; continue; }
     fi
