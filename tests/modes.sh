@@ -608,5 +608,37 @@ check "select: a missing target still opens its directory" "/etc /etc/does-not-e
 out=$($BIN --select "file:///home/gm/My%20Files/note.txt" --print-target 2>&1)
 check "select: a percent-encoded uri decodes" "/home/gm/My Files /home/gm/My Files/note.txt" "$out"
 
+# FLEA_FRONTEND=iced is the opt-in seam onto crates/flea-iced, for the window and the chooser alike,
+# and nothing else chooses it. A stub on FLEA_ICED_BIN reports what crossed exec, and a qs stub
+# beside it proves the shipped window is still what every other value of the variable opens.
+D="$FIXTURE_ROOT/flea-iced-seam-test-$$"
+sandbox_make "$D"
+cat > "$D/iced" <<'STUB'
+#!/bin/sh
+grep -i "^THP_enabled" /proc/self/status
+printf 'ICED %s\n' "$*"
+printf 'FLEA_BIN %s\n' "$FLEA_BIN"
+printf 'REPLY %s\n' "${FLEA_PICKER_REPLY-unset}"
+STUB
+printf '#!/bin/sh\nprintf "QS %%s\\n" "$*"\n' > "$D/qs"
+chmod +x "$D/iced" "$D/qs"
+seam() { env -u FLEA_BIN WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" "$@" 2>&1 </dev/null; }
+out=$(seam FLEA_FRONTEND=iced FLEA_ICED_BIN="$D/iced" $BIN --gui /etc)
+check "iced: the window execs flea-iced on the start path" "1" "$(echo "$out" | grep -c '^ICED /etc$')"
+check "iced: the backend it calls back into is this binary" "1" "$(echo "$out" | grep -c "^FLEA_BIN $(readlink -f "$BIN")\$")"
+check "iced: huge pages are off across that exec too" "1" "$(echo "$out" | grep -c '^THP_enabled:[[:space:]]*0$')"
+check "iced: the qs window is not started" "0" "$(echo "$out" | grep -c '^QS ')"
+out=$(seam FLEA_FRONTEND=iced FLEA_ICED_BIN="$D/iced" FLEA_PICKER='{}' $BIN --pick "$D/reply.json")
+check "iced: the chooser execs flea-iced --pick" "1" "$(echo "$out" | grep -c '^ICED --pick$')"
+check "iced: the chooser is handed the reply file" "1" "$(echo "$out" | grep -c "^REPLY $D/reply.json\$")"
+out=$(seam FLEA_FRONTEND=iced FLEA_ICED_BIN="$D/absent" $BIN --gui /etc); rc=$?
+check "iced: a missing flea-iced refuses rather than falling back" "2" "$rc"
+check "iced: and says what to set" "1" "$(echo "$out" | grep -c 'set FLEA_ICED_BIN')"
+check "iced: and starts nothing at all" "0" "$(echo "$out" | grep -c '^QS \|^ICED ')"
+out=$(seam FLEA_FRONTEND= FLEA_ICED_BIN="$D/iced" $BIN --gui /etc)
+check "iced: an empty FLEA_FRONTEND is the qs window" "1" "$(echo "$out" | grep -c '^QS -p ')"
+out=$(seam FLEA_FRONTEND=qt FLEA_ICED_BIN="$D/iced" $BIN --gui /etc)
+check "iced: any other value is the qs window" "0" "$(echo "$out" | grep -c '^ICED ')"
+
 [ "$fail" -eq 0 ] && echo "modes: all checks passed"
 exit $fail

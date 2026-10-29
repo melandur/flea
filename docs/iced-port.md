@@ -223,5 +223,36 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      and writes a rule built from it through the real validator. **A quirk carried over, not fixed:**
      `OpenWith.matching` lower-cases each label and not the typed text, so a search with a capital
      letter matches nothing, in QML and here alike.
-7. The picker for `tools/flea-portal`, then `flea --gui` switches to the iced binary, after a
-   field-bench run says the switch does not lose a column Flea wins today.
+7. **The chooser (done, its keyboard not yet driven live) and the opt-in launch (done); the default
+   switch (not taken).**
+   - `src/picker/` is the chooser window `flea --pick` opens for `tools/flea-portal`. `mod.rs` is
+     `ui/js/Picker.js`, the request with every field defaulted, the labels, the chips, the name rule
+     mirrored from `ops.rs`, `Format.fileUri`, and the reply written in Picker.js's own key order;
+     `recent.rs` is `ui/js/Recent.js` plus the XBEL read `ui/PickerRecent.qml` left to Qt, here
+     through `roxmltree`, a reader with no dependencies of its own, rather than a hand-rolled one;
+     `state.rs` and `replies.rs` are `ui/picker.qml`'s rules between a key and a backend check: the
+     newest listing only, a mark the backend reviews, `validate` on every listing, the save probe
+     keyed on folder and name and probed again when either moved, the collision asked before a
+     `review`, and exactly one answer. The reply is a temp beside the reply path and a rename, and
+     the backend is told to quit only once it has landed. The tests are tests/js/picker.js and
+     tests/js/recent.js case for case, the chooser's scenarios, and a live test against the real
+     backend: a chip narrows the listing, a mark comes back with its bytes and survives All files,
+     Recent lists the history's surviving local file and nothing remote, and a save over a file that
+     exists asks first and answers that file's URI. Turning the chip's globs off on the wire turns it
+     red. A sandboxed launch drew the chip row, the rail with Recent first, the listing and the
+     footer.
+   - **Deviations.** The rail lists Recent, the favourites, home and its folders and the mounted
+     volumes; a network place, a phone and an unmounted volume say they open from the Flea window,
+     because the chooser does not mount yet. Escape inside the Filename field gives the keyboard back
+     first and cancels on the second press, because iced's text field takes the first one. A
+     malformed history file reads as an empty Recent, where Qt's reader kept the bookmarks before
+     the break. The focus ring is the rail, the list, the Filename field and the two collision
+     buttons; the chrome's buttons answer the pointer only.
+   - **The launch.** `FLEA_FRONTEND=iced` makes `flea --gui` and `flea --pick` exec `flea-iced`
+     (`FLEA_ICED_BIN`, else beside the binary, else this tree's own `crates/flea-iced/target`), with
+     `FLEA_BIN` handed over the way `qs` gets it and huge pages off across the exec exactly as for
+     `qs`, which for iced is unmeasured. Asked for and not found, it refuses with exit 2 rather than
+     falling back; empty or any other value is the `qs` window. `--select` is not honoured yet and
+     says so. `tests/modes.sh` pins all of it against stubs and goes red with the seam disabled.
+   - **The default stays `qs`.** Switching it waits on the live keyboard run and a field-bench run
+     showing the switch loses no column Flea wins today; neither has been done.

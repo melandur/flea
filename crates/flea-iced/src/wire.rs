@@ -53,7 +53,23 @@ pub enum Reply {
     // menuaction op installed: the whole catalogue of launchable desktop entries, or why not.
     Installed { id: u64, apps: Result<Vec<(String, String)>, String> },
     Searched { n: usize, scanned: u64, ms: f64, cancelled: bool },
+    // A chooser check's answer, src/backend/picker.rs response(): the reviewed marks and how many
+    // left, or the save target it reviewed, or why not.
+    Picker(PickerReply),
     Other,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PickerReply {
+    pub id: u64,
+    pub op: String,
+    pub ok: bool,
+    pub error: String,
+    pub marks: Vec<(String, u64)>,
+    pub removed: usize,
+    pub review: u64,
+    pub path: String,
+    pub collision: bool,
 }
 
 pub fn parse(line: &str) -> Option<Reply> {
@@ -146,6 +162,19 @@ pub fn parse(line: &str) -> Option<Reply> {
                 .collect(),
             archive_failed: flag("afailed"),
         },
+        "picker" => Reply::Picker(PickerReply {
+            id: uint("id")?,
+            op: field("op"),
+            ok: flag("ok"),
+            error: field("error"),
+            marks: v.get("marks").and_then(Value::as_array).into_iter().flatten()
+                .filter_map(|m| Some((m.get("path")?.as_str()?.to_string(), m.get("bytes")?.as_u64()?)))
+                .collect(),
+            removed: uint("removed").unwrap_or(0) as usize,
+            review: uint("review").unwrap_or(0),
+            path: field("path"),
+            collision: flag("collision"),
+        }),
         "error" => Reply::Error { r#where: field("where"), path: field("path"), msg: field("msg") },
         _ => Reply::Other,
     })
@@ -190,6 +219,14 @@ pub enum Request {
     Peek { path: String, first: usize, hidden: bool },
     MenuInstalled { id: u64 },
     Sort { order: Order },
+    // The chooser's listings: a directory or the paths Recent names, narrowed to the chip's rule.
+    PickerList { path: String, first: usize, hidden: bool, filter: (Vec<String>, Vec<String>) },
+    ListPaths { paths: Vec<String>, first: usize, filter: (Vec<String>, Vec<String>) },
+    PickerMark { id: u64, path: String, directory: bool, multiple: bool },
+    PickerValidate { id: u64 },
+    PickerSave { id: u64, folder: String, name: String },
+    PickerReview { id: u64, review: u64 },
+    PickerClose,
     Quit,
 }
 
@@ -222,6 +259,22 @@ impl Request {
                 "c": "sort", "by": order.by, "desc": order.desc, "foldersFirst": order.folders_first, "groupByKind": order.group_by_kind,
             }),
             Request::MetaArchive { row } => json!({"c": "meta", "row": row, "text": false, "media": false, "archive": true}),
+            // The picker window's listRequest sends the same ordering fields the window's does, at
+            // their defaults, since a chooser stores no sort of its own.
+            Request::PickerList { path, first, hidden, filter } => json!({
+                "c": "list", "path": path, "first": first, "hidden": hidden, "by": "name", "desc": false,
+                "foldersFirst": true, "groupByKind": false, "pickerGlobs": filter.0, "pickerMimes": filter.1,
+            }),
+            Request::ListPaths { paths, first, filter } => json!({
+                "c": "listpaths", "paths": paths, "first": first, "pickerGlobs": filter.0, "pickerMimes": filter.1,
+            }),
+            Request::PickerMark { id, path, directory, multiple } => json!({
+                "c": "picker", "op": "mark", "id": id, "path": path, "directory": directory, "multiple": multiple,
+            }),
+            Request::PickerValidate { id } => json!({"c": "picker", "op": "validate", "id": id}),
+            Request::PickerSave { id, folder, name } => json!({"c": "picker", "op": "save", "id": id, "folder": folder, "name": name}),
+            Request::PickerReview { id, review } => json!({"c": "picker", "op": "review", "id": id, "review": review}),
+            Request::PickerClose => json!({"c": "picker", "op": "close"}),
             Request::Quit => json!({"c": "quit"}),
         };
         format!("{v}\n")

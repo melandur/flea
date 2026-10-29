@@ -29,6 +29,7 @@ mod pane;
 mod pathbar;
 mod places_rows;
 mod pdf;
+mod picker;
 mod prefs;
 mod preview;
 mod previewshell;
@@ -375,6 +376,9 @@ impl Flea {
 }
 
 fn main() -> iced::Result {
+    if std::env::args().nth(1).as_deref() == Some("--pick") {
+        return picker::launch();
+    }
     iced::application(boot::boot, Flea::update, Flea::view)
         .title("Flea")
         .subscription(Flea::subscription)
@@ -391,3 +395,4 @@ fn main() -> iced::Result {
         })
         .run()
 }
+

@@ -25,6 +25,8 @@ gstreamer-video = "0.25"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# Stage 7: the picker's Recent reads the desktop's XBEL history, which QML left to Qt's own reader.
+roxmltree = "0.20"
 
 # The PDF test writes its own two-page fixture through cairo, which only a test needs.
 [dev-dependencies]

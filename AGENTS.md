@@ -5676,4 +5676,6 @@ and acts on whatever is active, which may be a window you did not open.
 The window is being rewritten in Rust with iced, staged, operator's ruling of 2026-10-29.
 `docs/iced-port.md` holds the decisions and the stage list; read it before touching
 `crates/flea-iced`. Until its last stage lands, `ui/` is still the shipped front end and every rule
-above about it still applies.
+above about it still applies. `FLEA_FRONTEND=iced` is the one opt-in: `src/gui.rs` then execs
+`flea-iced` for `--gui` and `--pick` instead of `qs`, and refuses rather than falls back when it is
+asked for and not found; nothing else chooses it.

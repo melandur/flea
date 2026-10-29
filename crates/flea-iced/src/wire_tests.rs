@@ -65,3 +65,19 @@ fn the_installed_catalogue_parses_and_a_refusal_carries_its_reason() {
     let no = r#"{"t":"menuaction","id":7,"op":"installed","ok":false,"error":"no registry"}"#;
     assert_eq!(parse(no), Some(Reply::Installed { id: 7, apps: Err("no registry".into()) }));
 }
+
+#[test]
+fn a_picker_check_answers_with_its_marks_or_its_review_or_why_not() {
+    let marks = r#"{"t":"picker","id":3,"op":"validate","ok":true,"marks":[{"path":"/x/a.png","bytes":5}],"removed":1}"#;
+    let Some(Reply::Picker(m)) = parse(marks) else { panic!("not a picker answer") };
+    assert_eq!((m.id, m.ok, m.marks, m.removed), (3, true, vec![("/x/a.png".to_string(), 5)], 1));
+    let save = r#"{"t":"picker","id":4,"op":"save","ok":true,"review":4,"path":"/x/b.txt","collision":true}"#;
+    let Some(Reply::Picker(s)) = parse(save) else { panic!("not a picker answer") };
+    assert_eq!((s.review, s.path.as_str(), s.collision), (4, "/x/b.txt", true));
+    let no = r#"{"t":"picker","id":5,"op":"mark","ok":false,"error":"This item is not the requested file type."}"#;
+    let Some(Reply::Picker(n)) = parse(no) else { panic!("not a picker answer") };
+    assert_eq!((n.ok, n.error.as_str()), (false, "This item is not the requested file type."));
+    let l = Request::PickerList { path: "/x".into(), first: 70, hidden: false, filter: (vec!["*.png".into()], vec![]) }.line();
+    let v: Value = serde_json::from_str(l.trim_end()).unwrap();
+    assert_eq!((v["c"].as_str(), v["pickerGlobs"][0].as_str()), (Some("list"), Some("*.png")));
+}
