@@ -25,6 +25,10 @@ impl Flea {
                 Effect::OpenFile(path) if self.archive_routes_here(&path) => tasks.push(self.open_preview()),
                 Effect::OpenFile(path) => tasks.push(self.open_file(path)),
                 Effect::Preview => tasks.push(self.open_preview()),
+                Effect::SearchTimer(generation) => tasks.push(Task::perform(
+                    sleep(Duration::from_millis(crate::search::LIVE_MS)),
+                    move |_| Message::SearchLive(generation),
+                )),
                 Effect::WatchTimer => tasks.push(Task::perform(
                     sleep(Duration::from_millis(pane::WATCH_MS)),
                     |_| Message::WatchFired,

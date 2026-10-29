@@ -2,6 +2,7 @@
 // Everything the QML tree does that is not here yet says so rather than doing nothing.
 mod backend;
 mod boot;
+mod chrome;
 mod contrast;
 mod devices;
 mod delimited;
@@ -16,12 +17,14 @@ mod marks;
 mod media;
 mod mediashell;
 mod mounts;
+mod nav;
 mod netopen;
 mod netshell;
 mod network;
 mod opreplies;
 mod ops;
 mod pane;
+mod pathbar;
 mod pdf;
 mod prefs;
 mod preview;
@@ -32,9 +35,12 @@ mod protocols;
 mod rail;
 mod railshell;
 mod railview;
+mod search;
+mod searchkeys;
 mod sentence;
 #[cfg(test)]
 mod testexec;
+mod tasks;
 mod theme;
 mod thumbs;
 mod watch;
@@ -51,6 +57,7 @@ use pane::Pane;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tasks::{blocking, decode, sleep};
 use theme::Palette;
 use wire::Request;
 
@@ -108,6 +115,7 @@ struct Flea {
     prefs: prefs::Prefs,
     pdf: Option<mediashell::PdfView>,
     playback: mediashell::Playback,
+    chrome: chrome::Chrome,
 }
 
 #[derive(Debug, Clone)]
@@ -142,6 +150,13 @@ enum Message {
     PreviewSettled(u64),
     PreviewClose,
     TableScrolled(f32),
+    SearchLive(u64),
+    SearchPaste(Option<String>),
+    SortColumn(&'static str),
+    CrumbPressed(usize),
+    CrumbSettle(u64),
+    PathInput(String),
+    PathSubmit,
     PdfRendered(Result<pdf::Page, ()>),
     PdfTurn(i32),
     PdfZoom(i32),
@@ -159,25 +174,7 @@ enum Message {
     QuitDeadline,
 }
 
-fn sleep(d: Duration) -> impl std::future::Future<Output = ()> {
-    let (tx, rx) = iced::futures::channel::oneshot::channel();
-    std::thread::spawn(move || {
-        std::thread::sleep(d);
-        let _ = tx.send(());
-    });
-    async move {
-        let _ = rx.await;
-    }
-}
 
-// A blocking child off the UI thread, answered once.
-fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> impl std::future::Future<Output = T> {
-    let (tx, rx) = iced::futures::channel::oneshot::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(f());
-    });
-    async move { rx.await.expect("the worker thread answers before it ends") }
-}
 
 
 impl Flea {
@@ -227,6 +224,7 @@ impl Flea {
 
     fn handle(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Backend(backend::Event::Reply(reply @ wire::Reply::Peeked { .. })) => self.peeked(reply),
             Message::Backend(backend::Event::Reply(reply @ wire::Reply::Meta { .. })) => {
                 self.meta_answered(reply);
                 Task::none()
@@ -248,8 +246,8 @@ impl Flea {
             }
             Message::Key(event) => self.key(event),
             Message::Resized(size) => {
-                // The header and the status bar are a row each.
-                self.viewport_h = (size.height - 2.0 * ROW_H).max(ROW_H);
+                // The chrome, the header and the status bar are a row each.
+                self.viewport_h = (size.height - 3.0 * ROW_H).max(ROW_H);
                 self.window_w = size.width;
                 self.report_viewport()
             }
@@ -281,6 +279,13 @@ impl Flea {
             }
             Message::FavouriteSaved(result) => self.favourite_saved(result),
             Message::Dialog(msg) => self.dialog_message(msg),
+            m @ (Message::SearchLive(_)
+            | Message::SearchPaste(_)
+            | Message::SortColumn(_)
+            | Message::CrumbPressed(_)
+            | Message::CrumbSettle(_)
+            | Message::PathInput(_)
+            | Message::PathSubmit) => self.search_message(m),
             m @ (Message::DeviceListed(..)
             | Message::DeviceRan(..)
             | Message::DeviceTimer(..)
@@ -370,13 +375,6 @@ impl Flea {
     }
 }
 
-// One cache PNG to an icon-slot image. The path is always the backend's own thumbed answer, never a
-// filename, and the decode is a PNG decoder alone; AGENTS.md "Deliberate corners" names the residual.
-fn decode(path: &str) -> Option<image::Handle> {
-    let img = ::image::open(path).ok()?.thumbnail(THUMB_PX, THUMB_PX).to_rgba8();
-    let (w, h) = img.dimensions();
-    Some(image::Handle::from_rgba(w, h, img.into_raw()))
-}
 
 fn main() -> iced::Result {
     iced::application(boot::boot, Flea::update, Flea::view)

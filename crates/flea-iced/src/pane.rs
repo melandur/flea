@@ -35,6 +35,8 @@ pub enum Effect {
     Settle(u64, u64),
     // Decode this cache PNG for the icon slot; a fresh answer always replaces an older picture.
     DecodeThumb(String),
+    // Restart the search's live timer: a SearchLive carrying this generation after 120 ms.
+    SearchTimer(u64),
 }
 
 
@@ -87,6 +89,7 @@ pub struct Pane {
     // The status bar's sticky line, what a running transfer says while it runs.
     pub sticky: String,
     pub(crate) ops: Ops,
+    pub search: crate::search::Search,
     // preview.thumbnails: "media" asks for every row carrying t, "images" for images, "off" none.
     pub thumb_mode: String,
     pub file_type_colours: bool,
@@ -97,7 +100,7 @@ pub struct Pane {
     pub(crate) settle_gen: u64,
     pub(crate) settle_ms: u64,
     pub(crate) in_flight: Option<InFlight>,
-    window_pending: Option<(usize, usize)>,
+    pub(crate) window_pending: Option<(usize, usize)>,
     pub(crate) anchor: Option<Anchor>,
     locating: Option<(String, String, Anchor)>,
     pub(crate) watch_timer: bool,
@@ -179,6 +182,10 @@ impl Pane {
     pub fn receive(&mut self, reply: Reply) -> Vec<Effect> {
         match reply {
             Reply::Listed { n } => {
+                // A walk's first line, or a superseded walk's, is the search's to count.
+                if self.search_listed_line(n) {
+                    return vec![];
+                }
                 if let Some(f) = self.in_flight.as_mut() {
                     f.total = Some(n);
                 }
@@ -189,6 +196,8 @@ impl Pane {
             Reply::Changed { path } => self.on_changed(&path),
             Reply::Located { directory, path, index } => self.on_located(&directory, &path, index),
             Reply::Thumbed { row, file } => self.on_thumbed(row, file),
+            Reply::Searching { n, scanned, ms } => self.on_searching(n, scanned, ms),
+            Reply::Searched { n, scanned, ms, cancelled } => self.on_searched(n, scanned, ms, cancelled),
             Reply::Other => vec![],
             other => self.receive_op(other),
         }
@@ -222,7 +231,8 @@ impl Pane {
                 out.extend(self.pay_debt());
             }
             // A window reply that landed before the new `listed` belongs to the listing being left.
-            None if self.in_flight.is_some() => {}
+            // And one that landed before a walk's own `listed` belongs to the rows that walk replaced.
+            None if self.in_flight.is_some() || self.search.pending > 0 => {}
             None => {
                 if self.window_pending.map(|(s, _)| s) == Some(start) {
                     self.window_pending = None;
@@ -301,6 +311,11 @@ impl Pane {
         out
     }
 
+    pub(crate) fn window_drifted(&mut self) -> Vec<Effect> {
+        self.window_pending = None;
+        self.request_if_drifted()
+    }
+
     fn request_if_drifted(&mut self) -> Vec<Effect> {
         if self.total == 0 || self.in_flight.is_some() {
             return vec![];
@@ -336,57 +351,6 @@ impl Pane {
         out
     }
 
-    pub fn step(&mut self, delta: isize) -> Vec<Effect> {
-        if self.total == 0 {
-            return vec![];
-        }
-        // ui/js/Focus.js step: off, a step past an end clamps; on, a step taken FROM an end comes round.
-        let last = self.total as isize - 1;
-        let here = self.cursor as isize;
-        let next = if self.wrap_at_ends && delta.abs() == 1 && here + delta < 0 && here == 0 {
-            last
-        } else if self.wrap_at_ends && delta.abs() == 1 && here + delta > last && here == last {
-            0
-        } else {
-            (here + delta).clamp(0, last)
-        } as usize;
-        self.place_cursor(next)
-    }
-
-    // Enter, and a double click: a directory row navigates, every other row goes to `flea --open`.
-    pub fn activate(&mut self) -> Vec<Effect> {
-        let Some(row) = self.row_at(self.cursor).cloned() else { return vec![] };
-        let path = join(&self.path, &row.n);
-        if row.d {
-            self.open(path, None)
-        } else {
-            vec![Effect::OpenFile(path)]
-        }
-    }
-
-    // Right: a directory enters, a file opens the preview.
-    pub fn forward(&mut self) -> Vec<Effect> {
-        match self.row_at(self.cursor) {
-            Some(r) if r.d => self.activate(),
-            Some(_) => vec![Effect::Preview],
-            None => vec![],
-        }
-    }
-
-    pub fn up(&mut self) -> Vec<Effect> {
-        match parent(&self.path) {
-            Some((dir, leaf)) => self.open(dir, Some((leaf, 0))),
-            None => vec![],
-        }
-    }
-
-    pub fn toggle_hidden(&mut self) -> Vec<Effect> {
-        self.hidden = !self.hidden;
-        let mut out = vec![Effect::SaveHidden(self.hidden)];
-        let anchor = self.row_at(self.cursor).map(|r| (r.n.clone(), self.cursor));
-        out.extend(self.open(self.path.clone(), anchor));
-        out
-    }
 }
 
 #[cfg(test)]

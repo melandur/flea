@@ -47,6 +47,10 @@ pub enum Reply {
     // The archive half of a meta answer: the exact entry count, the first names, and whether the
     // index read failed, in which case the counts are zero and say nothing.
     Meta { row: usize, entries: u64, names: Vec<(String, bool)>, archive_failed: bool },
+    Searching { n: usize, scanned: u64, ms: f64 },
+    // A read-only look at a directory that is not the listing; `hidden` echoes the request's flag.
+    Peeked { path: String, hidden: bool, rows: Vec<Row> },
+    Searched { n: usize, scanned: u64, ms: f64, cancelled: bool },
     Other,
 }
 
@@ -106,6 +110,22 @@ pub fn parse(line: &str) -> Option<Reply> {
         "made" => Reply::Made { path: field("path") },
         "undone" => Reply::Undone { op: field("op") },
         "thumbed" => Reply::Thumbed { row: uint("row")? as usize, file: field("file") },
+        "peeked" => Reply::Peeked {
+            path: field("path"),
+            hidden: flag("hidden"),
+            rows: v.get("rows").and_then(|r| serde_json::from_value(r.clone()).ok()).unwrap_or_default(),
+        },
+        "searching" => Reply::Searching {
+            n: uint("n")? as usize,
+            scanned: uint("scanned").unwrap_or(0),
+            ms: v.get("ms").and_then(Value::as_f64).unwrap_or(0.0),
+        },
+        "searched" => Reply::Searched {
+            n: uint("n")? as usize,
+            scanned: uint("scanned").unwrap_or(0),
+            ms: v.get("ms").and_then(Value::as_f64).unwrap_or(0.0),
+            cancelled: flag("cancelled"),
+        },
         "meta" => Reply::Meta {
             row: uint("row")? as usize,
             entries: uint("entries").unwrap_or(0),
@@ -153,6 +173,10 @@ pub enum Request {
     ThumbCancel { rows: Vec<usize> },
     // One row's archive index, asked only while that archive is the thing open: never a sweep.
     MetaArchive { row: usize },
+    Search { path: String, query: String, hidden: bool, shallow: bool },
+    SearchCancel,
+    Peek { path: String, first: usize, hidden: bool },
+    Sort { order: Order },
     Quit,
 }
 
@@ -177,6 +201,12 @@ impl Request {
             Request::Undo => json!({"c": "undo"}),
             Request::Thumb { rows } => json!({"c": "thumb", "rows": rows}),
             Request::ThumbCancel { rows } => json!({"c": "thumbcancel", "rows": rows}),
+            Request::Search { path, query, hidden, shallow } => json!({"c": "search", "path": path, "query": query, "hidden": hidden, "shallow": shallow}),
+            Request::SearchCancel => json!({"c": "searchcancel"}),
+            Request::Peek { path, first, hidden } => json!({"c": "peek", "path": path, "first": first, "hidden": hidden}),
+            Request::Sort { order } => json!({
+                "c": "sort", "by": order.by, "desc": order.desc, "foldersFirst": order.folders_first, "groupByKind": order.group_by_kind,
+            }),
             Request::MetaArchive { row } => json!({"c": "meta", "row": row, "text": false, "media": false, "archive": true}),
             Request::Quit => json!({"c": "quit"}),
         };

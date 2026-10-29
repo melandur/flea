@@ -5,7 +5,8 @@ use crate::pane::{Effect, Pane};
 impl Pane {
     // PaneWire's watchBusy: a re-read renumbers every row, so it waits while anything holds an index.
     pub(crate) fn watch_busy(&self) -> bool {
-        self.in_flight.is_some() || !self.selection.is_empty() || self.renaming.is_some()
+        // A search listing is not a directory, so a change under it is owed to the folder it left.
+        self.in_flight.is_some() || !self.selection.is_empty() || self.renaming.is_some() || self.search_listed()
     }
 
     // onWatchBusyChanged: the debt is paid the moment the last thing holding it clears. The shell

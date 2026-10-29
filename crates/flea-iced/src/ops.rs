@@ -101,6 +101,17 @@ impl Pane {
             out.extend(self.pay_debt());
             return out;
         }
+        // Search.activateAction: on the results a single tap reveals the file in its own folder,
+        // and the second tap of a double is ignored rather than revealing twice.
+        if self.search_listed() {
+            if taps != 1 {
+                return vec![];
+            }
+            self.selection = [index].into();
+            let mut out = self.place_cursor(index);
+            out.extend(self.search_reveal());
+            return out;
+        }
         let mut out = vec![];
         if self.renaming.as_ref().is_some_and(|r| r.index != index) {
             out.extend(self.commit_rename());

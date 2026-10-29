@@ -70,6 +70,7 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         prefs: prefs.clone(),
         pdf: None,
         playback: Default::default(),
+        chrome: Default::default(),
     };
     flea.rebuild_rail();
     // The device poll starts at once and re-arms itself, the Timer's triggeredOnStart in QML.

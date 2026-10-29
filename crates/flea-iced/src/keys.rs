@@ -10,7 +10,7 @@ impl Flea {
             self.modifiers = m;
             return Task::none();
         }
-        let keyboard::Event::KeyPressed { key, modifiers, repeat, .. } = event else { return Task::none() };
+        let keyboard::Event::KeyPressed { key, modifiers, repeat, text, .. } = event else { return Task::none() };
         // The dialog owns the keyboard while it is up: Escape closes it, Tab walks its fields, and
         // its fields take everything else, Enter included through their on_submit.
         if self.dialog.is_some() {
@@ -18,6 +18,17 @@ impl Flea {
                 Key::Named(Named::Escape) => self.dialog_close(),
                 Key::Named(Named::Tab) if modifiers.shift() => iced::widget::operation::focus_previous(),
                 Key::Named(Named::Tab) => iced::widget::operation::focus_next(),
+                _ => Task::none(),
+            };
+        }
+        // The path bar owns the keys while it is open: Escape closes it, Tab completes the leaf.
+        if self.chrome.editing {
+            return match key.as_ref() {
+                Key::Named(Named::Escape) => {
+                    self.close_path_edit();
+                    Task::none()
+                }
+                Key::Named(Named::Tab) => self.complete_path(),
                 _ => Task::none(),
             };
         }
@@ -35,6 +46,9 @@ impl Flea {
             // An error is dismissed before anything else Escape unwinds.
             self.message = None;
             return Task::none();
+        }
+        if let Some(task) = self.search_key(&key, modifiers, text.as_deref()) {
+            return task;
         }
         // Tab is the only thing that moves the keyboard between the views, and a hidden rail is not
         // a place it can go (ui/js/Focus.js next).
@@ -79,7 +93,12 @@ impl Flea {
             // A held Space toggles once; the paint gesture of ui/js/Marks.js is not ported yet.
             (Key::Named(Named::Space), false) if !repeat => self.pane.toggle_select(),
             (Key::Character("m"), false) => return self.say("The listing menu is not in this build yet.".into()),
-            (Key::Character(c), true) if "fbtmjkl".contains(c) => {
+            // Ctrl+F searches this folder, Ctrl+Shift+F it and every folder below (2026-09-23).
+            (Key::Character("f" | "F"), true) => self.pane.search_start(modifiers.shift()),
+            (Key::Character("j"), true) => self.pane.sort_chord("name"),
+            (Key::Character("k"), true) => self.pane.sort_chord("size"),
+            (Key::Character("l"), true) => self.pane.sort_chord("mtime"),
+            (Key::Character(c), true) if "btm".contains(c) => {
                 return self.say(format!("Ctrl+{} is not in this build yet.", c.to_uppercase()));
             }
             _ => return Task::none(),

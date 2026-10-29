@@ -7,10 +7,16 @@ use iced::{Background, Border, Color, Element, Length};
 impl Flea {
     pub(crate) fn view(&self) -> Element<'_, Message> {
         let p = self.palette;
+        // ui/Header.qml: a click sorts by that column, and the order in force carries its mark.
+        let order = &self.pane.order;
+        let head = |label: &'static str, key: &'static str| {
+            let mark = if order.by == key { if order.desc { " ▼" } else { " ▲" } } else { "" };
+            mouse_area(text(format!("{label}{mark}"))).on_press(Message::SortColumn(key))
+        };
         let header = row![
-            text("Name").width(Length::Fill),
-            text("Size").width(SIZE_W),
-            text("Date Modified").width(DATE_W),
+            container(head("Name", "name")).width(Length::Fill),
+            container(head("Size", "size")).width(SIZE_W),
+            container(head("Date Modified", "mtime")).width(DATE_W),
         ]
         .padding([0.0, PAD_X])
         .height(ROW_H)
@@ -36,10 +42,20 @@ impl Flea {
         // A transient message wins the slot; the running transfer's sticky line is under it.
         let (note, ink) = match &self.message {
             Some((t, _, alert)) => (t.clone(), if *alert { p.error } else { p.foreground }),
+            None if self.pane.search_listed() && self.pane.search.mode == crate::search::Mode::Results => (self.pane.search_status(), p.foreground),
             None => (self.pane.sticky.clone(), p.foreground),
         };
+        // The query line takes the path's place while it is being typed in: the scope, the query and
+        // a caret, with Tab's other depth and Escape's way out spelled beside it.
+        let left: Element<'_, Message> = if self.pane.search.mode == crate::search::Mode::Typing {
+            let s = &self.pane.search;
+            let scope = format!("Search {}{}", self.pane.path, if s.deep { " and subfolders" } else { "" });
+            row![text(scope).color(p.muted), text(format!("{}▏", s.query)).color(p.foreground)].spacing(10).width(Length::Fill).into()
+        } else {
+            text(self.pane.path.clone()).width(Length::Fill).wrapping(text::Wrapping::None).into()
+        };
         let status = row![
-            text(self.pane.path.clone()).width(Length::Fill).wrapping(text::Wrapping::None),
+            left,
             text(note).color(ink),
             text(count),
         ]
@@ -51,7 +67,7 @@ impl Flea {
 
         let listing = column![header, self.preview_layer(body)].width(Length::Fill);
         let main: Element<'_, Message> = if self.rail.shown { row![self.rail_view(), listing].into() } else { listing.into() };
-        let window = container(column![main, status])
+        let window = container(column![self.chrome_view(), main, status])
             .style(move |_| container::Style::default().background(p.background).color(p.foreground))
             .width(Length::Fill)
             .height(Length::Fill);
@@ -103,9 +119,16 @@ impl Flea {
                 } else {
                     p.foreground
                 };
+                // A search result is a path under the walked folder: the leaf is its name and the rest
+                // its location, drawn muted beside it, the split the client makes (protocol "search").
+                let (leafname, location) = match (self.pane.search_listed(), r.n.rsplit_once('/')) {
+                    (true, Some((dir, leaf))) => (leaf.to_string(), dir.to_string()),
+                    _ => (r.n.clone(), String::new()),
+                };
                 let name = match &r.l {
-                    Some(target) => format!("{} -> {}", r.n, target),
-                    None => r.n.clone(),
+                    Some(target) => format!("{leafname} -> {target}"),
+                    None if !location.is_empty() => format!("{leafname}   {location}"),
+                    None => leafname,
                 };
                 // p 0 is a failed stat, and it condemns s and m with it; see docs/protocol.md "rows".
                 let size = if r.d { String::new() } else if link { "link".into() } else if r.p == 0 { "--".into() } else { format::size(r.s) };

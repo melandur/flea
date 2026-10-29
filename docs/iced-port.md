@@ -157,6 +157,26 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      **Test hygiene:** a stub a test has just written can be refused with `ETXTBSY` by a sibling
      test's fork still holding its write descriptor; `testexec::wait_executable` closes that, after
      one red in a full parallel run and six greens since.
-6. Settings panel, theme catalog, tabs, split, search, filter, path bar.
+6. **Settings, themes, tabs, split, search, filter and the path bar, in three parts.**
+   - **6a, search, sort and the chrome (done, the keys undriven live).** `search.rs` is
+     `ui/js/Search.js` and `ui/js/Sort.js`: Ctrl+F walks this folder and Ctrl+Shift+F every folder
+     below; typing restarts a 120 ms timer and the settled query is walked once; a counter drops
+     every line of a walk a newer one superseded; `searched` means the rows were just ranked, so the
+     window is asked for again from row 0; Escape cancels a running walk and then returns; Right on
+     the line waits for the walk of exactly this query; a single tap on a result reveals it in its
+     folder; and a search listing defers the watched re-read like a selection does. Sort chords start
+     size and date descending and reverse on a second press, header clicks start ascending, and the
+     order rides every later listing this session. `searchkeys.rs` is the query line's own keys,
+     type-ahead from the listing, typing back into the results, and the clipboard, with
+     `QueryLine.oneLine` checked against the JS in node. `pathbar.rs` is `ui/js/PathBar.js` and
+     `ui/js/Crumbs.js`; `chrome.rs` draws the crumbs, waits out the double-click interval before a
+     single click navigates, opens the path bar on a double click, and completes with Tab through
+     `peek`, matched on folder and hidden flag. A live test walks a real tree and reads the ranking
+     back: the whole name, then a name the query starts, then a later word.
+     **Not ported:** the filter, which the Default keymap no longer reaches and which arrives with
+     the chrome's buttons; the search's location column as its own column (it is drawn muted beside
+     the name).
+   - **6b, tabs and split (next).**
+   - **6c, the settings panel and the theme catalog.**
 7. The picker for `tools/flea-portal`, then `flea --gui` switches to the iced binary, after a
    field-bench run says the switch does not lose a column Flea wins today.

@@ -245,3 +245,38 @@ fn the_preview_reads_an_archive_index_and_renders_an_image_through_the_real_back
     assert_eq!((t.delim, t.records(), t.row(1)), (';', 2, vec!["widget".to_string(), "3".into()]));
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_deep_search_walks_ranks_and_returns_through_the_real_backend() {
+    let Some(bin) = std::env::var("FLEA_BIN").ok().filter(|b| !b.is_empty()) else {
+        eprintln!("live: FLEA_BIN is not set, so the search round trip was skipped");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("flea-iced-search-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("docs/deep")).unwrap();
+    for f in ["docs/deep/helper.txt", "docs/the_helper_notes.md", "helper", "unrelated.txt"] {
+        std::fs::write(root.join(f), b"x").unwrap();
+    }
+    let root_s = root.to_str().unwrap().to_string();
+    let mut live = Live::start(&bin);
+    let out = live.pane.open(root_s.clone(), None);
+    live.run(out);
+    live.until("the listing", |p| p.listed_once && !p.list_in_flight());
+
+    // Ctrl+Shift+F, "helper", the live timer firing at once as it would after 120 ms idle.
+    let mut out = live.pane.search_start(true);
+    out.extend(live.pane.search_typed("helper"));
+    let generation = out.iter().rev().find_map(|e| if let Effect::SearchTimer(g) = e { Some(*g) } else { None }).unwrap();
+    let out = live.pane.search_live(generation);
+    live.run(out);
+    live.until("the ranked results", |p| !p.search.running && p.total == 3 && p.rows.len() == 3);
+    // The whole name first, then the name it starts, then the one it starts a later word of.
+    assert_eq!(live.names(), vec!["helper", "docs/deep/helper.txt", "docs/the_helper_notes.md"]);
+    assert!(live.pane.search_status().starts_with("3 found in "));
+
+    let out = live.pane.search_close();
+    live.run(out);
+    live.until("the folder again", |p| !p.list_in_flight() && p.total == 3 && p.path == root_s && !p.search_listed());
+    drop(live);
+    let _ = std::fs::remove_dir_all(&root);
+}
