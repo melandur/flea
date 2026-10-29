@@ -239,6 +239,8 @@ impl Picking {
                     self.c.say("Network places open from the Flea window in this build; pick from the mounted folder.", false)
                 }
                 Activation::Say(text, error) => self.c.say(&text, error),
+                // The chooser's rail lists no Trash, which is not a place a file is picked from.
+                Activation::Trash => self.c.say("The Trash opens from the Flea window.", false),
             },
             None => vec![],
         };

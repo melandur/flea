@@ -1,0 +1,223 @@
+// The Trash view's half of the shell, ui/TrashHost.qml: opening it over the focused pane, running
+// what trash.rs decides, the keys it owns while it is up (every one of them, so nothing reaches the
+// listing it covers), its menus, and the Trash count `gio info` reads for the rail's menu.
+use crate::menu::Kind;
+use crate::trash::{Extend, Out};
+use crate::trashview::{Msg, LIST_ID};
+use crate::wire::Request;
+use crate::{blocking, Flea, Message, ROW_H};
+use iced::keyboard::{key::Named, Key, Modifiers};
+use iced::widget::{operation, scrollable};
+use iced::Task;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
+
+// TrashMonitor's query: GIO's own count, Trash on other mounted volumes included, bounded at 10 s.
+fn trash_count() -> Option<usize> {
+    let mut child = Command::new("gio")
+        .args(["info", "--attributes=trash::item-count", "trash:///"])
+        .env("LC_ALL", "C")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while child.try_wait().ok()?.is_none() {
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let out = child.wait_with_output().ok()?;
+    // Sample GIO output: "  trash::item-count: 12".
+    let text = String::from_utf8_lossy(&out.stdout);
+    out.status.success().then_some(())?;
+    text.lines().find_map(|l| l.trim().strip_prefix("trash::item-count:")).and_then(|n| n.trim().parse().ok())
+}
+
+impl Flea {
+    pub(crate) fn run_trash(&mut self, outs: Vec<Out>) -> Task<Message> {
+        let mut tasks = vec![];
+        for out in outs {
+            tasks.push(match out {
+                Out::Send(v) => self.run(vec![crate::pane::Effect::Send(Request::Json(v))]),
+                Out::Status(text, alert) => self.show(text, alert),
+                // The status bar here holds one line, so a failure's detail rides after its headline.
+                Out::Result(headline, detail, error) => {
+                    let line = if detail.is_empty() { headline } else { format!("{headline} · {}", detail.replace('\n', " · ")) };
+                    Task::batch([self.show(line, error), self.refresh_trash_count(false)])
+                }
+                Out::Closed => {
+                    self.rail.focused = false;
+                    Task::none()
+                }
+                Out::Reveal(row) => self.reveal_trash_row(row),
+            });
+        }
+        Task::batch(tasks)
+    }
+
+    // TrashHost.open: the overlay preview, the share browser and the selection all give way to it.
+    pub(crate) fn open_trash(&mut self, action: &str) -> Task<Message> {
+        if self.trash.confirming() {
+            return Task::none();
+        }
+        if self.trash.opened {
+            return self.trash_action(if action.is_empty() { "openTrash" } else { action });
+        }
+        let closed = if self.preview.active {
+            let effects = self.preview.close();
+            self.run_preview(effects)
+        } else {
+            Task::none()
+        };
+        self.share_browser = None;
+        self.pane.selection.clear();
+        self.close_menu();
+        self.rail.focused = false;
+        let rows = (self.viewport_h / ROW_H).ceil() as usize;
+        self.trash.window_rows = (rows + 2).clamp(1, crate::trash::MAX_WINDOW);
+        self.trash.visible = rows.max(1);
+        let outs = self.trash.open(action);
+        Task::batch([closed, self.run_trash(outs)])
+    }
+
+    // TrashHost.action: a row from either menu, or the view's own Empty Trash.
+    pub(crate) fn trash_action(&mut self, name: &str) -> Task<Message> {
+        if self.trash.confirming() {
+            return Task::none();
+        }
+        if !self.trash.opened {
+            return self.open_trash(name);
+        }
+        let outs = match name {
+            "restoreTrashSelection" => self.trash.restore(false),
+            "deletePermanently" => self.trash.prepare(false),
+            "restoreAll" => self.trash.restore(true),
+            "emptyTrash" => self.trash.prepare(true),
+            _ => vec![],
+        };
+        self.run_trash(outs)
+    }
+
+    pub(crate) fn trash_message(&mut self, msg: Msg) -> Task<Message> {
+        let outs = match msg {
+            Msg::Row(i) => return self.trash_row_pressed(i),
+            // A right click on a row outside the selection selects it first, then raises the menu.
+            Msg::RowMenu(i) => {
+                let marked = self.trash.row_at(i).is_some_and(|r| self.trash.is_selected(&r.uri));
+                let chose = if marked { Task::none() } else { self.trash_row_pressed(i) };
+                let y = ROW_H * 3.0 + (i.saturating_sub(self.trash.top) + 1) as f32 * ROW_H;
+                let total = self.trash.total;
+                return Task::batch([chose, self.open_trash_menu(Kind::TrashSelection, None, y, total)]);
+            }
+            Msg::Back => self.trash.close(),
+            Msg::Empty => self.trash.prepare(true),
+            Msg::Scrolled(vp) => {
+                self.trash.top = (vp.absolute_offset().y / ROW_H).floor().max(0.0) as usize;
+                self.trash.visible = (vp.bounds().height / ROW_H).ceil().max(1.0) as usize;
+                self.trash.ensure_window()
+            }
+            Msg::Cancel => self.trash.confirm_cancel(),
+            Msg::Delete => {
+                if let Some(c) = self.trash.confirmation.as_mut() {
+                    c.destructive = true;
+                }
+                self.trash.confirm_activate()
+            }
+            Msg::Tick => self.trash.check_tick(),
+            Msg::Count(n, menu) => {
+                self.trash.count = n;
+                return if menu { self.open_rail_trash_menu() } else { Task::none() };
+            }
+        };
+        self.run_trash(outs)
+    }
+
+    pub(crate) fn trash_reply(&mut self, v: &serde_json::Value) -> Task<Message> {
+        let outs = self.trash.receive(v);
+        self.run_trash(outs)
+    }
+
+    // The count is read again before the rail's Trash menu opens, so its rows grey on what is there now.
+    pub(crate) fn refresh_trash_count(&mut self, then_menu: bool) -> Task<Message> {
+        Task::perform(blocking(trash_count), move |n| Message::Trash(Msg::Count(n, then_menu)))
+    }
+
+    fn open_rail_trash_menu(&mut self) -> Task<Message> {
+        let Some(at) = self.rail.entries.iter().position(|e| e.kind == crate::rail::Kind::Trash) else { return Task::none() };
+        // The Trash row sits in PLACES, under its heading, on the rail's 8 px top padding.
+        let y = ROW_H + 8.0 + ROW_H + (at + 1) as f32 * ROW_H;
+        let total = self.trash.count.unwrap_or(0);
+        self.open_trash_menu(Kind::Trash, Some(crate::PAD_X), y, total)
+    }
+
+    fn reveal_trash_row(&mut self, row: usize) -> Task<Message> {
+        let t = &self.trash;
+        let visible = t.visible.max(1);
+        let top = if row < t.top { row } else if row >= t.top + visible { row + 1 - visible } else { return Task::none() };
+        self.trash.top = top;
+        operation::scroll_to(LIST_ID, scrollable::AbsoluteOffset { x: 0.0, y: top as f32 * ROW_H })
+    }
+
+    // Every key while the view is up: the rail's own when it holds the keyboard, the confirmation's
+    // while it is open, and the view's otherwise; None only when the view is shut.
+    pub(crate) fn trash_key(&mut self, key: &Key, modifiers: Modifiers) -> Option<Task<Message>> {
+        if !self.trash.opened {
+            return None;
+        }
+        if self.rail.focused {
+            if *key == Key::Named(Named::Tab) {
+                self.rail.focused = false;
+                return Some(Task::none());
+            }
+            return Some(self.rail_key(key).unwrap_or(Task::none()));
+        }
+        if let Some(c) = self.trash.confirmation.as_mut() {
+            let outs = match key.as_ref() {
+                Key::Named(Named::Escape) => self.trash.confirm_cancel(),
+                _ if modifiers.control() || modifiers.alt() || modifiers.logo() => vec![],
+                Key::Named(Named::Tab) => {
+                    c.destructive = !c.destructive;
+                    vec![]
+                }
+                Key::Named(Named::ArrowRight) => {
+                    c.destructive = true;
+                    vec![]
+                }
+                Key::Named(Named::ArrowLeft) => {
+                    c.destructive = false;
+                    vec![]
+                }
+                Key::Named(Named::Enter | Named::Space) => self.trash.confirm_activate(),
+                _ => vec![],
+            };
+            return Some(self.run_trash(outs));
+        }
+        let plain = !(modifiers.control() || modifiers.shift() || modifiers.alt() || modifiers.logo());
+        let cursor = self.trash.cursor as isize;
+        let outs = match key.as_ref() {
+            Key::Named(Named::Escape) => self.trash.close(),
+            Key::Named(Named::Backspace) if plain => self.trash.close(),
+            Key::Named(Named::ArrowDown) => self.trash.choose(cursor + 1, Extend::No),
+            Key::Named(Named::ArrowUp) => self.trash.choose(cursor - 1, Extend::No),
+            Key::Named(Named::Space) => self.trash.choose(cursor, Extend::Toggle),
+            Key::Character("a") if modifiers.control() => self.trash.select_all(),
+            Key::Named(Named::Delete) => self.trash.prepare(false),
+            Key::Named(Named::Tab) => {
+                self.rail.focused = self.rail.shown;
+                vec![]
+            }
+            Key::Named(Named::F5) if plain => self.trash.refresh(),
+            Key::Character("m") | Key::Named(Named::ContextMenu) => {
+                let kind = if self.trash.selected_count() > 0 { Kind::TrashSelection } else { Kind::Trash };
+                let total = self.trash.total;
+                return Some(self.open_trash_menu(kind, None, 2.0 * ROW_H, total));
+            }
+            _ => vec![],
+        };
+        Some(self.run_trash(outs))
+    }
+}

@@ -59,6 +59,7 @@ APP=""
 cleanup() {
     [ -n "$APP" ] && kill "$APP" 2> /dev/null
     [ -n "$COMP" ] && kill "$COMP" 2> /dev/null
+    [ -n "${BUS_PID:-}" ] && kill "$BUS_PID" 2> /dev/null
     sleep 0.5
     [ -n "$COMP" ] && rm -f "$XDG_RUNTIME_DIR/sway-ipc.$(id -u).$COMP.sock"
 }
@@ -84,6 +85,7 @@ launch() {
     env -u DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY="$SOCK" \
         XDG_STATE_HOME="$D/state" XDG_CACHE_HOME="$D/cache" XDG_DATA_HOME="$D/data" XDG_CONFIG_HOME="$D/config" \
         FLEA_BIN="$BIN" FLEA_ICED_TRACE=1 FLEA_PICKER_REPLY="$D/reply.json" \
+        DBUS_SESSION_BUS_ADDRESS="${TRASH_BUS:-${DBUS_SESSION_BUS_ADDRESS:-}}" \
         "$ICED" "$@" > "$D/out.log" 2> "$D/trace.log" &
     APP=$!
     sleep 3
@@ -285,6 +287,43 @@ k -k Right; sleep 1; shot overlay-code; k -k Escape; sleep 0.5
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 # The chooser below counts rows in the tree, so the folder goes with the window.
 rm -rf "$T/media"
+
+# The Trash view. trash:/// is gvfsd-trash's, which on the session bus is the operator's own Trash,
+# so this window gets a private bus whose gvfsd is started with the sandbox's data home and serves
+# only the sandbox Trash. gvfsd also lists .Trash-<uid> on other mounted drives, so nothing
+# destructive is pressed unless that private listing holds exactly the file this suite trashed.
+BUSOUT=$(env XDG_DATA_HOME="$D/data" dbus-daemon --session --fork --print-address=1 --print-pid=1)
+TRASH_BUS=$(printf '%s\n' "$BUSOUT" | sed -n 1p); BUS_PID=$(printf '%s\n' "$BUSOUT" | sed -n 2p)
+pgio() { DBUS_SESSION_BUS_ADDRESS="$TRASH_BUS" XDG_DATA_HOME="$D/data" gio "$@" 2> /dev/null; }
+alone() { [ "$(pgio trash --list)" = "$(printf 'trash:///%s\t%s' "$1" "$T/trashbin/$1")" ] && echo yes || echo no; }
+rail_trash() { WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 60 137; sleep 1.5; }
+jq '.view = "list"' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+mkdir -p "$T/trashbin"; echo one > "$T/trashbin/keep-me.txt"; echo two > "$T/trashbin/gone.txt"
+launch "$T/trashbin"
+k -k Delete; sleep 1
+check "Delete moves the cursor row into the sandbox Trash" "yes no" "$(exists "$D/data/Trash/files/gone.txt") $(exists "$T/trashbin/gone.txt")"
+if [ "$(alone gone.txt)" = yes ]; then
+    rail_trash; shot trash
+    check "the rail's Trash row opens the view, listing with recovery" 1 "$(grep -c '"op":"list","recover":true' "$D/trace.log")"
+    k -k space; k -k Delete; sleep 1; shot trash-confirm
+    k -k Return; sleep 1
+    check "Enter on the card's Cancel deletes nothing" yes "$(exists "$D/data/Trash/files/gone.txt")"
+    k -k Delete; sleep 1; k -k Right; k -k Return; sleep 1.5
+    check "the destructive button, reached deliberately, deletes it from disk" no "$(exists "$D/data/Trash/files/gone.txt")"
+    k -k Escape; sleep 0.5; k -k Delete; sleep 1
+    if [ "$(alone keep-me.txt)" = yes ]; then
+        rail_trash; k -k space; k m; k -k Return; sleep 1.5
+        check "Restore from the selection's menu puts it back" "yes no" "$(exists "$T/trashbin/keep-me.txt") $(exists "$D/data/Trash/files/keep-me.txt")"
+        k -k Escape; sleep 0.5
+    else
+        echo "skip  restore: the private Trash lists more than this suite's own file"
+    fi
+else
+    echo "skip  the Trash view's destructive checks: the private Trash lists more than this suite's own file"
+fi
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+kill "$BUS_PID" 2> /dev/null; BUS_PID=""; TRASH_BUS=""
+rm -rf "$T/trashbin"
 APP=""
 
 # The chooser, the window tools/flea-portal opens through flea --pick.

@@ -489,6 +489,30 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      Highlighter trait; it adds no crate. **Deviation:** the overlay colours a line at a time where
      the JavaScript coloured 4 KB runs, and a run carried a parameter list across its own line
      breaks, so a list's later lines draw their names plain here; a comment or string still carries.
-   - **8d-iii**, the trash view.
+   - **8d-iii-a, the Trash view (done; the live count and the sweep are 8d-iii-b).** `trash.rs` and
+     `trashreceive.rs` are ui/TrashView.qml: the backend's one `trashbrowse` session listed a window
+     at a time (with recovery on open), a selection held by URI and the identity each row was listed
+     with, select-all as the backend's own snapshot with rows taken out of it, restore, and permanent
+     deletion only through a prepared confirmation; one request in flight, and a reply taken only
+     when it answers it. A Trash that changes under an open confirmation is prepared again over the
+     same ask with its token, and a stale delete is reviewed again rather than failed; a finished
+     operation leaves the items that failed selected. `trashview.rs` draws the view over the focused
+     pane (its strip with Back, the greyed Up, the count and size, and Empty Trash; Name, Original
+     location, Deleted; rows drawn only for the held window) and TrashConfirm, whose Cancel holds the
+     keyboard until Tab or Right reaches the destructive button; the open card is checked every
+     2.5 s. `trashshell.rs` holds its keys (every key while it is up, so nothing reaches the
+     listing: the arrows, Space, Ctrl+A, Delete, F5, `m`, Tab to the rail, Escape and Backspace to
+     close) and its two menus, Restore / Delete permanently over a selection and Open / Restore all /
+     Empty Trash otherwise, the second also on the rail's Trash row, read on a fresh
+     `gio info trash::item-count`. The rail's Trash row opens the view. `Message` moved out of
+     `main.rs` into `message.rs` to make room. **Not ported, because nothing binds them since the key
+     cut:** the dd pair and the shift-arrow extend. **Deviation:** the status bar here has one line,
+     so a failure's detail rides after its headline rather than in QML's expandable queue. Driven
+     headless on a private session bus whose gvfsd serves the sandbox's own Trash (the session bus's
+     is the operator's), and only when that private listing holds exactly the suite's own file:
+     Delete trashes the cursor row, the rail's row opens the view, Enter on the card's Cancel deletes
+     nothing, the destructive button deletes from disk, and Restore from the menu puts a file back,
+     57 checks.
+   - **8d-iii-b**, the Trash count's live monitor and the rail's badge, and the opt-in 30-day sweep.
    - **8d-iv**, tabs with the Places menu, and the stored display settings (density, columns, text
      size).

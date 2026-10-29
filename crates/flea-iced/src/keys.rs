@@ -91,6 +91,9 @@ impl Flea {
             self.message = None;
             return Task::none();
         }
+        if let Some(task) = self.trash_key(&key, modifiers) {
+            return task;
+        }
         if let Some(task) = self.filter_key(&key, modifiers, text.as_deref()) {
             return task;
         }

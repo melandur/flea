@@ -191,3 +191,14 @@ fn a_frame_flips_at_the_far_edge_and_shifts_only_when_neither_side_fits() {
     assert_eq!(clamp(20.0, 50.0, 60.0), 0.0);
     assert_eq!(clamp(10.0, 500.0, 400.0), 0.0);
 }
+
+#[test]
+fn the_trash_menus_grey_on_an_empty_or_busy_trash_and_only_delete_can_be_hidden() {
+    let rows = |items: Vec<Item>| items.into_iter().map(|i| match i { Item::Row(e) => format!("{}{}", e.action, if e.disabled { "-" } else { "" }), Item::Separator => "|".into() }).collect::<Vec<_>>();
+    assert_eq!(rows(trash_entries(Kind::Trash, 3, false, &[])), ["open", "|", "restoreAll", "|", "emptyTrash"]);
+    assert_eq!(rows(trash_entries(Kind::Trash, 0, false, &[])), ["open", "|", "restoreAll-", "|", "emptyTrash-"]);
+    assert_eq!(rows(trash_entries(Kind::Trash, 3, true, &[])), ["open", "|", "restoreAll-", "|", "emptyTrash-"]);
+    assert_eq!(rows(trash_entries(Kind::TrashSelection, 3, false, &[])), ["restoreTrashSelection", "|", "deletePermanently"]);
+    assert_eq!(rows(trash_entries(Kind::TrashSelection, 3, false, &["delete".into()])), ["restoreTrashSelection"]);
+    assert_eq!(rows(trash_entries(Kind::Trash, 3, false, &["emptyTrash".into()])), ["open", "|", "restoreAll"]);
+}

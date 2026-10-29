@@ -37,6 +37,7 @@ mod card_live_tests;
 mod marks;
 mod media;
 mod menu;
+mod message;
 mod menufacts;
 mod menushell;
 mod menuview;
@@ -90,6 +91,9 @@ mod tables {
 }
 mod tasks;
 mod theme;
+mod trash;
+mod trashshell;
+mod trashview;
 mod thumbs;
 mod watch;
 mod keys;
@@ -99,8 +103,9 @@ mod view;
 mod wire;
 
 use backend::Backend;
+pub(crate) use message::Message;
 use iced::keyboard;
-use iced::widget::{image, scrollable};
+use iced::widget::image;
 use iced::{window, Font, Task};
 use pane::Pane;
 use std::collections::{HashMap, VecDeque};
@@ -165,78 +170,9 @@ struct Flea {
     // menuOnNeighbour: the folder and row a neighbour's right click is waiting to raise the menu on.
     pending_menu: Option<(String, String)>,
     colprev: columnpreview::ColumnShell,
+    trash: trash::Trash,
 }
 
-#[derive(Debug, Clone)]
-enum Message {
-    // A backend's line, tagged with the spawn it came from, which names the pane.
-    Backend(u64, backend::Event),
-    Key(keyboard::Event),
-    Scrolled(u8, scrollable::Viewport),
-    RowPressed(u8, usize),
-    RenameInput(String),
-    RenameSubmit,
-    Opened(u8, Option<i32>, String),
-    WatchFired(u8),
-    Settled(u8, u64),
-    // The scrollable reports only on a scroll, so the window's own size is what tells the pane how
-    // many rows it shows before the first one.
-    Resized(iced::Size),
-    DeviceListed(Option<String>),
-    DeviceRan(devices::Job, Option<i32>),
-    DeviceTimer(devices::Timer, u64),
-    RailPressed(usize),
-    RailMenu(usize),
-    RailChose(rail::Action),
-    RailMenuClosed,
-    NetTick,
-    NetListed(process::Ran),
-    NetLeg(u64, network::Leg, process::Ran),
-    NetAuth(u64, process::Ran),
-    FavouriteSaved(Result<Vec<serde_json::Value>, String>),
-    Dialog(dialog::Msg),
-    PreviewLoaded(String, Result<Result<previewshell::Table, String>, ()>),
-    PreviewImage(String, Option<image::Handle>),
-    PreviewSettled(u64),
-    PreviewClose,
-    TableScrolled(f32),
-    SearchLive(u8, u64),
-    SearchPaste(Option<String>),
-    SortColumn(u8, &'static str),
-    PanelLoaded(Option<serde_json::Value>, Box<settings::Facts>),
-    PanelSaved(Option<serde_json::Value>),
-    PanelClose,
-    PanelSection(&'static str),
-    PanelActivate(usize),
-    PanelPick(usize, usize),
-    PanelRemoveRule(usize),
-    Card(openrulecard::CardMsg),
-    CrumbPressed(usize),
-    CrumbSettle(u64),
-    PathInput(String),
-    PathSubmit,
-    PdfRendered(Result<pdf::Page, ()>),
-    PdfTurn(i32),
-    PdfZoom(i32),
-    MediaTick,
-    MediaToggle,
-    MediaMute,
-    NetUnmounted(process::Ran),
-    RailRenameInput(String),
-    RailRenameSubmit,
-    ShareChosen(usize),
-    Decoded(String, Option<image::Handle>),
-    Expired(u64),
-    Saved(bool),
-    CloseRequested,
-    QuitDeadline,
-    Menu(menushell::Msg),
-    Action(cardshell::Msg),
-    Job(jobkeys::Msg),
-    Send(sendshell::Msg),
-    Chrome(chrome::Act),
-    Column(columnsview::Msg),
-}
 
 impl Flea {
     // Every input ends by asking whether the watched re-read it was holding can now be paid, and,
@@ -298,6 +234,7 @@ impl Flea {
             Message::Send(msg) => self.send_message(msg),
             Message::Chrome(act) => self.chrome_act(act),
             Message::Column(msg) => self.column_message(msg),
+            Message::Trash(msg) => self.trash_message(msg),
             m @ (Message::PanelLoaded(..)
             | Message::PanelSaved(_)
             | Message::PanelClose

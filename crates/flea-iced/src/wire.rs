@@ -83,6 +83,8 @@ pub enum Reply {
     // A menuaction answer other than installed, and a permissions answer, for actioncard.rs.
     MenuAction(Value),
     Permissions(Value),
+    // A trashbrowse answer, which trash.rs reads whole.
+    Trash(Value),
     // The archive and convert jobs' lines and the formats probe, for jobshell.rs.
     Job(Value),
     Other,
@@ -172,6 +174,7 @@ pub fn parse(line: &str) -> Option<Reply> {
         "menuaction" => Reply::MenuAction(v.clone()),
         "formats" | "localsendpeers" | "localsendsent" | "archivestarted" | "archiveprogress" | "archivedone" | "convertstarted" | "convertchecked" | "convertdone" => Reply::Job(v.clone()),
         "permissions" => Reply::Permissions(v.clone()),
+        "trashbrowse" => Reply::Trash(v.clone()),
         "peeked" => Reply::Peeked {
             path: field("path"),
             hidden: flag("hidden"),

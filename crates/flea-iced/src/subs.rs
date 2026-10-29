@@ -17,6 +17,12 @@ impl Flea {
             iced::event::listen_with(chrome::mouse_back).map(Message::Chrome),
             window::close_requests().map(|_| Message::CloseRequested),
             window::resize_events().map(|(_, size)| Message::Resized(size)),
+            // TrashView's 2.5 s check while a confirmation is open: a nested change GIO's monitor misses.
+            if self.trash.confirmation.is_some() {
+                iced::time::every(std::time::Duration::from_millis(2500)).map(|_| Message::Trash(crate::trashview::Msg::Tick))
+            } else {
+                Subscription::none()
+            },
             // A playing file is drawn at its own pace, about 30 frames a second; a paused one is
             // only polled for its bus, and nothing ticks at all without media open.
             match self.playback.media.as_ref().map(|m| m.playing).or(self.column_media_playing()) {

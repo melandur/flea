@@ -9,6 +9,9 @@
 pub enum Kind {
     File,
     Background,
+    // TrashHost.menuAt: the Trash's own rows, and a selection inside the Trash view.
+    Trash,
+    TrashSelection,
 }
 
 // What the rules read. `targets` is ui/js/Ops.js targetIndices' length: the selection when there is
@@ -148,6 +151,33 @@ pub fn entries(kind: Kind, f: &Facts, hidden: &[String]) -> Vec<Item> {
         }
         group = grp;
         out.push(Item::Row(e));
+    }
+    out
+}
+
+// Menu.trashEntries and TrashHost's selection menu. Restore all and Empty Trash grey on an empty or
+// busy Trash; a selection's two rows grey while a request is in flight, and only Delete can be hidden.
+pub fn trash_entries(kind: Kind, total: usize, busy: bool, hidden: &[String]) -> Vec<Item> {
+    let entry = |id, action, label, glyph, disabled| Entry { id, action, label, glyph, disabled, danger: false, hint: "", errored: false, sub: vec![] };
+    if kind == Kind::TrashSelection {
+        let mut out = vec![Item::Row(entry("restoreTrashSelection", "restoreTrashSelection", "Restore", "undo", busy))];
+        if !is_hidden(hidden, "delete") {
+            out.push(Item::Separator);
+            out.push(Item::Row(Entry { danger: true, ..entry("delete", "deletePermanently", "Delete permanently", "trash", busy) }));
+        }
+        return out;
+    }
+    let mut out = vec![];
+    let mut group = "";
+    for &(id, label, glyph, kinds, grp, _) in INVENTORY {
+        if !kinds.contains('T') || is_hidden(hidden, id) {
+            continue;
+        }
+        if !out.is_empty() && group != grp {
+            out.push(Item::Separator);
+        }
+        group = grp;
+        out.push(Item::Row(entry(id, id, label, glyph, id != "open" && (total == 0 || busy))));
     }
     out
 }

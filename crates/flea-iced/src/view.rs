@@ -75,6 +75,10 @@ impl Flea {
     }
 
     fn pane_column<'a>(&'a self, v: PaneView<'a>) -> Element<'a, Message> {
+        // The Trash view covers the focused pane whole, header and listing alike.
+        if v.focused && self.trash.opened {
+            return self.trash_view();
+        }
         let p = self.palette;
         // ui/Header.qml: a click sorts by that column, and the order in force carries its mark.
         let order = &v.pane.order;

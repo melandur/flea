@@ -233,9 +233,27 @@ impl Flea {
         }
     }
 
+    // The Trash's two menus, at a height in the window: under the rail's Trash row when `x` is given,
+    // across the middle of the pane otherwise, where TrashView raises its own.
+    // `total` is the view's own count inside it and the monitor's from the rail, as TrashHost has it.
+    pub(crate) fn open_trash_menu(&mut self, kind: Kind, x: Option<f32>, y: f32, total: usize) -> Task<Message> {
+        self.close_menu();
+        let items = menu::trash_entries(kind, total, self.trash.busy(), &self.effective_hidden());
+        let Some(cursor) = menu::first(&items) else { return Task::none() };
+        let (x0, width) = self.pane_box();
+        let window_h = self.viewport_h + 3.0 * ROW_H;
+        let x = x.unwrap_or_else(|| x0 + menu::clamp(width / 2.0, MENU_W, width));
+        let y = menu::clamp(y, frame_height(&items), window_h);
+        self.menu = Some(ListMenu { kind, items, cursor, flyout: false, sub_cursor: 0, x, y, path: String::new(), names: vec![] });
+        Task::none()
+    }
+
     fn menu_act(&mut self, action: &'static str, label: &'static str) -> Task<Message> {
         let Some(m) = self.menu.take() else { return Task::none() };
         self.pane.menu_open = false;
+        if matches!(m.kind, Kind::Trash | Kind::TrashSelection) {
+            return if action == "open" { self.open_trash("") } else { self.trash_action(action) };
+        }
         if m.kind == Kind::File && (m.path != self.pane.path || m.names != self.targets()) {
             return self.show("Selected items changed; reopen the menu.".into(), true);
         }
@@ -299,7 +317,7 @@ impl Flea {
         let path = match (kind, self.pane.row_at(self.pane.cursor)) {
             (Kind::File, Some(r)) => join(&self.pane.path, &r.n),
             (Kind::File, None) => return Task::none(),
-            (Kind::Background, _) => self.pane.path.clone(),
+            (Kind::Background | Kind::Trash | Kind::TrashSelection, _) => self.pane.path.clone(),
         };
         let label = path.trim_end_matches('/').rsplit('/').next().filter(|l| !l.is_empty()).unwrap_or("/").to_string();
         let op = serde_json::json!({ "op": "add", "record": { "label": label, "path": path } }).to_string();

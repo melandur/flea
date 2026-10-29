@@ -143,6 +143,7 @@ impl Flea {
             }
             Activation::Share(i) => self.open_share(i),
             Activation::Remote(uri, label) => self.open_remote(&uri, &label),
+            Activation::Trash => self.open_trash(""),
             Activation::Say(text, alert) => {
                 // Nothing opened, so nothing is handed the keyboard.
                 return self.show(text, alert);
@@ -159,6 +160,9 @@ impl Flea {
     pub(crate) fn rail_open_menu(&mut self, index: usize) -> Task<Message> {
         self.rail.cursor = index;
         let Some(entry) = self.rail.entries.get(index) else { return Task::none() };
+        if entry.kind == rail::Kind::Trash {
+            return self.refresh_trash_count(true);
+        }
         let actions = match entry.kind {
             rail::Kind::Device(i) => self.devices.entries.get(i).map(rail::menu).unwrap_or_default(),
             rail::Kind::Share(i) => self.network.entries.get(i).map(rail::share_menu).unwrap_or_default(),

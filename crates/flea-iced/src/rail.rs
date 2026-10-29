@@ -159,6 +159,8 @@ pub enum Activation {
     Share(usize),
     // A favourite that names a network place: opened through the network service.
     Remote(String, String),
+    // The Trash row opens the Trash view over the pane, ui/Sidebar.qml's trashRequested.
+    Trash,
     Say(String, bool),
 }
 
@@ -188,7 +190,7 @@ pub(crate) fn decode_path(raw: &str) -> String {
 pub fn activate(entry: &Entry) -> Activation {
     match &entry.kind {
         Kind::Home => Activation::Open(entry.path.clone()),
-        Kind::Trash => Activation::Say("The Trash view is not in this build yet.".into(), false),
+        Kind::Trash => Activation::Trash,
         Kind::Favourite { error, .. } if !error.is_empty() => {
             Activation::Say(format!("Could not open {} · {error}", entry.label), true)
         }
