@@ -1,7 +1,10 @@
-// Flea's window in iced, Stage 1 of the port: the listing pane over the unchanged `flea --backend`.
+// Flea's window in iced: the listing pane and the write operations over the unchanged `flea --backend`.
 // Everything the QML tree does that is not here yet says so rather than doing nothing.
 mod backend;
 mod format;
+#[cfg(test)]
+mod live_tests;
+mod ops;
 mod pane;
 mod prefs;
 mod theme;
@@ -9,11 +12,11 @@ mod wire;
 
 use backend::Backend;
 use iced::keyboard::{self, key::Named, Key};
-use iced::widget::{column, container, mouse_area, operation, row, scrollable, space, text, Id};
+use iced::widget::{column, container, mouse_area, operation, row, scrollable, space, text, text_input, Id};
 use iced::{window, Background, Border, Color, Element, Font, Length, Subscription, Task};
 use pane::{Effect, Pane};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use theme::Palette;
 use wire::{Order, Request};
 
@@ -25,6 +28,9 @@ const PAD_X: f32 = 14.0;
 const SIZE_W: f32 = 90.0;
 const DATE_W: f32 = 140.0;
 const LIST_ID: &str = "listing";
+const RENAME_ID: &str = "rename";
+// The second press of a double click lands inside this, iced's own mouse::click interval.
+const DOUBLE_TAP: Duration = Duration::from_millis(300);
 // Longer than the backend's own 25 s drain limit; see ui/Backend.qml quitDeadline.
 const QUIT_DEADLINE: Duration = Duration::from_secs(30);
 
@@ -32,7 +38,10 @@ struct Flea {
     pane: Pane,
     backend: Option<Arc<Backend>>,
     palette: Palette,
-    message: Option<(String, u64)>,
+    // The status bar's one transient slot: text, generation, and whether it is an error.
+    message: Option<(String, u64, bool)>,
+    modifiers: keyboard::Modifiers,
+    last_tap: Option<(usize, Instant)>,
     message_gen: u64,
     opening: bool,
     quitting: bool,
@@ -46,7 +55,8 @@ enum Message {
     Key(keyboard::Event),
     Scrolled(scrollable::Viewport),
     RowPressed(usize),
-    RowActivated(usize),
+    RenameInput(String),
+    RenameSubmit,
     Opened(Option<i32>, String),
     WatchFired,
     Expired(u64),
@@ -95,6 +105,8 @@ fn boot() -> (Flea, Task<Message>) {
         palette: Palette::load(),
         message: None,
         message_gen: 0,
+        modifiers: keyboard::Modifiers::default(),
+        last_tap: None,
         opening: false,
         quitting: false,
         viewport_h: 36.0 * ROW_H,
@@ -116,9 +128,13 @@ fn boot() -> (Flea, Task<Message>) {
 
 impl Flea {
     fn say(&mut self, text: String) -> Task<Message> {
+        self.show(text, false)
+    }
+
+    fn show(&mut self, text: String, alert: bool) -> Task<Message> {
         self.message_gen += 1;
         let gen = self.message_gen;
-        self.message = Some((text, gen));
+        self.message = Some((text, gen, alert));
         Task::perform(sleep(Duration::from_millis(pane::MESSAGE_MS)), move |_| Message::Expired(gen))
     }
 
@@ -141,7 +157,9 @@ impl Flea {
                     sleep(Duration::from_millis(pane::WATCH_MS)),
                     |_| Message::WatchFired,
                 )),
-                Effect::Message(text) => tasks.push(self.say(text)),
+                Effect::Message(text) => tasks.push(self.show(text, false)),
+                Effect::Alert(text) => tasks.push(self.show(text, true)),
+                Effect::FocusRename => tasks.push(operation::focus(RENAME_ID)),
                 Effect::SaveHidden(hidden) => {
                     let bin = backend::binary();
                     tasks.push(Task::perform(blocking(move || prefs::save_hidden(&bin, hidden)), Message::Saved));
@@ -180,7 +198,24 @@ impl Flea {
     }
 
     fn key(&mut self, event: keyboard::Event) -> Task<Message> {
-        let keyboard::Event::KeyPressed { key, modifiers, .. } = event else { return Task::none() };
+        if let keyboard::Event::ModifiersChanged(m) = event {
+            self.modifiers = m;
+            return Task::none();
+        }
+        let keyboard::Event::KeyPressed { key, modifiers, repeat, .. } = event else { return Task::none() };
+        if key == Key::Named(Named::Escape) {
+            // An error is dismissed before anything else Escape unwinds.
+            if self.message.as_ref().is_some_and(|m| m.2) {
+                self.message = None;
+                return Task::none();
+            }
+            let effects = self.pane.escape();
+            return self.run(effects);
+        }
+        // The editor owns every other key while it is open; Enter reaches it through on_submit.
+        if self.pane.renaming.is_some() {
+            return Task::none();
+        }
         let effects = match (key.as_ref(), modifiers.control()) {
             (Key::Named(Named::ArrowDown), false) => self.pane.step(1),
             (Key::Named(Named::ArrowUp), false) => self.pane.step(-1),
@@ -189,18 +224,46 @@ impl Flea {
             (Key::Named(Named::Enter), false) => self.pane.activate(),
             (Key::Named(Named::F5), false) => self.pane.reread(),
             (Key::Character("h"), true) => self.pane.toggle_hidden(),
-            (Key::Character(c), true) if "cvxzfbgtnmajkl".contains(c) => {
+            (Key::Character("c"), true) => self.pane.copy(false),
+            (Key::Character("x"), true) => self.pane.copy(true),
+            (Key::Character("v"), true) => self.pane.paste(),
+            (Key::Character("z"), true) => self.pane.undo(),
+            (Key::Character("a"), true) => self.pane.select_all(),
+            (Key::Character("n"), true) => self.pane.new_folder(),
+            (Key::Named(Named::Delete), false) => self.pane.trash(),
+            (Key::Named(Named::F2), false) => self.pane.start_rename(),
+            // A held Space toggles once; the paint gesture of ui/js/Marks.js is not ported yet.
+            (Key::Named(Named::Space), false) if !repeat => self.pane.toggle_select(),
+            (Key::Character(c), true) if "fbgtmjkl".contains(c) => {
                 return self.say(format!("Ctrl+{} is not in this build yet.", c.to_uppercase()));
             }
-            (Key::Named(Named::Delete | Named::Space | Named::F2 | Named::Tab), false) => {
-                return self.say("That key is not in this build yet.".into());
-            }
+            (Key::Named(Named::Tab), false) => return self.say("That key is not in this build yet.".into()),
             _ => return Task::none(),
         };
         self.run(effects)
     }
 
+    // Every input ends by asking whether the watched re-read it was holding can now be paid.
     fn update(&mut self, message: Message) -> Task<Message> {
+        let task = self.handle(message);
+        let owed = self.pane.pay_debt();
+        Task::batch([task, self.run(owed)])
+    }
+
+    // ui/js/Tap.js reads a tap count, and iced's press arrives on both clicks of a double, so the
+    // count is taken here: a second press on the same row inside the interval is the second tap.
+    fn tap(&mut self, index: usize) -> Task<Message> {
+        let now = Instant::now();
+        let taps = match self.last_tap {
+            Some((i, at)) if i == index && now.duration_since(at) < DOUBLE_TAP => 2,
+            _ => 1,
+        };
+        self.last_tap = if taps == 1 { Some((index, now)) } else { None };
+        let effects = self.pane.tap(index, taps, self.modifiers.control(), self.modifiers.shift());
+        self.run(effects)
+    }
+
+    fn handle(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::Backend(backend::Event::Reply(reply)) => {
                 let effects = self.pane.receive(reply);
@@ -227,13 +290,13 @@ impl Flea {
                 let effects = self.pane.viewport(first, visible);
                 self.run(effects)
             }
-            Message::RowPressed(i) => {
-                let effects = self.pane.click(i);
-                self.run(effects)
+            Message::RowPressed(i) => self.tap(i),
+            Message::RenameInput(draft) => {
+                self.pane.rename_input(draft);
+                Task::none()
             }
-            Message::RowActivated(i) => {
-                self.pane.click(i);
-                let effects = self.pane.activate();
+            Message::RenameSubmit => {
+                let effects = self.pane.commit_rename();
                 self.run(effects)
             }
             Message::Opened(code, path) => {
@@ -253,7 +316,7 @@ impl Flea {
                 self.run(effects)
             }
             Message::Expired(gen) => {
-                if self.message.as_ref().map(|m| m.1) == Some(gen) {
+                if self.message.as_ref().is_some_and(|m| m.1 == gen) {
                     self.message = None;
                 }
                 Task::none()
@@ -292,10 +355,18 @@ impl Flea {
             self.listing()
         };
 
-        let count = if self.pane.total == 1 { "1 item".to_string() } else { format!("{} items", format::count(self.pane.total)) };
+        let mut count = if self.pane.total == 1 { "1 item".to_string() } else { format!("{} items", format::count(self.pane.total)) };
+        if !self.pane.selection.is_empty() {
+            count += &format!(" · {} selected", format::count(self.pane.selection.len()));
+        }
+        // A transient message wins the slot; the running transfer's sticky line is under it.
+        let (note, ink) = match &self.message {
+            Some((t, _, alert)) => (t.clone(), if *alert { p.error } else { p.foreground }),
+            None => (self.pane.sticky.clone(), p.foreground),
+        };
         let status = row![
             text(self.pane.path.clone()).width(Length::Fill).wrapping(text::Wrapping::None),
-            text(self.message.as_ref().map(|m| m.0.clone()).unwrap_or_default()).color(p.foreground),
+            text(note).color(ink),
             text(count),
         ]
         .spacing(16)
@@ -332,7 +403,19 @@ impl Flea {
     fn row(&self, i: usize) -> Element<'_, Message> {
         let p = self.palette;
         let cursor = i == self.pane.cursor;
+        let selected = self.pane.selection.contains(&i);
+        let editing = self.pane.renaming.as_ref().filter(|r| r.index == i);
         let cells: Element<'_, Message> = match self.pane.row_at(i) {
+            Some(_) if editing.is_some() => {
+                let r = editing.unwrap();
+                let field = text_input("Name", &r.draft)
+                    .id(Id::new(RENAME_ID))
+                    .on_input_maybe(r.pending.is_none().then_some(Message::RenameInput))
+                    .on_submit(Message::RenameSubmit)
+                    .size(TEXT_PX)
+                    .width(Length::Fill);
+                row![field, text(r.error.clone()).color(p.error)].spacing(12).align_y(iced::Center).into()
+            }
             Some(r) => {
                 let link = format::is_symlink(r.p);
                 let ink = if link {
@@ -368,15 +451,18 @@ impl Flea {
             .width(Length::Fill)
             .align_y(iced::Center)
             .style(move |_| {
+                // The cursor draws the accent fill, a marked row that is not the cursor the plain one.
                 if cursor {
                     container::Style::default()
                         .background(Background::Color(Color { a: 0.18, ..p.accent }))
                         .border(Border { color: p.accent, width: 0.0, radius: 0.0.into() })
+                } else if selected {
+                    container::Style::default().background(p.selection)
                 } else {
                     container::Style::default()
                 }
             });
-        mouse_area(band).on_press(Message::RowPressed(i)).on_double_click(Message::RowActivated(i)).into()
+        mouse_area(band).on_press(Message::RowPressed(i)).into()
     }
 
     fn subscription(&self) -> Subscription<Message> {

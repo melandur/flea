@@ -29,7 +29,22 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
    palette, quit drained through `quit` with the 30 s deadline. Driven live against a 100,001-entry
    directory: first screenful and count correct. **Not yet measured** against the QML window for
    first paint, scroll CPU or PSS, and the keyboard path has been unit tested but not driven live.
-2. Selection, clipboard, trash, rename, new folder, undo, transfers and their status line.
+2. **Write operations (done, keyboard and mouse undriven).** `ops.rs` ports ui/js/Ops.js,
+   Selection.js and Tap.js and PaneWire's write handlers: Space, Ctrl+A, click, Ctrl+click,
+   Shift+click and a double click counted from two presses; Ctrl+C and Ctrl+X resolve rows through
+   `paths`, Ctrl+V sends `transfer`, and a cut is spent by the line that accepts it and kept on a
+   refusal; one running transfer with its sticky progress line, its queue, the first failure and
+   the done line; Delete trashes with the cursor landing where the block was; F2 opens the inline
+   editor, which keeps the draft and says why on a refusal; Ctrl+N makes a folder and opens its
+   editor once the cursor lands on it; Ctrl+Z undoes; Escape unwinds an error, the editor, the
+   selection, the running transfer and then the newest queued one. A selection or an open editor
+   owes the watched re-read instead of running it, and every input pays the debt once it clears.
+   `live_tests.rs` drives new folder, rename, undo twice, copy and paste through the real
+   `flea --backend` when `FLEA_BIN` is set, and a mutation of the mkdir request turns it red.
+   **Deliberate deviation:** the hints say "Ctrl+Z undoes" and "Ctrl+V pastes"; ui/js/Status.js
+   still names `z` and `p`, bare letters the key cut removed. Not ported yet: duplicate (menu only),
+   the held-Space paint, the transfer card, retry selection, trash undriven live (`gio trash`
+   refuses /tmp).
 3. Icons, the filetype tier and thumbnails, with the settle timer and the no-sweep tests.
 4. Rail: places, devices, network, the share browser.
 5. Preview: text, image (through `--preview-image`), archive, table, PDF, media.

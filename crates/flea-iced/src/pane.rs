@@ -5,7 +5,9 @@
 // Rule 1: the pane holds [held, held + rows.len()) and nothing else; only rows that window names
 // are ever stat'd. Rule 2: the view is a count, and only visible rows are built. Rule 3: `list`
 // answers `listed` and its first screenful as a pair, and the pair is accepted together.
+use crate::ops::Ops;
 use crate::wire::{Order, Reply, Request, Row};
+use std::collections::BTreeSet;
 
 pub const BUFFER: usize = 150;
 pub const REFETCH_MARGIN: usize = 25;
@@ -20,7 +22,10 @@ pub enum Effect {
     OpenFile(String),
     WatchTimer,
     Message(String),
+    // The same slot, drawn in the error role; Escape dismisses it first.
+    Alert(String),
     SaveHidden(bool),
+    FocusRename,
 }
 
 #[derive(Debug)]
@@ -32,9 +37,22 @@ struct InFlight {
 
 // Who the cursor should land on once a listing commits: a name, or failing that an old index.
 #[derive(Debug, Clone)]
-struct Anchor {
-    name: String,
-    fallback: usize,
+pub(crate) struct Anchor {
+    pub(crate) name: String,
+    pub(crate) fallback: usize,
+    // A folder just made opens its rename field once the cursor has landed on it.
+    pub(crate) rename: bool,
+}
+
+// The inline editor: which row, what it renames, the draft and the one sentence a refusal leaves.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rename {
+    pub index: usize,
+    pub source: String,
+    pub draft: String,
+    pub error: String,
+    // The destination a sent request names, so a late reply cannot finish another rename.
+    pub pending: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -52,10 +70,17 @@ pub struct Pane {
     pub visible_rows: usize,
     pub error: Option<String>,
     pub listed_once: bool,
+    // ui/js/Selection.js: row indices, which is why a new listing clears them.
+    pub selection: BTreeSet<usize>,
+    pub(crate) select_anchor: usize,
+    pub renaming: Option<Rename>,
+    // The status bar's sticky line, what a running transfer says while it runs.
+    pub sticky: String,
+    pub(crate) ops: Ops,
     in_flight: Option<InFlight>,
     window_pending: Option<(usize, usize)>,
-    anchor: Option<Anchor>,
-    locating: Option<(String, String, usize)>,
+    pub(crate) anchor: Option<Anchor>,
+    locating: Option<(String, String, Anchor)>,
     watch_timer: bool,
     watch_debt: bool,
 }
@@ -68,7 +93,7 @@ pub fn join(dir: &str, name: &str) -> String {
     }
 }
 
-fn parent(path: &str) -> Option<(String, String)> {
+pub(crate) fn parent(path: &str) -> Option<(String, String)> {
     let trimmed = path.trim_end_matches('/');
     if trimmed.is_empty() {
         return None;
@@ -96,18 +121,36 @@ impl Pane {
         index.checked_sub(self.held).and_then(|o| self.rows.get(o))
     }
 
-    #[cfg(test)]
     pub fn list_in_flight(&self) -> bool {
         self.in_flight.is_some()
     }
 
+    // PaneWire's watchBusy: a re-read renumbers every row, so it waits while anything holds an index.
+    fn watch_busy(&self) -> bool {
+        self.in_flight.is_some() || !self.selection.is_empty() || self.renaming.is_some()
+    }
+
+    // onWatchBusyChanged: the debt is paid the moment the last thing holding it clears. The shell
+    // calls this after every input, so no path that clears a selection has to remember to.
+    pub fn pay_debt(&mut self) -> Vec<Effect> {
+        if self.watch_debt && !self.watch_busy() {
+            self.watch_debt = false;
+            return self.reread();
+        }
+        vec![]
+    }
+
     // A navigation: the cursor starts at row 0 unless an anchor says otherwise.
     pub fn open(&mut self, path: String, anchor: Option<(String, usize)>) -> Vec<Effect> {
+        self.open_anchored(path, anchor.map(|(name, fallback)| Anchor { name, fallback, rename: false }))
+    }
+
+    pub(crate) fn open_anchored(&mut self, path: String, anchor: Option<Anchor>) -> Vec<Effect> {
         // The watch debt does not travel: it belonged to the directory being left.
         if path != self.path {
             self.watch_debt = false;
         }
-        self.anchor = anchor.map(|(name, fallback)| Anchor { name, fallback });
+        self.anchor = anchor;
         self.locating = None;
         self.window_pending = None;
         self.in_flight = Some(InFlight { path: path.clone(), total: None });
@@ -133,6 +176,7 @@ impl Pane {
             Reply::Changed { path } => self.on_changed(&path),
             Reply::Located { directory, path, index } => self.on_located(&directory, &path, index),
             Reply::Other => vec![],
+            other => self.receive_op(other),
         }
     }
 
@@ -151,12 +195,12 @@ impl Pane {
                 self.listed_once = true;
                 self.cursor = 0;
                 self.first_visible = 0;
+                self.selection.clear();
+                self.select_anchor = 0;
+                self.renaming = None;
                 out.push(Effect::ScrollTo(0));
                 out.extend(self.apply_anchor());
-                if self.watch_debt {
-                    self.watch_debt = false;
-                    out.extend(self.watch_fired_now());
-                }
+                out.extend(self.pay_debt());
             }
             // A window reply that landed before the new `listed` belongs to the listing being left.
             None if self.in_flight.is_some() => {}
@@ -179,26 +223,39 @@ impl Pane {
             return vec![];
         }
         if let Some(offset) = self.rows.iter().position(|r| r.n == anchor.name) {
-            return self.place_cursor(self.held + offset);
+            return self.land(self.held + offset, anchor.rename);
         }
         // Not in the first screenful: ask the name arena rather than walking windows for it.
         let path = join(&self.path, &anchor.name);
-        self.locating = Some((self.path.clone(), path.clone(), anchor.fallback));
+        self.locating = Some((self.path.clone(), path.clone(), anchor));
         vec![Effect::Send(Request::Locate { path })]
     }
 
     fn on_located(&mut self, directory: &str, path: &str, index: i64) -> Vec<Effect> {
-        let Some((dir, wanted, fallback)) = self.locating.clone() else { return vec![] };
+        let Some((dir, wanted, anchor)) = self.locating.clone() else { return vec![] };
         if self.in_flight.is_some() || directory != dir || path != wanted || dir != self.path {
             return vec![];
         }
         self.locating = None;
+        if index >= 0 {
+            return self.land(index as usize, anchor.rename);
+        }
         // A name gone from the listing keeps the view where the user left it, clamped.
-        let target = if index >= 0 { index as usize } else { fallback.min(self.total.saturating_sub(1)) };
-        self.place_cursor(target)
+        self.place_cursor(anchor.fallback.min(self.total.saturating_sub(1)))
+    }
+
+    fn land(&mut self, index: usize, rename: bool) -> Vec<Effect> {
+        let mut out = self.place_cursor(index);
+        if rename {
+            out.extend(self.start_rename_at(index));
+        }
+        out
     }
 
     fn on_error(&mut self, r#where: &str, path: &str, msg: &str) -> Vec<Effect> {
+        if let Some(out) = self.op_error(r#where, path, msg) {
+            return out;
+        }
         let sentence = sentence(r#where, msg, path);
         // A failed list leaves the directory on screen in place; see docs/protocol.md "list".
         if r#where == "scan" && self.in_flight.as_ref().map(|f| f.path.as_str()) == Some(path) {
@@ -210,7 +267,7 @@ impl Pane {
                 return vec![];
             }
         }
-        vec![Effect::Message(sentence)]
+        vec![Effect::Alert(sentence)]
     }
 
     fn on_changed(&mut self, path: &str) -> Vec<Effect> {
@@ -223,6 +280,11 @@ impl Pane {
         if listing.is_some() || path != self.path {
             return vec![];
         }
+        // A selection or an open editor holds row indices, so the re-read is owed rather than run.
+        if self.watch_busy() {
+            self.watch_debt = true;
+            return vec![];
+        }
         if self.watch_timer {
             return vec![];
         }
@@ -232,14 +294,10 @@ impl Pane {
 
     pub fn watch_fired(&mut self) -> Vec<Effect> {
         self.watch_timer = false;
-        if self.in_flight.is_some() {
+        if self.watch_busy() {
             self.watch_debt = true;
             return vec![];
         }
-        self.watch_fired_now()
-    }
-
-    fn watch_fired_now(&mut self) -> Vec<Effect> {
         self.reread()
     }
 
@@ -271,7 +329,7 @@ impl Pane {
         vec![Effect::Send(Request::Window { start: want.0, count: want.1 })]
     }
 
-    fn place_cursor(&mut self, index: usize) -> Vec<Effect> {
+    pub(crate) fn place_cursor(&mut self, index: usize) -> Vec<Effect> {
         if self.total == 0 {
             return vec![];
         }
@@ -300,10 +358,6 @@ impl Pane {
             (here + delta).clamp(0, last)
         } as usize;
         self.place_cursor(next)
-    }
-
-    pub fn click(&mut self, index: usize) -> Vec<Effect> {
-        self.place_cursor(index)
     }
 
     // Enter, and a double click: a directory row navigates, every other row goes to `flea --open`.
@@ -359,23 +413,44 @@ pub fn sentence(r#where: &str, msg: &str, path: &str) -> String {
         "sort" => "Sorting by that column is not available.".into(),
         "read" => "The backend stopped responding; reopen Flea and try again.".into(),
         "backend" => format!("The backend is not available: {msg}"),
-        _ => msg.to_string(),
+        "undo" | "redo" => capitalised(msg),
+        "rename" if exists(msg) => "A file with that name is already here.".into(),
+        "rename" => "That file could not be renamed.".into(),
+        "rename-kept" => "Copied, but the old name was only partly removed. Check it.".into(),
+        "mkdir" if exists(msg) => "A folder or file with that name is already here.".into(),
+        "mkdir" => "That folder could not be created.".into(),
+        "duplicate" => "That file could not be duplicated.".into(),
+        "trash" => "That could not be moved to Trash.".into(),
+        "transfer" | "archive" | "convert" => capitalised(msg),
+        _ => "That action could not be completed; try again.".into(),
     }
 }
 
+fn exists(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    m.contains("file exists") || m.contains("already exists")
+}
+
+fn capitalised(msg: &str) -> String {
+    let mut chars = msg.chars();
+    let Some(first) = chars.next() else { return "That action could not be completed; try again.".into() };
+    let out: String = first.to_uppercase().chain(chars).collect();
+    if out.ends_with('.') { out } else { format!("{out}.") }
+}
+
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    fn row(n: &str, d: bool) -> Row {
+    pub(crate) fn row(n: &str, d: bool) -> Row {
         Row { n: n.into(), d, s: 0, m: 0, p: 0o100644, i: String::new(), t: false, k: 0, l: None }
     }
 
-    fn rows(start: usize, count: usize) -> Vec<Row> {
+    pub(crate) fn rows(start: usize, count: usize) -> Vec<Row> {
         (start..start + count).map(|i| row(&format!("f{i:06}"), false)).collect()
     }
 
-    fn listed(p: &mut Pane, path: &str, total: usize) -> Vec<Effect> {
+    pub(crate) fn listed(p: &mut Pane, path: &str, total: usize) -> Vec<Effect> {
         let first = p.window_size().min(total);
         let mut out = p.receive(Reply::Listed { n: total });
         out.extend(p.receive(Reply::Rows { start: 0, rows: rows(0, first), kinds: vec![] }));
@@ -383,7 +458,7 @@ mod tests {
         out
     }
 
-    fn sends(effects: &[Effect]) -> Vec<Request> {
+    pub(crate) fn sends(effects: &[Effect]) -> Vec<Request> {
         effects.iter().filter_map(|e| if let Effect::Send(r) = e { Some(r.clone()) } else { None }).collect()
     }
 
@@ -430,7 +505,7 @@ mod tests {
         listed(&mut p, "/a", 3);
         p.open("/root".into(), None);
         let out = p.receive(Reply::Error { r#where: "scan".into(), path: "/root".into(), msg: "Permission denied (os error 13)".into() });
-        assert_eq!(out, vec![Effect::Message("Permission denied on root".into())]);
+        assert_eq!(out, vec![Effect::Alert("Permission denied on root".into())]);
         assert_eq!(p.path, "/a");
         assert!(!p.list_in_flight());
     }
