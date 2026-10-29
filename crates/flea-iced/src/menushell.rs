@@ -119,15 +119,24 @@ impl Flea {
         let Some(cursor) = menu::first(&items) else { return Task::none() };
         // Under the row's bottom-left like the rail's, or under the last row over empty space. A
         // right click opens there too: iced reports no pointer position with the press itself.
+        // Measured in view positions, so a filtered row's menu opens under the row as it is drawn; the
+        // grid's under the tile, at the tile's own column, and with no header band above its tiles.
         let (x0, width) = self.pane_box();
-        let below = match row {
-            Some(i) => (i + 1) as f32 * ROW_H,
-            None => self.pane.total as f32 * ROW_H,
+        let view = row.and_then(|i| self.pane.view_of(i));
+        let (below, left, listing_top) = if self.grid_mode() {
+            let g = self.grid_geometry();
+            let below = match view {
+                Some(v) => (v / g.columns + 1) as f32 * g.cell_h,
+                None => self.pane.view_total().div_ceil(g.columns) as f32 * g.cell_h,
+            };
+            (below, view.map_or(0.0, |v| (v % g.columns) as f32 * g.cell_w), ROW_H)
+        } else {
+            let below = view.map_or(self.pane.view_total(), |v| v + 1) as f32 * ROW_H;
+            (below, 0.0, 2.0 * ROW_H)
         };
-        let listing_top = 2.0 * ROW_H;
         let y_in = (below - self.scroll_y).clamp(0.0, self.viewport_h);
         let window_h = self.viewport_h + 3.0 * ROW_H;
-        let x = x0 + menu::clamp(crate::PAD_X, MENU_W, width);
+        let x = x0 + menu::clamp(left + crate::PAD_X, MENU_W, width);
         let y = menu::clamp(listing_top + y_in, frame_height(&items), window_h);
         self.menu = Some(ListMenu { kind, items, cursor, flyout: false, sub_cursor: 0, x, y, path: self.pane.path.clone(), names: self.targets() });
         self.pane.menu_open = true;

@@ -18,7 +18,7 @@ impl Flea {
                     }
                 }
                 Effect::ScrollTo(index) => {
-                    let y = index as f32 * ROW_H;
+                    let y = if self.grid_mode() { self.grid_geometry().scroll_y(index) } else { index as f32 * ROW_H };
                     tasks.push(operation::scroll_to(list_id(self.side), scrollable::AbsoluteOffset { x: 0.0, y }));
                 }
                 // Nav.openCursor: an archive nobody claimed opens Flea's own view and launches nothing.
@@ -46,10 +46,7 @@ impl Flea {
                     let side = self.side;
                     tasks.push(Task::perform(sleep(Duration::from_millis(ms)), move |_| Message::Settled(side, generation)));
                 }
-                Effect::DecodeThumb(path) => {
-                    let key = path.clone();
-                    tasks.push(Task::perform(blocking(move || decode(&path)), move |h| Message::Decoded(key.clone(), h)));
-                }
+                Effect::DecodeThumb(path) => tasks.push(self.decode_task(path)),
                 Effect::SaveHidden(hidden) => {
                     let bin = backend::binary();
                     tasks.push(Task::perform(blocking(move || prefs::save_hidden(&bin, hidden)), Message::Saved));
@@ -60,7 +57,23 @@ impl Flea {
     }
 
     // The scrollable's rows on screen, reported to the pane, out of main.rs whole.
+    pub(crate) fn decode_task(&self, path: String) -> Task<Message> {
+        let px = if self.grid_mode() { self.grid_geometry().thumb as u32 } else { crate::THUMB_PX };
+        let key = path.clone();
+        Task::perform(blocking(move || decode(&path, px)), move |h| Message::Decoded(key.clone(), h))
+    }
+
+    // ViewState's view: the grid in a window that is not split, as Pane.qml's listOnly makes it.
+    pub(crate) fn grid_mode(&self) -> bool {
+        self.other.is_none() && self.dual_from == "grid"
+    }
+
     pub(crate) fn report_viewport(&mut self) -> Task<Message> {
+        if self.grid_mode() {
+            let (first, visible, last) = self.grid_geometry().viewport(self.scroll_y, self.viewport_h);
+            let effects = self.pane.viewport(first, visible, last);
+            return self.run(effects);
+        }
         let first = (self.scroll_y / ROW_H).floor().max(0.0) as usize;
         // Fully visible rows, which is what the cursor clamp wants; the view draws one more.
         let visible = (self.viewport_h / ROW_H).floor().max(1.0) as usize;

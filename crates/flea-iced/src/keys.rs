@@ -125,6 +125,21 @@ impl Flea {
         if self.pane.renaming.is_some() {
             return Task::none();
         }
+        // Grid.arrow: in the grid every arrow moves between tiles, so Left and Right are not the tree's.
+        if self.grid_mode() && !modifiers.control() {
+            use crate::grid::Arrow;
+            let arrow = match key.as_ref() {
+                Key::Named(Named::ArrowDown) => Some(Arrow::Down),
+                Key::Named(Named::ArrowUp) => Some(Arrow::Up),
+                Key::Named(Named::ArrowLeft) => Some(Arrow::Left),
+                Key::Named(Named::ArrowRight) => Some(Arrow::Right),
+                _ => None,
+            };
+            if let Some(arrow) = arrow {
+                let effects = self.pane.grid_arrow(arrow, self.grid_geometry().columns);
+                return self.run(effects);
+            }
+        }
         let effects = match (key.as_ref(), modifiers.control()) {
             (Key::Named(Named::ArrowDown), false) => self.pane.step(1),
             (Key::Named(Named::ArrowUp), false) => self.pane.step(-1),

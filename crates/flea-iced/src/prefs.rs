@@ -37,6 +37,8 @@ pub struct Prefs {
     pub menu_hidden: Vec<String>,
     // shelf.enabled: the shelf's own switch, which is what the menu's shelf row follows.
     pub shelf_enabled: bool,
+    // preview.thumbSize, the grid's tile mark and thumbnail size.
+    pub thumb_size: String,
 }
 
 impl Default for Prefs {
@@ -71,6 +73,7 @@ impl Default for Prefs {
                 .map(String::from)
                 .to_vec(),
             shelf_enabled: false,
+            thumb_size: "medium".into(),
         }
     }
 }
@@ -118,6 +121,7 @@ impl Prefs {
                 None => d.menu_hidden,
             },
             shelf_enabled: v.pointer("/shelf/enabled").and_then(Value::as_bool) == Some(true),
+            thumb_size: v.pointer("/preview/thumbSize").and_then(Value::as_str).unwrap_or("medium").to_string(),
         }
     }
 

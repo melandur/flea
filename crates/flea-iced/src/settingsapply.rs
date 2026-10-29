@@ -35,6 +35,14 @@ impl Flea {
             Some(side) => self.with_side(side, apply),
             None => Task::none(),
         };
+        // A new thumbnail size changes the grid's tiles and the size held thumbnails decode at.
+        let resized = if was.thumb_size != next.thumb_size && self.grid_mode() {
+            let files: Vec<String> = self.pane.thumbs.keys().filter_map(|i| self.pane.thumb_file(*i).map(String::from)).collect();
+            let decodes: Vec<Task<Message>> = files.into_iter().map(|f| self.decode_task(f)).collect();
+            Task::batch([self.report_viewport(), Task::batch(decodes)])
+        } else {
+            Task::none()
+        };
         if was.theme_id != next.theme_id {
             self.palette = crate::theme::Palette::load(&next.theme_id);
         }
@@ -52,6 +60,6 @@ impl Flea {
         self.devices.show_unmounted = next.show_unmounted;
         self.network.remember_passwords = next.remember_passwords;
         self.rebuild_rail();
-        Task::batch([mine, theirs])
+        Task::batch([mine, theirs, resized])
     }
 }

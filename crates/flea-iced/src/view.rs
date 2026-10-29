@@ -8,11 +8,11 @@ use iced::{Background, Border, Color, Element, Length};
 // One pane as the view draws it: which side it sits on, where its listing is scrolled, and whether
 // it holds the keyboard, which is what decides between the accent and the plain cursor fill.
 #[derive(Clone, Copy)]
-struct PaneView<'a> {
-    pane: &'a Pane,
-    side: u8,
-    scroll_y: f32,
-    focused: bool,
+pub(crate) struct PaneView<'a> {
+    pub(crate) pane: &'a Pane,
+    pub(crate) side: u8,
+    pub(crate) scroll_y: f32,
+    pub(crate) focused: bool,
 }
 
 impl Flea {
@@ -107,10 +107,12 @@ impl Flea {
                 .align_x(iced::Center);
                 self.background(v, container(tile).center(Length::Fill).into())
             }
+            _ if self.grid_mode() => self.background(v, self.grid_listing(v)),
             _ => self.background(v, self.listing(v)),
         };
         let body = if v.focused { self.preview_layer(body) } else { body };
-        column![header, body].width(Length::Fill).into()
+        // The grid draws no column header: its tiles have no columns to title.
+        if self.grid_mode() { column![body].width(Length::Fill).into() } else { column![header, body].width(Length::Fill).into() }
     }
 
     // A right click a row did not take is the background menu's: the empty space below the rows.

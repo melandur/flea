@@ -22,6 +22,8 @@ mod effects;
 mod form;
 mod filter;
 mod format;
+mod grid;
+mod gridview;
 #[cfg(test)]
 mod live_tests;
 #[cfg(test)]

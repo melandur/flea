@@ -398,12 +398,26 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      watch. The status bar carries its query line and summary, and the no-match tile names the query
      back. **The filter is not reachable in this build, faithfully:** ChromeBar draws its button in
      the grid view alone and no key opens it, so it arrives with the grid; the unit tests drive it
-     whole. **Deviation:** while a filter stands the held window does not move, where QML lets it
-     drift under the filter; the summary already says the filter tests the rows held. `keysheet.rs`
+     whole. While a filter stands the held window does not move, which is GridArea.requestIfDrifted's
+     own rule (`pane.shown !== null`), and the grid is the only view that offers one. `keysheet.rs`
      is KeymapSheet.qml over sheetFor("default", "gui")'s own rows, read by running that function,
      with a test that checks the groups, their order and every base label against ui/js/Keymap.js;
      `?` opens it and any key closes it without reaching the listing. 44 headless checks.
-   - **8d-ii**, the grid and columns views, and with the grid the filter and sort buttons.
+   - **8d-ii-a, the grid (done; its Filter and Sort buttons are pointer-only and undriven).**
+     `grid.rs` is GridArea.qml's geometry and ui/js/Grid.js's arrows: as many tiles across as the
+     wider of Style.space(125), 146 px here, and the thumbnail with its padding allows; a tile row
+     stands in for a text row in the viewport, the scroll and the held-window drift; every arrow
+     needs a real cell to land on, so a step off the grid or across a tile row's end is taken and goes
+     nowhere, and Left and Right are not the tree's in the grid. `gridview.rs` draws GridTile: the
+     thumbnail or mark at `preview.thumbSize`'s pixels, decoded at that size as Image.sourceSize is,
+     two centred caption lines, the cursor's accent fill and edge, and the rename field in the
+     caption's place. The chrome trades Search for Filter and Sort (Sort.next) in the grid, both
+     standing down during a search; choosing a mode is the view key, saved alone, a mode chosen
+     while split leaves it because the split's panes are list-only, and leaving the grid closes its
+     filter. A menu opens under its tile, and under a filter every menu opens under the row as drawn.
+     `tests/iced-headless.sh` launches with `view: "grid"` and drives Right and Down, asking the
+     backend for the listing's order rather than deriving it, 46 checks.
+   - **8d-ii-b**, the columns view and its preview column.
    - **8d-iii**, the trash view.
    - **8d-iv**, tabs with the Places menu, and the stored display settings (density, columns, text
      size).

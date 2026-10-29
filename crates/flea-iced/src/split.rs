@@ -170,6 +170,11 @@ impl Flea {
     }
 }
 
+// The view key alone, for a mode chosen outside the split.
+pub(crate) fn save_view_mode(mode: &str) -> Task<Message> {
+    save(serde_json::json!({ "view": mode }))
+}
+
 fn save(patch: serde_json::Value) -> Task<Message> {
     let bin = crate::backend::binary();
     Task::perform(

@@ -223,6 +223,27 @@ comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 check "closing the window sends quit" 1 "$(since "$n" | grep -c '"c":"quit"')"
 check "and the window and its backend both exit" "0 0" "$(alive) $(kill -0 "$backend" 2> /dev/null && echo 1 || echo 0)"
 
+# The grid, from a window launched with view "grid". Which row a step lands on is asked of the backend
+# itself, so the check never re-derives the listing's sort in shell.
+nth_row() {
+    printf '{"c":"list","path":"%s","first":60,"hidden":false}\n{"c":"quit"}\n' "$T" | "$BIN" --backend 2> /dev/null \
+        | jq -r --argjson n "$1" 'select(.t == "rows") | .rows[$n].n'
+}
+jq '.view = "grid"' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+WANT=com.thisisgm.flea.iced
+launch "$T"; shot grid
+n=$(mark); k -k Right; k -k Return; sleep 1
+check "in the grid Right steps across to the next tile" 1 "$(since "$n" | grep -c "\"path\":\"$T/$(nth_row 1)\"")"
+k -k Escape
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+launch "$T"
+# 1600 px less the rail's 192 holds nine tiles of 146, so Down is nine rows on. F2 names the row it is on.
+want=$(nth_row 9); n=$(mark); k -k Down; k -k F2; k -k Escape
+k -k F2; ctrl a; k gridpicked.txt; k -k Return; sleep 1
+check "in the grid Down steps a whole tile row" "no yes" "$(exists "$T/$want") $(exists "$T/gridpicked.txt")"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+APP=""
+
 # The chooser, the window tools/flea-portal opens through flea --pick.
 WANT=com.thisisgm.flea.picker
 pick "{\"title\":\"Live pick\",\"multiple\":true,\"folder\":\"$T\",\"filters\":[{\"label\":\"Text\",\"globs\":[\"*.txt\"],\"mimes\":[]}]}"

@@ -58,9 +58,7 @@ impl Pane {
         summary(self.view_total(), self.rows.len(), self.total)
     }
 
-    // Opened from the chrome's filter button, which ChromeBar.qml draws in the grid view alone; that
-    // view is stage 8d-ii, so until it lands only the tests reach this.
-    #[allow(dead_code)]
+    // Opened from the chrome's filter button, which ChromeBar.qml draws in the grid view alone.
     pub fn filter_start(&mut self) {
         self.filter_typing = true;
     }

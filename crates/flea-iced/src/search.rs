@@ -241,6 +241,13 @@ impl Pane {
         self.resort(key, desc)
     }
 
+    // Sort.next: the next order the backend produces, always ascending, the grid's sort button.
+    pub fn sort_next(&mut self) -> Vec<Effect> {
+        const ORDERS: [&str; 4] = ["name", "size", "mtime", "kind"];
+        let at = ORDERS.iter().position(|k| *k == self.order.by).map_or(0, |i| i + 1);
+        self.resort(ORDERS[at % ORDERS.len()], false)
+    }
+
     // Sort.column: a header click, which starts every key ascending.
     pub fn sort_column(&mut self, key: &str) -> Vec<Effect> {
         let desc = self.order.by == key && !self.order.desc;

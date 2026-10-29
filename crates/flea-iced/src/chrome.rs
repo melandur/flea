@@ -18,6 +18,8 @@ pub enum Act {
     Back,
     Up,
     Search,
+    Filter,
+    Sort,
     Mode(&'static str),
     Settings,
     SheetClose,
@@ -61,14 +63,42 @@ impl Flea {
             Act::MouseBack => self.pane.mouse_back(),
             Act::Up => self.pane.up(),
             Act::Search => self.pane.search_start(false),
+            // The grid's two: the filter over the held rows, and the next order the backend makes.
+            Act::Filter => {
+                self.pane.filter_start();
+                vec![]
+            }
+            Act::Sort => self.pane.sort_next(),
             Act::Settings => return self.open_panel(),
-            // ViewState: the split is a toggle of its own; list is the view this build draws.
-            Act::Mode("dual") if self.other.is_none() => return self.toggle_split(),
-            Act::Mode("list") if self.other.is_some() => return self.toggle_split(),
-            Act::Mode("list") | Act::Mode("dual") => vec![],
-            Act::Mode(mode) => return self.say(format!("The {mode} view is not in this build yet.")),
+            Act::Mode("columns") => return self.say("The columns view is not in this build yet.".into()),
+            Act::Mode(mode) => return self.choose_view(mode),
         };
         self.run(effects)
+    }
+
+    // shell.qml onViewChosen: "dual" toggles the split in, any other mode is the view key, and a mode
+    // chosen while split leaves it, because the split's panes are list-only (Pane.qml listOnly).
+    fn choose_view(&mut self, mode: &'static str) -> Task<Message> {
+        if mode == "dual" {
+            return if self.other.is_none() { self.toggle_split() } else { Task::none() };
+        }
+        let was = self.grid_mode();
+        self.dual_from = mode.to_string();
+        let left = if self.other.is_some() { self.toggle_split() } else { crate::split::save_view_mode(mode) };
+        if was == self.grid_mode() {
+            return left;
+        }
+        // Pane.qml onViewModeChanged: only the views that draw a filter keep one, and the held
+        // thumbnails are decoded again at the new view's own size.
+        if !self.grid_mode() {
+            self.pane.filter_close();
+        }
+        let files: Vec<String> = self.pane.thumbs.keys().filter_map(|i| self.pane.thumb_file(*i).map(String::from)).collect();
+        let decodes: Vec<Task<Message>> = files.into_iter().map(|f| self.decode_task(f)).collect();
+        self.scroll_y = 0.0;
+        let scrolled = self.run(vec![crate::pane::Effect::ScrollTo(0)]);
+        let reported = self.report_viewport();
+        Task::batch([left, scrolled, reported, Task::batch(decodes)])
     }
 
     fn chrome_button(&self, glyph: &'static str, enabled: bool, ink: iced::Color, act: Act) -> Element<'_, Message> {
@@ -195,8 +225,17 @@ impl Flea {
             strip.into()
         };
         let p2 = p;
-        let mode = if self.other.is_some() { "dual" } else { "list" };
-        let mut right = row![self.chrome_button("search", true, p.foreground, Act::Search)].spacing(4).align_y(iced::Center);
+        let mode = if self.other.is_some() { "dual" } else { self.dual_from.as_str() };
+        // ChromeBar: the grid trades Search for the filter and the sort; both stand down while a
+        // search is up, because the search owns the header then.
+        let free = self.pane.search.mode == crate::search::Mode::Off;
+        let mut right = if self.grid_mode() {
+            row![self.chrome_button("filter", free, p.foreground, Act::Filter), self.chrome_button("sort", free, p.foreground, Act::Sort)]
+        } else {
+            row![self.chrome_button("search", true, p.foreground, Act::Search)]
+        }
+        .spacing(4)
+        .align_y(iced::Center);
         for m in ["list", "columns", "grid", "dual"] {
             right = right.push(self.chrome_button(m, true, if m == mode { p.foreground } else { p.muted }, Act::Mode(m)));
         }

@@ -1,6 +1,6 @@
 // The shell's three ways of leaving the UI thread: a sleep, a blocking job answered once, and a
 // thumbnail decoded to the icon slot.
-use crate::{DECODED_CAP, THUMB_PX};
+use crate::DECODED_CAP;
 use iced::widget::image;
 use std::time::Duration;
 
@@ -26,8 +26,10 @@ pub(crate) fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static
 
 // One cache PNG to an icon-slot image. The path is always the backend's own thumbed answer, never a
 // filename, and the decode is a PNG decoder alone; AGENTS.md "Deliberate corners" names the residual.
-pub(crate) fn decode(path: &str) -> Option<image::Handle> {
-    let img = ::image::open(path).ok()?.thumbnail(THUMB_PX, THUMB_PX).to_rgba8();
+// px is the slot's own decode size: twice the list's icon slot, or the grid's thumbnail size, which is
+// what Image.sourceSize is in GridTile.qml.
+pub(crate) fn decode(path: &str, px: u32) -> Option<image::Handle> {
+    let img = ::image::open(path).ok()?.thumbnail(px, px).to_rgba8();
     let (w, h) = img.dimensions();
     Some(image::Handle::from_rgba(w, h, img.into_raw()))
 }

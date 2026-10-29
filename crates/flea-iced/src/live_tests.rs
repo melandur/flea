@@ -190,7 +190,7 @@ fn a_visible_image_is_thumbnailed_decoded_and_nothing_else_is_asked() {
     let decoded = ::image::open(&file).unwrap().thumbnail(46, 46).to_rgba8();
     let px = decoded.get_pixel(decoded.width() / 2, decoded.height() / 2);
     assert!(px[0] > 180 && px[1] < 60 && px[2] < 60, "the decoded thumbnail is not the red image: {px:?}");
-    assert!(crate::decode(&file).is_some());
+    assert!(crate::decode(&file, crate::THUMB_PX).is_some());
     drop(live);
     let _ = std::fs::remove_dir_all(&root);
 }
