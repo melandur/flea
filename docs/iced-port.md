@@ -528,5 +528,26 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      on the private bus: the badge after a Delete, and with one item backdated to 2020 and one fresh,
      the sweep deletes the old, keeps the fresh, writes today's day, and a second launch that day
      sweeps nothing; switched on only when the private Trash holds exactly those two, 60 checks.
-   - **8d-iv**, tabs with the Places menu, and the stored display settings (density, columns, text
-     size).
+   - **8d-iv-a, tabs and the Places menu (done; their strip is pointer-only, as in QML).** `tabs.rs`
+     is ui/js/Tabs.js on the pane, so each pane of the split has its own: hidden tabs are snapshots of
+     the path, history, cursor, view, dotfile answer, selection and order, and the one live listing
+     is the current tab's. A new tab lands where Settings > View > Opening says, or on the Places
+     row's own path; a switch to the same folder re-lists nothing and brings the cursor and the
+     selection back, but the selection only when no listing ran since (issue 94's counter, which the
+     pane now keeps); a switch to another folder lists it with the tab's own order and dotfile answer
+     and lands on its index, through an anchor with no name, which is pendingCursor exactly. The
+     search and the filter go with any switch, a walk's scope is the folder a tab records, and nine
+     is the cap; every refusal is QML's sentence. `tabbar.rs` draws TabBar under the chrome across
+     the window only while there are two: the current tab on the window's ground with the accent
+     edge, a close mark whose target never shrinks, a middle press to close, and + for a new tab;
+     a tab restores its own view outside the split. `placemenu.rs` and `menu.rs`'s `place_entries`
+     are PlaceMenu: on Home and a favourite, Open, Open in new tab, Open in terminal, Copy path, and
+     Add to or Remove from Favorites, each on the row's own path, and with the Extras row off a
+     favourite keeps its one Remove; a remove names the expected records and refuses when the row
+     moved. **No key opens a tab, and the default hidden set switches the Places menu off**, which
+     is the key cut's and the shipped defaults' doing in QML too, so a tab is reached by turning
+     Settings > Menus > Extras > Places row menu on. Driven headless: a favourite's menu opens its
+     folder in a new tab, a press on the first tab lists it again, closing the other tab lists
+     nothing, and Remove drops the favourite, 64 checks.
+   - **8d-iv-b**, the stored display settings: density and the list's columns.
+   - **8d-iv-c**, text size, which makes the crate's fixed metrics follow a stored stop.

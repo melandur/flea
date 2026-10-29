@@ -163,6 +163,9 @@ impl Flea {
         if entry.kind == rail::Kind::Trash {
             return self.refresh_trash_count(true);
         }
+        if matches!(entry.kind, rail::Kind::Home | rail::Kind::Favourite { .. }) {
+            return self.open_place_menu(index);
+        }
         let actions = match entry.kind {
             rail::Kind::Device(i) => self.devices.entries.get(i).map(rail::menu).unwrap_or_default(),
             rail::Kind::Share(i) => self.network.entries.get(i).map(rail::share_menu).unwrap_or_default(),

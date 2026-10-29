@@ -47,6 +47,8 @@ pub struct Prefs {
     pub trash_count_shown: bool,
     pub trash_auto_empty: bool,
     pub trash_swept_on: i64,
+    // newTab: where a new tab opens, the current folder, home or the start folder.
+    pub new_tab: String,
 }
 
 impl Default for Prefs {
@@ -87,6 +89,7 @@ impl Default for Prefs {
             trash_count_shown: false,
             trash_auto_empty: false,
             trash_swept_on: 0,
+            new_tab: "current".into(),
         }
     }
 }
@@ -140,6 +143,7 @@ impl Prefs {
             trash_count_shown: v.pointer("/places/trashCount").and_then(Value::as_bool) == Some(true),
             trash_auto_empty: v.pointer("/trashAutoEmpty").and_then(Value::as_bool) == Some(true),
             trash_swept_on: v.pointer("/trashSweptOn").and_then(Value::as_i64).unwrap_or(0),
+            new_tab: v.pointer("/newTab").and_then(Value::as_str).unwrap_or("current").to_string(),
         }
     }
 

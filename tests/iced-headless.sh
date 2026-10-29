@@ -345,6 +345,23 @@ else
 fi
 kill "$BUS_PID" 2> /dev/null; BUS_PID=""; TRASH_BUS=""
 rm -rf "$T/trashbin"
+# Off again: past here the windows are on the session bus, whose count is the operator's own Trash.
+jq '.places.trashCount = false' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+
+# Tabs, opened from a favourite's Places menu (its Extras row is on here, menu.hidden being seeded
+# without placeMenu): the strip appears, a press on the first tab lists its folder again, a press on
+# the second's close mark closes it with nothing listed, and the same menu removes the favourite.
+jq --arg p "$T/alpha" '.places.favourites = [{"label": "alpha", "path": $p}]' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+launch "$T"
+n=$(mark); k -k Tab -k Down -k Down; k m; k -k Down -k Return; sleep 1; shot tabs
+check "the Places menu opens its folder in a new tab" 1 "$(since "$n" | grep -c "\"c\":\"list\".*\"path\":\"$T/alpha\"")"
+n=$(mark); WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 100 55; sleep 1
+check "a press on the first tab lists its folder again" 1 "$(since "$n" | grep -c "\"c\":\"list\".*\"path\":\"$T\"")"
+n=$(mark); WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 370 55; sleep 1; shot tabs-closed
+check "closing the other tab lists nothing" 0 "$(since "$n" | grep -c '"c":"list"')"
+k m; k -k Down -k Down -k Down -k Down -k Return; sleep 1.5
+check "Remove from Favorites drops the row's own record" 0 "$(jq '.places.favourites | length' "$D/state/flea/ui.json")"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 APP=""
 
 # The chooser, the window tools/flea-portal opens through flea --pick.

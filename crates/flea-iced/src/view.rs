@@ -31,7 +31,11 @@ impl Flea {
             }
         };
         let main: Element<'_, Message> = if self.rail.shown { row![self.rail_view(), panes].into() } else { panes };
-        let window = container(column![self.chrome_view(), main, self.status_view()])
+        let mut stacked = column![self.chrome_view()];
+        if let Some(bar) = self.tab_bar() {
+            stacked = stacked.push(bar);
+        }
+        let window = container(stacked.push(main).push(self.status_view()))
             .style(move |_| container::Style::default().background(p.background).color(p.foreground))
             .width(Length::Fill)
             .height(Length::Fill);

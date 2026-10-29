@@ -42,6 +42,8 @@ pub struct ListMenu {
     // changed is refused, ui/PaneMenuActions.qml's "Selected items changed; reopen the menu."
     path: String,
     names: Vec<String>,
+    // A Places row's menu: the path it acts on, and the favourite's index when it is one.
+    place: Option<(String, Option<usize>)>,
 }
 
 pub fn frame_height(items: &[Item]) -> f32 {
@@ -138,8 +140,8 @@ impl Flea {
         let y_in = (below - self.scroll_y).clamp(0.0, self.viewport_h);
         let window_h = self.viewport_h + 3.0 * ROW_H;
         let x = x0 + menu::clamp(left + crate::PAD_X, MENU_W, width);
-        let y = menu::clamp(listing_top + y_in, frame_height(&items), window_h);
-        self.menu = Some(ListMenu { kind, items, cursor, flyout: false, sub_cursor: 0, x, y, path: self.pane.path.clone(), names: self.targets() });
+        let y = menu::clamp(listing_top + self.tab_strip_h() + y_in, frame_height(&items), window_h);
+        self.menu = Some(ListMenu { kind, items, cursor, flyout: false, sub_cursor: 0, x, y, path: self.pane.path.clone(), names: self.targets(), place: None });
         self.pane.menu_open = true;
         // Asked again on every menu, so a tool installed while the window was open counts next time.
         asked
@@ -244,13 +246,32 @@ impl Flea {
         let window_h = self.viewport_h + 3.0 * ROW_H;
         let x = x.unwrap_or_else(|| x0 + menu::clamp(width / 2.0, MENU_W, width));
         let y = menu::clamp(y, frame_height(&items), window_h);
-        self.menu = Some(ListMenu { kind, items, cursor, flyout: false, sub_cursor: 0, x, y, path: String::new(), names: vec![] });
+        self.menu = Some(ListMenu { kind, items, cursor, flyout: false, sub_cursor: 0, x, y, path: String::new(), names: vec![], place: None });
+        Task::none()
+    }
+
+    // RailMenu.railMenuFor for Home and a favourite: the folder menu, under the row it was opened on.
+    pub(crate) fn open_place_menu(&mut self, index: usize) -> Task<Message> {
+        let Some(entry) = self.rail.entries.get(index) else { return Task::none() };
+        let favourite = match entry.kind {
+            crate::rail::Kind::Favourite { index, .. } => Some(index),
+            _ => None,
+        };
+        let items = menu::place_entries(favourite.is_some(), &self.effective_hidden());
+        let Some(cursor) = menu::first(&items) else { return self.say(format!("{} has nothing to eject or unmount.", entry.label)) };
+        let place = Some((entry.path.clone(), favourite));
+        let y = menu::clamp(self.rail_row_bottom(index), frame_height(&items), self.viewport_h + 3.0 * ROW_H);
+        self.close_menu();
+        self.menu = Some(ListMenu { kind: Kind::Place(favourite.is_some()), items, cursor, flyout: false, sub_cursor: 0, x: crate::PAD_X, y, path: String::new(), names: vec![], place });
         Task::none()
     }
 
     fn menu_act(&mut self, action: &'static str, label: &'static str) -> Task<Message> {
         let Some(m) = self.menu.take() else { return Task::none() };
         self.pane.menu_open = false;
+        if let (Kind::Place(_), Some((path, favourite))) = (m.kind, m.place.clone()) {
+            return self.place_act(action, path, favourite);
+        }
         if matches!(m.kind, Kind::Trash | Kind::TrashSelection) {
             return if action == "open" { self.open_trash("") } else { self.trash_action(action) };
         }
@@ -291,11 +312,15 @@ impl Flea {
 
     // ui/Opener.qml openTerminal: `flea --terminal` in the directory on screen, one at a time.
     pub(crate) fn open_terminal(&mut self) -> Task<Message> {
+        self.open_terminal_at(self.pane.path.clone())
+    }
+
+    pub(crate) fn open_terminal_at(&mut self, dir: String) -> Task<Message> {
         if self.opening_terminal {
             return self.say("Still opening the last terminal; try again in a moment.".into());
         }
         self.opening_terminal = true;
-        let (bin, dir) = (crate::backend::binary(), self.pane.path.clone());
+        let bin = crate::backend::binary();
         Task::perform(blocking(move || std::process::Command::new(&bin).arg("--terminal").arg(&dir).status().ok().and_then(|s| s.code())), |code| {
             Message::Menu(Msg::Terminal(code))
         })
@@ -305,7 +330,10 @@ impl Flea {
     // which outlives the window; an empty listing has no row to name and copies nothing.
     pub(crate) fn copy_path(&mut self) -> Task<Message> {
         let Some(row) = self.pane.row_at(self.pane.cursor) else { return Task::none() };
-        let path = join(&self.pane.path, &row.n);
+        self.copy_text(join(&self.pane.path, &row.n))
+    }
+
+    pub(crate) fn copy_text(&mut self, path: String) -> Task<Message> {
         Task::perform(
             blocking(move || std::process::Command::new("wl-copy").arg("--").arg(&path).status().is_ok_and(|s| s.success())),
             |ok| Message::Menu(Msg::Copied(ok)),
@@ -317,8 +345,12 @@ impl Flea {
         let path = match (kind, self.pane.row_at(self.pane.cursor)) {
             (Kind::File, Some(r)) => join(&self.pane.path, &r.n),
             (Kind::File, None) => return Task::none(),
-            (Kind::Background | Kind::Trash | Kind::TrashSelection, _) => self.pane.path.clone(),
+            (Kind::Background | Kind::Trash | Kind::TrashSelection | Kind::Place(_), _) => self.pane.path.clone(),
         };
+        self.favourite_add(path)
+    }
+
+    pub(crate) fn favourite_add(&mut self, path: String) -> Task<Message> {
         let label = path.trim_end_matches('/').rsplit('/').next().filter(|l| !l.is_empty()).unwrap_or("/").to_string();
         let op = serde_json::json!({ "op": "add", "record": { "label": label, "path": path } }).to_string();
         let bin = crate::backend::binary();

@@ -92,7 +92,7 @@ impl Flea {
             Msg::RowMenu(i) => {
                 let marked = self.trash.row_at(i).is_some_and(|r| self.trash.is_selected(&r.uri));
                 let chose = if marked { Task::none() } else { self.trash_row_pressed(i) };
-                let y = ROW_H * 3.0 + (i.saturating_sub(self.trash.top) + 1) as f32 * ROW_H;
+                let y = ROW_H * 3.0 + self.tab_strip_h() + (i.saturating_sub(self.trash.top) + 1) as f32 * ROW_H;
                 let total = self.trash.total;
                 return Task::batch([chose, self.open_trash_menu(Kind::TrashSelection, None, y, total)]);
             }
@@ -176,8 +176,7 @@ impl Flea {
 
     fn open_rail_trash_menu(&mut self) -> Task<Message> {
         let Some(at) = self.rail.entries.iter().position(|e| e.kind == crate::rail::Kind::Trash) else { return Task::none() };
-        // The Trash row sits in PLACES, under its heading, on the rail's 8 px top padding.
-        let y = ROW_H + 8.0 + ROW_H + (at + 1) as f32 * ROW_H;
+        let y = self.rail_row_bottom(at);
         let total = self.trash.count.unwrap_or(0);
         self.open_trash_menu(Kind::Trash, Some(crate::PAD_X), y, total)
     }
@@ -242,7 +241,7 @@ impl Flea {
             Key::Character("m") | Key::Named(Named::ContextMenu) => {
                 let kind = if self.trash.selected_count() > 0 { Kind::TrashSelection } else { Kind::Trash };
                 let total = self.trash.total;
-                return Some(self.open_trash_menu(kind, None, 2.0 * ROW_H, total));
+                return Some(self.open_trash_menu(kind, None, 2.0 * ROW_H + self.tab_strip_h(), total));
             }
             _ => vec![],
         };

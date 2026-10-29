@@ -254,7 +254,7 @@ impl Pane {
         self.resort(key, desc)
     }
 
-    fn resort(&mut self, key: &str, desc: bool) -> Vec<Effect> {
+    pub(crate) fn resort(&mut self, key: &str, desc: bool) -> Vec<Effect> {
         if self.order.by == key && self.order.desc == desc {
             return vec![];
         }

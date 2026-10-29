@@ -74,4 +74,5 @@ pub enum Message {
     Chrome(chrome::Act),
     Column(columnsview::Msg),
     Trash(trashview::Msg),
+    Tab(crate::tabbar::Msg),
 }

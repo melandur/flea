@@ -119,6 +119,9 @@ pub struct Pane {
     locating: Option<(String, String, Anchor)>,
     pub(crate) watch_timer: bool,
     pub(crate) watch_debt: bool,
+    // tabs.rs: the hidden tabs' snapshots, and the listing counter a selection's return is checked by.
+    pub tabs: crate::tabs::Tabs,
+    pub(crate) list_requests: u64,
 }
 
 pub fn join(dir: &str, name: &str) -> String {
@@ -194,6 +197,7 @@ impl Pane {
         self.locating = None;
         self.window_pending = None;
         self.in_flight = Some(InFlight { path: path.clone(), total: None });
+        self.list_requests += 1;
         vec![Effect::Send(Request::List { path, first: self.window_size(), hidden: self.hidden, order: self.order.clone() })]
     }
 
@@ -277,6 +281,10 @@ impl Pane {
         let Some(anchor) = self.anchor.take() else { return vec![] };
         if self.total == 0 {
             return vec![];
+        }
+        // No name is Tabs.applyPending's pendingCursor: the index the tab was on, clamped.
+        if anchor.name.is_empty() {
+            return self.place_cursor(anchor.fallback.min(self.total - 1));
         }
         if let Some(offset) = self.rows.iter().position(|r| r.n == anchor.name) {
             return self.land(self.held + offset, anchor.rename);

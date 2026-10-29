@@ -12,6 +12,8 @@ pub enum Kind {
     // TrashHost.menuAt: the Trash's own rows, and a selection inside the Trash view.
     Trash,
     TrashSelection,
+    // PlaceMenu: a Places or Favorites row's own folder menu; true for a favourite.
+    Place(bool),
 }
 
 // What the rules read. `targets` is ui/js/Ops.js targetIndices' length: the selection when there is
@@ -178,6 +180,28 @@ pub fn trash_entries(kind: Kind, total: usize, busy: bool, hidden: &[String]) ->
         }
         group = grp;
         out.push(Item::Row(entry(id, id, label, glyph, id != "open" && (total == 0 || busy))));
+    }
+    out
+}
+
+// PlaceMenu.entries: the folder menu while its Extras row is on, the favourite's one Remove while it
+// is off, and nothing for Home then; the last row adds the favourite or removes it, never both.
+pub fn place_entries(favourite: bool, hidden: &[String]) -> Vec<Item> {
+    let entry = |id, action, label, glyph| Entry { id, action, label, glyph, disabled: false, danger: false, hint: "", errored: false, sub: vec![] };
+    if is_hidden(hidden, "placeMenu") {
+        return if favourite { vec![Item::Row(entry("removeFavourite", "removeFavourite", "Remove", "minus"))] } else { vec![] };
+    }
+    let mut out = vec![];
+    let mut group = "";
+    for &(id, label, glyph, kinds, grp, _) in INVENTORY {
+        if !kinds.contains('P') || is_hidden(hidden, id) || (id == "addFavourite" && favourite) || (id == "removeFavourite" && !favourite) {
+            continue;
+        }
+        if !out.is_empty() && group != grp {
+            out.push(Item::Separator);
+        }
+        group = grp;
+        out.push(Item::Row(entry(id, id, label, glyph)));
     }
     out
 }

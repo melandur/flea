@@ -84,8 +84,13 @@ impl Flea {
         let was = (self.grid_mode(), self.columns_mode());
         self.dual_from = mode.to_string();
         let left = if self.other.is_some() { self.toggle_split() } else { crate::split::save_view_mode(mode) };
+        Task::batch([left, self.after_view_change(was)])
+    }
+
+    // What a view change costs once the mode is set, whether chosen or restored by a tab.
+    pub(crate) fn after_view_change(&mut self, was: (bool, bool)) -> Task<Message> {
         if was == (self.grid_mode(), self.columns_mode()) {
-            return left;
+            return Task::none();
         }
         // Pane.qml onViewModeChanged: only the views that draw a filter keep one, and the held
         // thumbnails are decoded again at the new view's own size.
@@ -98,7 +103,7 @@ impl Flea {
         self.scroll_y = 0.0;
         let scrolled = self.run(vec![crate::pane::Effect::ScrollTo(0)]);
         let reported = self.report_viewport();
-        Task::batch([left, scrolled, reported, Task::batch(decodes)])
+        Task::batch([scrolled, reported, Task::batch(decodes)])
     }
 
     fn chrome_button(&self, glyph: &'static str, enabled: bool, ink: iced::Color, act: Act) -> Element<'_, Message> {

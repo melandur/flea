@@ -202,3 +202,13 @@ fn the_trash_menus_grey_on_an_empty_or_busy_trash_and_only_delete_can_be_hidden(
     assert_eq!(rows(trash_entries(Kind::TrashSelection, 3, false, &["delete".into()])), ["restoreTrashSelection"]);
     assert_eq!(rows(trash_entries(Kind::Trash, 3, false, &["emptyTrash".into()])), ["open", "|", "restoreAll"]);
 }
+
+#[test]
+fn a_place_row_menu_acts_on_its_folder_and_is_one_remove_while_its_extras_row_is_off() {
+    let rows = |items: Vec<Item>| items.into_iter().map(|i| match i { Item::Row(e) => e.action, Item::Separator => "|" }).collect::<Vec<_>>();
+    assert_eq!(rows(place_entries(false, &[])), ["open", "openTab", "|", "openTerminal", "copypath", "addFavourite"]);
+    assert_eq!(rows(place_entries(true, &[])), ["open", "openTab", "|", "openTerminal", "copypath", "removeFavourite"]);
+    let off = vec!["placeMenu".to_string()];
+    assert_eq!(rows(place_entries(true, &off)), ["removeFavourite"]);
+    assert!(place_entries(false, &off).is_empty(), "Home has no menu then");
+}

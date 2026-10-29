@@ -57,6 +57,7 @@ mod pane;
 mod pathbar;
 mod places_rows;
 mod pdf;
+mod placemenu;
 mod picker;
 mod prefs;
 mod providers;
@@ -89,6 +90,8 @@ mod testexec;
 mod tables {
     include!(concat!(env!("OUT_DIR"), "/tables.rs"));
 }
+mod tabbar;
+mod tabs;
 mod tasks;
 mod theme;
 mod trash;
@@ -192,7 +195,7 @@ impl Flea {
             Message::Key(event) => self.key(event),
             Message::Resized(size) => {
                 // The chrome, the header and the status bar are a row each.
-                self.viewport_h = (size.height - 3.0 * ROW_H).max(ROW_H);
+                self.viewport_h = (size.height - 3.0 * ROW_H - self.tab_strip_h()).max(ROW_H);
                 self.window_w = size.width;
                 let other = self.other.as_ref().map(|o| o.side);
                 let mine = self.report_viewport();
@@ -237,6 +240,7 @@ impl Flea {
             Message::Chrome(act) => self.chrome_act(act),
             Message::Column(msg) => self.column_message(msg),
             Message::Trash(msg) => self.trash_message(msg),
+            Message::Tab(msg) => self.tab_message(msg),
             m @ (Message::PanelLoaded(..)
             | Message::PanelSaved(_)
             | Message::PanelClose

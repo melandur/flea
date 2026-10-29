@@ -21,6 +21,29 @@ fn elide(label: &str, width: f32) -> String {
 }
 
 impl Flea {
+    // Where row `index` ends, in window coordinates: the chrome, the tab strip, the rail's own 8 px
+    // top padding, then a heading before each group's first row, walked the way rail_view lays out.
+    pub(crate) fn rail_row_bottom(&self, index: usize) -> f32 {
+        let mut y = ROW_H + self.tab_strip_h() + 8.0;
+        let mut last = None;
+        let empty_network = self.rail.show_network && !self.rail.entries.iter().any(|e| e.group() == Group::Network);
+        for (i, e) in self.rail.entries.iter().enumerate().take(index + 1) {
+            if empty_network && e.group() == Group::Devices && last != Some(Group::Network) {
+                y += ROW_H;
+                last = Some(Group::Network);
+            }
+            if last != Some(e.group()) {
+                y += ROW_H;
+                last = Some(e.group());
+            }
+            y += ROW_H;
+            if i == index {
+                break;
+            }
+        }
+        y
+    }
+
     pub(crate) fn rail_view(&self) -> Element<'_, Message> {
         let p = self.palette;
         let mut col = Column::new().padding([8.0, 0.0]);
