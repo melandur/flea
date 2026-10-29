@@ -362,6 +362,7 @@ impl Flea {
                     .map(|key| Subscription::run_with(key, backend::events).with(key).map(|(key, event)| Message::Backend(key, event))),
             ),
             keyboard::listen().map(Message::Key),
+            iced::event::listen_with(keys::captured_escape).map(Message::Key),
             window::close_requests().map(|_| Message::CloseRequested),
             window::resize_events().map(|(_, size)| Message::Resized(size)),
             // A playing file is drawn at its own pace, about 30 frames a second; a paused one is
@@ -382,11 +383,12 @@ fn main() -> iced::Result {
     iced::application(boot::boot, Flea::update, Flea::view)
         .title("Flea")
         .subscription(Flea::subscription)
-        .exit_on_close_request(false)
         .default_font(Font::DEFAULT)
         .settings(iced::Settings { default_text_size: TEXT_PX.into(), ..Default::default() })
         // Its own app id while both front ends exist, so a compositor rule or a test can tell them apart.
         .window(window::Settings {
+            // Not on the builder: .window() replaces the settings whole, and a close then skips the drain.
+            exit_on_close_request: false,
             platform_specific: window::settings::PlatformSpecific {
                 application_id: "com.thisisgm.flea.iced".into(),
                 ..Default::default()

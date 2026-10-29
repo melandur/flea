@@ -249,11 +249,14 @@ pub fn launch() -> iced::Result {
     iced::application(app::boot, app::Picking::update, app::Picking::view)
         .title(app::Picking::title)
         .subscription(app::Picking::subscription)
-        .exit_on_close_request(false)
         .default_font(iced::Font::DEFAULT)
         .settings(iced::Settings { default_text_size: crate::TEXT_PX.into(), ..Default::default() })
         .window(window::Settings {
             size: iced::Size::new(720.0, 520.0),
+            // Here and not as .exit_on_close_request(false) on the builder: .window() replaces the
+            // whole settings, so a builder call before it is silently undone and a close exits at
+            // once, skipping the backend's drain (and, in the chooser, the refusal reply).
+            exit_on_close_request: false,
             platform_specific: window::settings::PlatformSpecific {
                 application_id: "com.thisisgm.flea.picker".into(),
                 ..Default::default()

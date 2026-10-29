@@ -5678,4 +5678,6 @@ The window is being rewritten in Rust with iced, staged, operator's ruling of 20
 `crates/flea-iced`. Until its last stage lands, `ui/` is still the shipped front end and every rule
 above about it still applies. `FLEA_FRONTEND=iced` is the one opt-in: `src/gui.rs` then execs
 `flea-iced` for `--gui` and `--pick` instead of `qs`, and refuses rather than falls back when it is
-asked for and not found; nothing else chooses it.
+asked for and not found; nothing else chooses it. `tests/iced-headless.sh` drives the iced window's keyboard
+in a private headless sway on its own socket, so it never takes the operator's screen or focus; run
+that and not a key driver aimed at the desktop.

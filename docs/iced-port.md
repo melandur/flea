@@ -243,8 +243,7 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      footer.
    - **Deviations.** The rail lists Recent, the favourites, home and its folders and the mounted
      volumes; a network place, a phone and an unmounted volume say they open from the Flea window,
-     because the chooser does not mount yet. Escape inside the Filename field gives the keyboard back
-     first and cancels on the second press, because iced's text field takes the first one. A
+     because the chooser does not mount yet. A
      malformed history file reads as an empty Recent, where Qt's reader kept the bookmarks before
      the break. The focus ring is the rail, the list, the Filename field and the two collision
      buttons; the chrome's buttons answer the pointer only.
@@ -254,5 +253,43 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      `qs`, which for iced is unmeasured. Asked for and not found, it refuses with exit 2 rather than
      falling back; empty or any other value is the `qs` window. `--select` is not honoured yet and
      says so. `tests/modes.sh` pins all of it against stubs and goes red with the seam disabled.
-   - **The default stays `qs`.** Switching it waits on the live keyboard run and a field-bench run
-     showing the switch loses no column Flea wins today; neither has been done.
+   - **The live keyboard run (2026-10-29), on the operator's desktop.** A sandboxed tree, state and
+     cache, keys sent with `wtype` only while the iced window held focus AND its last `list` named
+     the fixture, every step checked against `FLEA_ICED_TRACE` (requests, and now every key the
+     window was handed), the disk and a screenshot. Driven and correct: the cursor keys, Right into a
+     folder and Left back onto it, Ctrl+H (and `ui.json` written), F2 rename on disk, Ctrl+N then
+     Escape then Ctrl+Z, Space, Ctrl+C, Ctrl+V into a folder with the status line, Ctrl+F and a
+     ranked shallow search, Ctrl+T split with the keyboard on the new pane and its child quit on
+     leaving, Right preview and Left close, `,` the settings panel walked by keyboard and its toggle
+     written and re-listed, Ctrl+G (hides the rail, as in QML) and Tab into the rail. The chooser:
+     two marks and Enter answered both URIs, a typed save name was probed, reviewed and answered,
+     closing the window answered a refusal, and one Escape in the Filename field cancelled.
+     **Two defects found and fixed.** A focused text field captures Escape, so no editor closed on
+     it (`keys::captured_escape` forwards exactly the captured presses to the same router, in both
+     windows). `.window(Settings)` replaces the whole window settings, so the earlier
+     `.exit_on_close_request(false)` was undone: closing the window exited without `quit` and the
+     drain, and a closed chooser wrote no reply at all, which the portal reads as a fault; the field
+     now sits inside the settings. **Not explained:** the first run, before keys were traced, read
+     each arrow as an enter-and-leave pair of `list` requests, and it never recurred; `wtype`'s
+     keymap swap is the guess. **Not driven:** Enter on a rail place (it lists the operator's real
+     folders), Super+W (a `wtype` key cannot fire a compositor bind; the close was driven with
+     `hl.dsp.window.close` on the iced window's own address), trash (`gio trash` refuses `/tmp`).
+     **The run took the operator's focus**, and once their own click moved the window onto a live
+     SFTP mount, where two read-only `list`s went before the fixture guard existed.
+   - **The same run, headless, without the operator's focus.** sway 1.12 run with
+     `WLR_BACKENDS=headless` on its own socket, never as a session, with the iced window, `wtype`
+     and `grim` all pointed at that socket alone; the operator's Hyprland never sees the window. 27
+     checks, all passing, replaying every step above against the trace, the disk and the chooser's
+     reply file. Both fixes were reverted one at a time and the run turned red on exactly the steps
+     each one owns, so it tests what it says. **Three things this box needed**, each found by it
+     failing: something here SIGKILLs any process named `sway` (the same binary under another name
+     runs), so the run uses a renamed copy; `wtype`'s short-lived virtual keyboard sends its key
+     before a client in a keyboard-less compositor has its keymap, so every call waits 300 ms
+     first; and the editor's Escape is only a real test once text has been typed into it, because
+     a field that never took focus lets Escape through uncaptured and passes with or without the
+     fix. **Return is never pressed on a file there**: it runs the desktop's handler, which opened
+     a terminal inside the test compositor on the first headless run. It is `tests/iced-headless.sh`, its
+     fixture, state and screenshots under `FLEA_FIXTURE_ROOT/flea-iced-headless` through the
+     sandbox guard, listed in `tests/run-all.sh`'s not-run inventory because sway is no dependency.
+   - **The default stays `qs`.** Switching it waits on a field-bench run showing the switch loses no
+     column Flea wins today, which has not been done.

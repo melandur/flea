@@ -52,6 +52,7 @@ picker|needs the display, a session bus, and Flea activatable as the FileChooser
 network-live|needs live share credentials and the approved runtime bundle, controller only
 ui-tui|is a standalone native TUI proof that needs the display and owns the display lock
 themes|needs the display: it launches the candidate once per stock theme, and tests/js/themes.js is the half that runs here
+iced-headless|needs sway, wtype and grim and both cargo builds; it runs its own headless compositor and never touches the display
 "
 
 printf '\nNot run here, and why:\n'

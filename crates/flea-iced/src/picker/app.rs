@@ -372,6 +372,7 @@ impl Picking {
         Subscription::batch([
             Subscription::run_with(0u64, backend::events).map(PMsg::Backend),
             keyboard::listen().map(PMsg::Key),
+            iced::event::listen_with(crate::keys::captured_escape).map(PMsg::Key),
             window::close_requests().map(|_| PMsg::CloseRequested),
         ])
     }

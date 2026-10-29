@@ -120,7 +120,8 @@ fn a_chooser_round_trip_through_the_real_backend() {
     // Recent lists what is still there, in the history's own order, and nothing remote.
     let e = live.c.open(super::RECENT);
     live.run(e);
-    live.until("the Recent listing", |l| !l.c.rows.is_empty());
+    // The marks are checked again on every listing, and accept is refused until that answer lands.
+    live.until("the Recent listing", |l| !l.c.rows.is_empty() && l.c.mark_request == 0);
     assert_eq!(live.names(), vec![format!("{}/a #.png", dir.trim_start_matches('/'))]);
     let e = live.c.accept(false);
     live.run(e);

@@ -4,6 +4,16 @@ use iced::keyboard::{self, key::Named, Key};
 use iced::Task;
 use std::time::Instant;
 
+// A focused text field captures Escape to unfocus itself, so keyboard::listen never sees the one
+// press every editor here closes on. This hands exactly those captured presses to the same router;
+// an uncaptured Escape still arrives through keyboard::listen alone, so none is handled twice.
+pub(crate) fn captured_escape(event: iced::Event, status: iced::event::Status, _: iced::window::Id) -> Option<keyboard::Event> {
+    match (event, status) {
+        (iced::Event::Keyboard(e @ keyboard::Event::KeyPressed { key: Key::Named(Named::Escape), .. }), iced::event::Status::Captured) => Some(e),
+        _ => None,
+    }
+}
+
 impl Flea {
     pub(crate) fn key(&mut self, event: keyboard::Event) -> Task<Message> {
         if let keyboard::Event::ModifiersChanged(m) = event {
@@ -11,6 +21,10 @@ impl Flea {
             return Task::none();
         }
         let keyboard::Event::KeyPressed { key, modifiers, repeat, text, .. } = event else { return Task::none() };
+        // FLEA_ICED_TRACE: every key the window was handed, beside the requests it caused.
+        if std::env::var_os("FLEA_ICED_TRACE").is_some_and(|v| !v.is_empty()) {
+            eprintln!("flea-iced: key {key:?} {modifiers:?} repeat={repeat} text={text:?}");
+        }
         // An open settings panel takes every key, so none reaches the listing behind it.
         if self.panel.open && self.dialog.is_none() {
             return self.panel_key(&key);
