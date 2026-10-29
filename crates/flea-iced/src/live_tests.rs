@@ -194,3 +194,54 @@ fn a_visible_image_is_thumbnailed_decoded_and_nothing_else_is_asked() {
     drop(live);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn the_preview_reads_an_archive_index_and_renders_an_image_through_the_real_backend() {
+    let Some(bin) = std::env::var("FLEA_BIN").ok().filter(|b| !b.is_empty()) else {
+        eprintln!("live: FLEA_BIN is not set, so the preview round trip was skipped");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("flea-iced-preview-{}", std::process::id()));
+    let dir = root.join("d");
+    std::fs::create_dir_all(dir.join("inner")).unwrap();
+    std::fs::write(dir.join("inner/a.txt"), b"alpha").unwrap();
+    std::fs::write(dir.join("b.txt"), b"beta").unwrap();
+    let zip = root.join("pack.zip");
+    let made = Command::new("bsdtar").arg("-a").arg("-cf").arg(&zip).arg("-C").arg(&dir).arg("inner").arg("b.txt").status().unwrap();
+    assert!(made.success());
+    let png = root.join("red.png");
+    ::image::RgbImage::from_pixel(64, 40, ::image::Rgb([220, 20, 20])).save(&png).unwrap();
+
+    // The archive: list its folder, ask the one row's index, read the answer the way the shell does.
+    let mut live = Live::start(&bin);
+    let out = live.pane.open(root.to_str().unwrap().into(), None);
+    live.run(out);
+    live.until("the listing", |p| p.listed_once && !p.list_in_flight());
+    let row = live.pane.rows.iter().position(|r| r.n == "pack.zip").unwrap();
+    live.stdin.write_all(Request::MetaArchive { row }.line().as_bytes()).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let meta = loop {
+        let line = live.lines.recv_timeout(deadline.saturating_duration_since(Instant::now())).expect("no meta answer");
+        if let Some(Reply::Meta { row: r, entries, names, archive_failed }) = wire::parse(&line) {
+            break (r, entries, names, archive_failed);
+        }
+    };
+    assert_eq!(meta.0, row);
+    assert!(!meta.3, "the index read failed");
+    assert!(meta.1 >= 2 && meta.2.iter().any(|(n, _)| n.trim_end_matches('/') == "b.txt"), "{meta:?}");
+    drop(live);
+
+    // The image: --preview-image renders in the thumbnail jail and answers a PNG path.
+    let out = Command::new(&bin).args(["--preview-image", png.to_str().unwrap(), "512"]).output().unwrap();
+    let rendered = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    assert!(out.status.success() && rendered.ends_with(".png"), "{rendered}");
+    let decoded = ::image::open(&rendered).unwrap().to_rgb8();
+    assert!(decoded.get_pixel(decoded.width() / 2, decoded.height() / 2)[0] > 180);
+
+    // And a table read off disk the way the shell reads one.
+    let csv = root.join("t.csv");
+    std::fs::write(&csv, "name;n\nwidget;3\n").unwrap();
+    let t = crate::previewshell::Table::read(&std::fs::read_to_string(&csv).unwrap(), csv.to_str().unwrap(), false);
+    assert_eq!((t.delim, t.records(), t.row(1)), (';', 2, vec!["widget".to_string(), "3".into()]));
+    let _ = std::fs::remove_dir_all(&root);
+}

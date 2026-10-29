@@ -115,6 +115,7 @@ fn a_bare_root_lists_through_a_spanish_gvfs_and_a_share_opens_by_the_pinned_loca
     std::fs::write(&stub, STUB).unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    crate::testexec::wait_executable(&stub);
     let path = format!("{}:/usr/bin:/bin", dir.display());
 
     let mut n = Network::new(false);
@@ -222,6 +223,7 @@ fn the_password_reaches_the_helper_on_its_stdin_and_never_in_its_argv() {
     std::fs::write(&stub, format!("#!/bin/sh\nread -r pw\nprintf 'stdin=%s argv=%s\\n' \"$pw\" \"$*\" > {}\nexit 0\n", log.display())).unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+    crate::testexec::wait_executable(&stub);
 
     let mut n = Network::new(false);
     let out = n.save_location("sftp://u@h/x", "h", "hunter2", "network-1");

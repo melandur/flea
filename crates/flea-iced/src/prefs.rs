@@ -26,6 +26,8 @@ pub struct Prefs {
     pub show_unmounted: bool,
     pub rail_shown: bool,
     pub sidebar_width: Option<f64>,
+    // open.rules: an ending and the application the operator chose for it.
+    pub open_rules: Vec<(String, String)>,
 }
 
 impl Default for Prefs {
@@ -50,6 +52,7 @@ impl Default for Prefs {
             show_unmounted: false,
             rail_shown: true,
             sidebar_width: None,
+            open_rules: vec![],
         }
     }
 }
@@ -85,6 +88,9 @@ impl Prefs {
             show_unmounted: v.pointer("/places/showUnmounted").and_then(Value::as_bool) == Some(true),
             rail_shown: v.pointer("/places/rail").and_then(Value::as_str) != Some("hidden"),
             sidebar_width: v.pointer("/places/sidebarWidth").and_then(Value::as_f64),
+            open_rules: v.pointer("/open/rules").and_then(Value::as_array).into_iter().flatten()
+                .filter_map(|r| Some((r.get("ends")?.as_str()?.to_lowercase(), r.get("app")?.as_str()?.to_string())))
+                .collect(),
         }
     }
 
@@ -93,6 +99,14 @@ impl Prefs {
             Ok(o) if o.status.success() => Prefs::from_json(&String::from_utf8_lossy(&o.stdout)),
             _ => Prefs::default(),
         }
+    }
+
+    // SettingsOpen.chosen: the longest ending wins, case-folded, and a name that IS the ending is a
+    // dotfile. Nav.openCursor asks this before the archive route, so a claimed .nii.gz goes to its
+    // application rather than to Flea's own archive view.
+    pub fn claimed(&self, name: &str) -> bool {
+        let folded = name.to_lowercase();
+        self.open_rules.iter().any(|(ends, _)| folded.len() > ends.len() && folded.ends_with(ends.as_str()))
     }
 
     // ui/js/Startup.js startPath: a named path outranks every setting, and an empty one is home.
@@ -131,6 +145,13 @@ mod tests {
         assert!(p.sort_desc && !p.folders_first && p.wrap_at_ends && p.hidden);
         assert!(Prefs::from_json("{}").folders_first);
         assert_eq!(Prefs::from_json("not json"), Prefs::default());
+    }
+
+    #[test]
+    fn a_claimed_ending_is_case_folded_and_a_dotfile_is_not_it() {
+        let p = Prefs::from_json(r#"{"open":{"rules":[{"ends":".nii.gz","app":"itksnap.desktop"}]}}"#);
+        assert!(p.claimed("BRAIN.NII.GZ") && p.claimed("a.nii.gz"));
+        assert!(!p.claimed(".nii.gz") && !p.claimed("a.gz"));
     }
 
     #[test]

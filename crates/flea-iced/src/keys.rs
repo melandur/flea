@@ -21,6 +21,9 @@ impl Flea {
                 _ => Task::none(),
             };
         }
+        if let Some(task) = self.preview_key(&key) {
+            return task;
+        }
         // The rail's rename field owns the keys while it is open; Escape is the one it hands back.
         if self.rail.renaming.is_some() {
             if key == Key::Named(Named::Escape) {

@@ -44,6 +44,9 @@ pub enum Reply {
     Undone { op: String },
     // file is empty rather than absent on failure, so a row that was asked for always answers.
     Thumbed { row: usize, file: String },
+    // The archive half of a meta answer: the exact entry count, the first names, and whether the
+    // index read failed, in which case the counts are zero and say nothing.
+    Meta { row: usize, entries: u64, names: Vec<(String, bool)>, archive_failed: bool },
     Other,
 }
 
@@ -103,6 +106,14 @@ pub fn parse(line: &str) -> Option<Reply> {
         "made" => Reply::Made { path: field("path") },
         "undone" => Reply::Undone { op: field("op") },
         "thumbed" => Reply::Thumbed { row: uint("row")? as usize, file: field("file") },
+        "meta" => Reply::Meta {
+            row: uint("row")? as usize,
+            entries: uint("entries").unwrap_or(0),
+            names: v.get("names").and_then(Value::as_array).into_iter().flatten()
+                .filter_map(|e| Some((e.get("n")?.as_str()?.to_string(), e.get("d").and_then(Value::as_bool).unwrap_or(false))))
+                .collect(),
+            archive_failed: flag("afailed"),
+        },
         "error" => Reply::Error { r#where: field("where"), path: field("path"), msg: field("msg") },
         _ => Reply::Other,
     })
@@ -140,6 +151,8 @@ pub enum Request {
     // Never sent with an empty rows: thumbcancel with none cancels everything queued.
     Thumb { rows: Vec<usize> },
     ThumbCancel { rows: Vec<usize> },
+    // One row's archive index, asked only while that archive is the thing open: never a sweep.
+    MetaArchive { row: usize },
     Quit,
 }
 
@@ -164,6 +177,7 @@ impl Request {
             Request::Undo => json!({"c": "undo"}),
             Request::Thumb { rows } => json!({"c": "thumb", "rows": rows}),
             Request::ThumbCancel { rows } => json!({"c": "thumbcancel", "rows": rows}),
+            Request::MetaArchive { row } => json!({"c": "meta", "row": row, "text": false, "media": false, "archive": true}),
             Request::Quit => json!({"c": "quit"}),
         };
         format!("{v}\n")

@@ -21,7 +21,10 @@ impl Flea {
                     let y = index as f32 * ROW_H;
                     tasks.push(operation::scroll_to(LIST_ID, scrollable::AbsoluteOffset { x: 0.0, y }));
                 }
+                // Nav.openCursor: an archive nobody claimed opens Flea's own view and launches nothing.
+                Effect::OpenFile(path) if self.archive_routes_here(&path) => tasks.push(self.open_preview()),
                 Effect::OpenFile(path) => tasks.push(self.open_file(path)),
+                Effect::Preview => tasks.push(self.open_preview()),
                 Effect::WatchTimer => tasks.push(Task::perform(
                     sleep(Duration::from_millis(pane::WATCH_MS)),
                     |_| Message::WatchFired,

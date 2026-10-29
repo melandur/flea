@@ -121,7 +121,42 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
    files had passed its 400-line hard cap, `pane.rs` at 836. Tests moved to `*_tests.rs` beside each
    module, the way `src/shelf_tests.rs` sits beside `src/shelf.rs`, and `thumbs.rs`, `watch.rs`,
    `sentence.rs`, `opreplies.rs`, `view.rs`, `keys.rs` and `boot.rs` came out at their seams.
-5. Preview: text, image (through `--preview-image`), archive, table, PDF, media.
+5. **Preview, split in two.**
+   - **5a, the overlay and the kinds without a native library (done, not yet seen on screen).**
+     `kinds.rs` is `ui/js/Kinds.js`. `delimited.rs` is `ui/js/Delimited.js`: quotes open a field
+     only at its start, doubled quotes, newlines inside a cell, the BOM, the sniff's agreement and
+     tie rule, and the number test, every one of whose cases is pinned to the JS regex's own answer
+     taken with node (that run caught mixed group separators, `1,234.567.890`, which the first port
+     refused). `preview.rs` is the overlay's state and `ui/js/PreviewKeys.js`: inset Up and Down move
+     the listing with the preview following, settled at 120 ms so a held key loads the first file
+     and the last and nothing between; Right and Space expand, Left leaves an inset preview, Escape
+     leaves from either. `previewshell.rs` loads text into a read-only editor, reads a table, runs
+     `flea --sheet` for a spreadsheet, renders an image through `flea --preview-image` in the
+     thumbnail jail, and asks the backend for one archive row's index; every answer carries its path
+     and is dropped if the cursor moved on. Enter on an archive opens this view unless `open.rules`
+     claims the ending. A live test reads a real zip's index through the backend and renders a PNG
+     through the jail. **Readings of the source over the prose:** Space only ever expands, which is
+     what `PreviewKeys.act` does, although AGENTS.md says it also returns to inset. **Deviations:** a
+     table's header row scrolls with its records so its columns stay aligned sideways, where QML pins
+     it; text is drawn without syntax colours until `ui/js/Syntax.js` is ported as its own step.
+   - **5b, PDF and media (done, not yet seen on screen).** The operator chose poppler-glib and
+     GStreamer on 2026-10-29, both already installed on an Omarchy box. `pdf.rs` keeps one worker
+     thread holding the open document, because poppler's objects stay on the thread that made them
+     and re-parsing for every page turn would cost what QtPdf never did; a page is fitted to the
+     frame at zoom 1, the ladder runs to 4 in quarter steps, and a test writes a real two-page PDF
+     through cairo and reads its colours back at both zooms. `media.rs` is `playbin` with an RGBA app
+     sink holding one frame and dropping the rest; a test encodes a two-second clip with GStreamer
+     and plays it back to a red 64x48 frame and a two-second duration. `gst::init` runs on the first
+     media preview and never at startup, rule 5's laziness carried over (unmeasured against QML's
+     20 MB). Expanded Left and Right turn the page or seek 5 s; `m` mutes media only, one session
+     flag; a playing file is drawn about 30 times a second and a paused one only polled; dropping
+     the preview is what stops playback. **Not ported:** the PDF's Tab-walked control strip (its
+     buttons are clickable), the media seek bar's scrubbing, the video poster mark, the sample rate
+     fact. **Packaging, when the iced binary ships:** `poppler-glib`, `gstreamer`, `gst-plugins-base`
+     and `gst-plugins-good` join `depends`, and `gst-libav` belongs in `optdepends` for codecs.
+     **Test hygiene:** a stub a test has just written can be refused with `ETXTBSY` by a sibling
+     test's fork still holding its write descriptor; `testexec::wait_executable` closes that, after
+     one red in a full parallel run and six greens since.
 6. Settings panel, theme catalog, tabs, split, search, filter, path bar.
 7. The picker for `tools/flea-portal`, then `flea --gui` switches to the iced binary, after a
    field-bench run says the switch does not lose a column Flea wins today.

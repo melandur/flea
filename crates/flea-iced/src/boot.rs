@@ -63,6 +63,13 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         share_browser: None,
         dialog: None,
         dialog_memory: None,
+        preview: Default::default(),
+        surfaces: Default::default(),
+        table_scroll: 0.0,
+        window_w: 1280.0,
+        prefs: prefs.clone(),
+        pdf: None,
+        playback: Default::default(),
     };
     flea.rebuild_rail();
     // The device poll starts at once and re-arms itself, the Timer's triggeredOnStart in QML.

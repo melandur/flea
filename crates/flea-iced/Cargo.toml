@@ -15,9 +15,20 @@ path = "src/main.rs"
 iced = { version = "0.14", features = ["tokio", "image", "svg"] }
 # Decodes a cache PNG to the icon slot off the UI thread, the job QML gave Image.sourceSize.
 image = { version = "0.25", default-features = false, features = ["png"] }
+# Stage 5b, the operator's choice of 2026-10-29: poppler-glib renders a PDF page into a cairo
+# surface, and GStreamer plays media into frames, both system libraries already on an Omarchy box.
+poppler-rs = "0.26"
+cairo-rs = "0.22"
+gstreamer = "0.25"
+gstreamer-app = "0.25"
+gstreamer-video = "0.25"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+# The PDF test writes its own two-page fixture through cairo, which only a test needs.
+[dev-dependencies]
+cairo-rs = { version = "0.22", features = ["pdf"] }
 
 [profile.release]
 opt-level = 3

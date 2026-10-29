@@ -51,3 +51,9 @@ fn a_request_is_one_line_with_its_newline() {
     assert_eq!(v["path"], "/a \"b\"");
     assert_eq!(v["first"], 350);
 }
+
+#[test]
+fn the_meta_sample_from_the_backend_parses_its_archive_half() {
+    let line = r#"{"t":"meta","row":4,"w":0,"h":0,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true},{"n":"say \"hi\".txt","d":false}],"lines":0,"partial":false,"lfailed":false,"target":"","targetdir":false,"owner":"gm"}"#;
+    assert_eq!(parse(line), Some(Reply::Meta { row: 4, entries: 214, names: vec![("ui".into(), true), ("say \"hi\".txt".into(), false)], archive_failed: false }));
+}

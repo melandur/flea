@@ -4,6 +4,7 @@ mod backend;
 mod boot;
 mod contrast;
 mod devices;
+mod delimited;
 mod dialog;
 mod dialogview;
 mod effects;
@@ -12,6 +13,8 @@ mod format;
 #[cfg(test)]
 mod live_tests;
 mod marks;
+mod media;
+mod mediashell;
 mod mounts;
 mod netopen;
 mod netshell;
@@ -19,17 +22,24 @@ mod network;
 mod opreplies;
 mod ops;
 mod pane;
+mod pdf;
 mod prefs;
+mod preview;
+mod previewshell;
+mod previewview;
 mod process;
 mod protocols;
 mod rail;
 mod railshell;
 mod railview;
 mod sentence;
+#[cfg(test)]
+mod testexec;
 mod theme;
 mod thumbs;
 mod watch;
 mod keys;
+mod kinds;
 mod view;
 mod wire;
 
@@ -91,6 +101,13 @@ struct Flea {
     dialog: Option<dialog::Dialog>,
     // NetworkDialog's unacknowledged failure: the place and the reason, kept across a close.
     dialog_memory: Option<(String, String)>,
+    preview: preview::Preview,
+    surfaces: previewshell::Surfaces,
+    table_scroll: f32,
+    window_w: f32,
+    prefs: prefs::Prefs,
+    pdf: Option<mediashell::PdfView>,
+    playback: mediashell::Playback,
 }
 
 #[derive(Debug, Clone)]
@@ -120,6 +137,17 @@ enum Message {
     NetAuth(u64, process::Ran),
     FavouriteSaved(Result<Vec<serde_json::Value>, String>),
     Dialog(dialog::Msg),
+    PreviewLoaded(String, Result<Result<previewshell::Table, String>, ()>),
+    PreviewImage(String, Option<image::Handle>),
+    PreviewSettled(u64),
+    PreviewClose,
+    TableScrolled(f32),
+    PdfRendered(Result<pdf::Page, ()>),
+    PdfTurn(i32),
+    PdfZoom(i32),
+    MediaTick,
+    MediaToggle,
+    MediaMute,
     NetUnmounted(process::Ran),
     RailRenameInput(String),
     RailRenameSubmit,
@@ -199,6 +227,10 @@ impl Flea {
 
     fn handle(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::Backend(backend::Event::Reply(reply @ wire::Reply::Meta { .. })) => {
+                self.meta_answered(reply);
+                Task::none()
+            }
             Message::Backend(backend::Event::Reply(reply)) => {
                 let effects = self.pane.receive(reply);
                 self.run(effects)
@@ -218,6 +250,7 @@ impl Flea {
             Message::Resized(size) => {
                 // The header and the status bar are a row each.
                 self.viewport_h = (size.height - 2.0 * ROW_H).max(ROW_H);
+                self.window_w = size.width;
                 self.report_viewport()
             }
             Message::Scrolled(viewport) => {
@@ -246,37 +279,34 @@ impl Flea {
                     _ => self.say("That file could not be opened.".into()),
                 }
             }
-            Message::DeviceListed(stdout) => self.device_listed(stdout),
-            Message::DeviceRan(job, code) => self.device_ran(job, code),
-            Message::DeviceTimer(which, generation) => self.device_timer(which, generation),
-            Message::RailPressed(i) => self.rail_activate(i, false),
-            Message::RailMenu(i) => self.rail_open_menu(i),
-            Message::RailChose(action) => self.rail_choose(action),
-            Message::NetTick => self.net_tick(),
-            Message::NetListed(ran) => self.net_listed(ran),
-            Message::NetLeg(generation, leg, ran) => {
-                let effects = self.network.leg_done(generation, leg, ran);
-                self.run_network(effects)
-            }
-            Message::NetAuth(generation, ran) => {
-                let effects = self.network.auth_done(generation, ran);
-                self.run_network(effects)
-            }
             Message::FavouriteSaved(result) => self.favourite_saved(result),
             Message::Dialog(msg) => self.dialog_message(msg),
-            Message::NetUnmounted(ran) => self.net_unmounted(ran),
-            Message::RailRenameInput(draft) => {
-                if let Some(r) = self.rail.renaming.as_mut() {
-                    r.1 = draft;
-                }
-                Task::none()
-            }
-            Message::RailRenameSubmit => self.commit_rail_rename(),
-            Message::ShareChosen(i) => self.share_chosen(i),
-            Message::RailMenuClosed => {
-                self.rail.menu = None;
-                Task::none()
-            }
+            m @ (Message::DeviceListed(..)
+            | Message::DeviceRan(..)
+            | Message::DeviceTimer(..)
+            | Message::NetAuth(..)
+            | Message::NetLeg(..)
+            | Message::NetListed(..)
+            | Message::NetTick
+            | Message::RailChose(..)
+            | Message::RailMenu(..)
+            | Message::RailPressed(..)
+            | Message::NetUnmounted(..)
+            | Message::RailMenuClosed
+            | Message::RailRenameInput(..)
+            | Message::RailRenameSubmit
+            | Message::ShareChosen(..)) => self.rail_message(m),
+            m @ (Message::PreviewLoaded(..)
+            | Message::PreviewImage(..)
+            | Message::PreviewSettled(_)
+            | Message::PreviewClose
+            | Message::PdfRendered(_)
+            | Message::PdfTurn(_)
+            | Message::PdfZoom(_)
+            | Message::MediaTick
+            | Message::MediaToggle
+            | Message::MediaMute
+            | Message::TableScrolled(_)) => self.preview_message(m),
             Message::Settled(generation) => {
                 let effects = self.pane.settled(generation);
                 self.run(effects)
@@ -329,6 +359,13 @@ impl Flea {
             keyboard::listen().map(Message::Key),
             window::close_requests().map(|_| Message::CloseRequested),
             window::resize_events().map(|(_, size)| Message::Resized(size)),
+            // A playing file is drawn at its own pace, about 30 frames a second; a paused one is
+            // only polled for its bus, and nothing ticks at all without media open.
+            match &self.playback.media {
+                Some(m) if m.playing => iced::time::every(std::time::Duration::from_millis(33)).map(|_| Message::MediaTick),
+                Some(_) => iced::time::every(std::time::Duration::from_millis(250)).map(|_| Message::MediaTick),
+                None => Subscription::none(),
+            },
         ])
     }
 }

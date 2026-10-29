@@ -29,6 +29,8 @@ pub enum Effect {
     Alert(String),
     SaveHidden(bool),
     FocusRename,
+    // Right on a file row: the Quick Look on the cursor row.
+    Preview,
     // Restart the settle timer: a Settle message carrying this generation after that many ms.
     Settle(u64, u64),
     // Decode this cache PNG for the icon slot; a fresh answer always replaces an older picture.
@@ -362,11 +364,11 @@ impl Pane {
         }
     }
 
-    // Right: a directory enters; a file would open the preview, which this front end lacks yet.
+    // Right: a directory enters, a file opens the preview.
     pub fn forward(&mut self) -> Vec<Effect> {
         match self.row_at(self.cursor) {
             Some(r) if r.d => self.activate(),
-            Some(_) => vec![Effect::Message("Preview is not in this build yet.".into())],
+            Some(_) => vec![Effect::Preview],
             None => vec![],
         }
     }

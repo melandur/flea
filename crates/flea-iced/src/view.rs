@@ -49,7 +49,7 @@ impl Flea {
         .align_y(iced::Center);
         let status = container(status).style(move |_| container::Style::default().color(p.muted).background(p.surface));
 
-        let listing = column![header, body].width(Length::Fill);
+        let listing = column![header, self.preview_layer(body)].width(Length::Fill);
         let main: Element<'_, Message> = if self.rail.shown { row![self.rail_view(), listing].into() } else { listing.into() };
         let window = container(column![main, status])
             .style(move |_| container::Style::default().background(p.background).color(p.foreground))

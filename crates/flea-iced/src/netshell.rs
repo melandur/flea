@@ -57,6 +57,42 @@ fn write_bookmarks(body: &str) -> bool {
 }
 
 impl Flea {
+    // The rail's and the network's messages, routed here so the shell's own match stays short.
+    pub(crate) fn rail_message(&mut self, message: Message) -> Task<Message> {
+        match message {
+            Message::DeviceListed(stdout) => self.device_listed(stdout),
+            Message::DeviceRan(job, code) => self.device_ran(job, code),
+            Message::DeviceTimer(which, generation) => self.device_timer(which, generation),
+            Message::RailPressed(i) => self.rail_activate(i, false),
+            Message::RailMenu(i) => self.rail_open_menu(i),
+            Message::RailChose(action) => self.rail_choose(action),
+            Message::NetTick => self.net_tick(),
+            Message::NetListed(ran) => self.net_listed(ran),
+            Message::NetLeg(generation, leg, ran) => {
+                let effects = self.network.leg_done(generation, leg, ran);
+                self.run_network(effects)
+            }
+            Message::NetAuth(generation, ran) => {
+                let effects = self.network.auth_done(generation, ran);
+                self.run_network(effects)
+            }
+            Message::NetUnmounted(ran) => self.net_unmounted(ran),
+            Message::RailRenameInput(draft) => {
+                if let Some(r) = self.rail.renaming.as_mut() {
+                    r.1 = draft;
+                }
+                Task::none()
+            }
+            Message::RailRenameSubmit => self.commit_rail_rename(),
+            Message::ShareChosen(i) => self.share_chosen(i),
+            Message::RailMenuClosed => {
+                self.rail.menu = None;
+                Task::none()
+            }
+            _ => Task::none(),
+        }
+    }
+
     pub(crate) fn run_network(&mut self, effects: Vec<network::Effect>) -> Task<Message> {
         let mut tasks = vec![];
         for e in effects {
