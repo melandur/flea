@@ -13,6 +13,8 @@ mod jobkeys;
 mod jobshell;
 mod jobview;
 mod chrome;
+mod columns;
+mod columnsview;
 mod contrast;
 mod devices;
 mod delimited;
@@ -71,6 +73,7 @@ mod settingsapply;
 mod settingspanel;
 mod settingsview;
 mod split;
+mod subs;
 #[cfg(test)]
 mod testexec;
 // Every table build.rs generates: the mark paths and families, the filetype colours, the themes.
@@ -90,7 +93,7 @@ mod wire;
 use backend::Backend;
 use iced::keyboard;
 use iced::widget::{image, scrollable};
-use iced::{window, Font, Subscription, Task};
+use iced::{window, Font, Task};
 use pane::Pane;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -150,6 +153,9 @@ struct Flea {
     jobs: jobshell::Jobs,
     sends: sendshell::Sends,
     sheet_open: bool,
+    columns: columns::Columns,
+    // menuOnNeighbour: the folder and row a neighbour's right click is waiting to raise the menu on.
+    pending_menu: Option<(String, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -220,14 +226,17 @@ enum Message {
     Job(jobkeys::Msg),
     Send(sendshell::Msg),
     Chrome(chrome::Act),
+    Column(columnsview::Msg),
 }
 
 impl Flea {
-    // Every input ends by asking whether the watched re-read it was holding can now be paid.
+    // Every input ends by asking whether the watched re-read it was holding can now be paid, and,
+    // in the columns view, whether a neighbour column has yet to be asked for.
     fn update(&mut self, message: Message) -> Task<Message> {
         let task = self.handle(message);
         let owed = self.pane.pay_debt();
-        Task::batch([task, self.run(owed)])
+        let paid = self.run(owed);
+        Task::batch([task, paid, self.columns_follow()])
     }
 
     fn handle(&mut self, message: Message) -> Task<Message> {
@@ -279,6 +288,7 @@ impl Flea {
             Message::Job(msg) => self.job_message(msg),
             Message::Send(msg) => self.send_message(msg),
             Message::Chrome(act) => self.chrome_act(act),
+            Message::Column(msg) => self.column_message(msg),
             m @ (Message::PanelLoaded(..)
             | Message::PanelSaved(_)
             | Message::PanelClose
@@ -348,29 +358,6 @@ impl Flea {
             Message::CloseRequested => self.quit(),
             Message::QuitDeadline => iced::exit(),
         }
-    }
-
-    fn subscription(&self) -> Subscription<Message> {
-        Subscription::batch([
-            // One stream per live child, each tagged with the spawn key that names its pane.
-            Subscription::batch(
-                std::iter::once(self.backend_key)
-                    .chain(self.other.as_ref().map(|o| o.key))
-                    .map(|key| Subscription::run_with(key, backend::events).with(key).map(|(key, event)| Message::Backend(key, event))),
-            ),
-            keyboard::listen().map(Message::Key),
-            iced::event::listen_with(keys::captured_escape).map(Message::Key),
-            iced::event::listen_with(chrome::mouse_back).map(Message::Chrome),
-            window::close_requests().map(|_| Message::CloseRequested),
-            window::resize_events().map(|(_, size)| Message::Resized(size)),
-            // A playing file is drawn at its own pace, about 30 frames a second; a paused one is
-            // only polled for its bus, and nothing ticks at all without media open.
-            match &self.playback.media {
-                Some(m) if m.playing => iced::time::every(std::time::Duration::from_millis(33)).map(|_| Message::MediaTick),
-                Some(_) => iced::time::every(std::time::Duration::from_millis(250)).map(|_| Message::MediaTick),
-                None => Subscription::none(),
-            },
-        ])
     }
 }
 

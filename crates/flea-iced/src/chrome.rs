@@ -70,7 +70,6 @@ impl Flea {
             }
             Act::Sort => self.pane.sort_next(),
             Act::Settings => return self.open_panel(),
-            Act::Mode("columns") => return self.say("The columns view is not in this build yet.".into()),
             Act::Mode(mode) => return self.choose_view(mode),
         };
         self.run(effects)
@@ -82,14 +81,15 @@ impl Flea {
         if mode == "dual" {
             return if self.other.is_none() { self.toggle_split() } else { Task::none() };
         }
-        let was = self.grid_mode();
+        let was = (self.grid_mode(), self.columns_mode());
         self.dual_from = mode.to_string();
         let left = if self.other.is_some() { self.toggle_split() } else { crate::split::save_view_mode(mode) };
-        if was == self.grid_mode() {
+        if was == (self.grid_mode(), self.columns_mode()) {
             return left;
         }
         // Pane.qml onViewModeChanged: only the views that draw a filter keep one, and the held
         // thumbnails are decoded again at the new view's own size.
+        // Focus.lookup: the columns view offers no filter, so leaving the grid takes it away.
         if !self.grid_mode() {
             self.pane.filter_close();
         }
@@ -196,7 +196,10 @@ impl Flea {
 
     // A peek is matched on its folder and its hidden flag, because two clients read this wire.
     pub(crate) fn peeked(&mut self, reply: Reply) -> Task<Message> {
-        let Reply::Peeked { path, hidden, rows } = reply else { return Task::none() };
+        let Reply::Peeked { path, hidden, rows, failed } = reply else { return Task::none() };
+        if self.columns.answered(&path, hidden, rows.clone(), failed) {
+            return Task::none();
+        }
         if self.chrome.pending.as_ref() != Some(&(path.clone(), hidden)) {
             return Task::none();
         }

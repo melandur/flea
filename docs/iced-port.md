@@ -417,7 +417,25 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      filter. A menu opens under its tile, and under a filter every menu opens under the row as drawn.
      `tests/iced-headless.sh` launches with `view: "grid"` and drives Right and Down, asking the
      backend for the listing's order rather than deriving it, 46 checks.
-   - **8d-ii-b**, the columns view and its preview column.
+   - **8d-ii-b-1, the columns view (done; its neighbour columns are pointer-only and undriven).**
+     `columns.rs` holds ColumnsArea's peek cache: the parent and the cursor row's folder asked with
+     `peek` after every input, each once, and the whole cache dropped when the pane moves or its
+     hidden flag changes; a peek this view did not ask for is the path bar's and is left to it.
+     `columnsview.rs` draws ColumnPane and ColumnRow: a third for the parent, its row for the folder
+     on screen lifted as the trail and the rest muted, a third for the pane's own listing, which is
+     the scrollable whose viewport thumbnails and the held window follow and the one column with the
+     accent, a size and the rename field, and the rest for the cursor's folder. A plain tap on a
+     folder in the middle column enters it (Tap.tappedMiddle, the 2026-09-11 ruling); a neighbour's
+     folder reveals on one tap and its file opens on two (Tap.tappedColumn). **A right click on a
+     neighbour's row follows the code over keys.toml's pointer table:** the table says a peeked row
+     has no menu, while ColumnPane routes it to menuOnNeighbour, which lists that folder and raises
+     the menu on the row once it lands, and that is what this does. A folder the peek could not read
+     draws nothing, because StateMessage there carries no message and the empty tile stands down
+     for a locked folder. The menu opens under its row in the middle third. **Not yet: the preview
+     column** (PreviewColumn.qml and ui/js/Facts.js, 8d-ii-b-2); a file under the cursor leaves the
+     third column empty, which is the QML's own answer with `preview.column` off. Peeks are driven
+     headless from a window launched with `view: "columns"`, 48 checks.
+   - **8d-ii-b-2**, the columns view's preview column.
    - **8d-iii**, the trash view.
    - **8d-iv**, tabs with the Places menu, and the stored display settings (density, columns, text
      size).

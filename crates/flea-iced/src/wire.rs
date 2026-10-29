@@ -51,7 +51,8 @@ pub enum Reply {
     Meta { row: usize, entries: u64, names: Vec<(String, bool)>, archive_failed: bool },
     Searching { n: usize, scanned: u64, ms: f64 },
     // A read-only look at a directory that is not the listing; `hidden` echoes the request's flag.
-    Peeked { path: String, hidden: bool, rows: Vec<Row> },
+    // failed: the folder could not be read, which answers zero rows the way an empty one does.
+    Peeked { path: String, hidden: bool, rows: Vec<Row>, failed: bool },
     // menuaction op installed: the whole catalogue of launchable desktop entries, or why not.
     Installed { id: u64, apps: Result<Vec<(String, String)>, String> },
     Searched { n: usize, scanned: u64, ms: f64, cancelled: bool },
@@ -154,6 +155,7 @@ pub fn parse(line: &str) -> Option<Reply> {
             path: field("path"),
             hidden: flag("hidden"),
             rows: v.get("rows").and_then(|r| serde_json::from_value(r.clone()).ok()).unwrap_or_default(),
+            failed: flag("failed"),
         },
         "searching" => Reply::Searching {
             n: uint("n")? as usize,

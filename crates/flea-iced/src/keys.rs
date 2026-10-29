@@ -212,7 +212,8 @@ impl Flea {
         // A click in the listing is the listing taking the keyboard back from the rail.
         self.rail.focused = false;
         self.rail.menu = None;
-        let effects = self.pane.tap(index, taps, self.modifiers.control(), self.modifiers.shift());
+        let (ctrl, shift) = (self.modifiers.control(), self.modifiers.shift());
+        let effects = if self.columns_mode() { self.pane.tap_middle(index, taps, ctrl, shift) } else { self.pane.tap(index, taps, ctrl, shift) };
         self.run(effects)
     }
 }

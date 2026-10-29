@@ -108,11 +108,12 @@ impl Flea {
                 self.background(v, container(tile).center(Length::Fill).into())
             }
             _ if self.grid_mode() => self.background(v, self.grid_listing(v)),
+            _ if self.columns_mode() => self.background(v, self.columns_view(v)),
             _ => self.background(v, self.listing(v)),
         };
         let body = if v.focused { self.preview_layer(body) } else { body };
         // The grid draws no column header: its tiles have no columns to title.
-        if self.grid_mode() { column![body].width(Length::Fill).into() } else { column![header, body].width(Length::Fill).into() }
+        if self.grid_mode() || self.columns_mode() { column![body].width(Length::Fill).into() } else { column![header, body].width(Length::Fill).into() }
     }
 
     // A right click a row did not take is the background menu's: the empty space below the rows.

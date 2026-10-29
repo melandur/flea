@@ -242,6 +242,15 @@ want=$(nth_row 9); n=$(mark); k -k Down; k -k F2; k -k Escape
 k -k F2; ctrl a; k gridpicked.txt; k -k Return; sleep 1
 check "in the grid Down steps a whole tile row" "no yes" "$(exists "$T/$want") $(exists "$T/gridpicked.txt")"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+
+# The columns view: the parent and the cursor's folder are peeked, and a move onto another folder
+# peeks that one; the middle column is the pane's own listing, so Down still moves its cursor.
+jq '.view = "columns"' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+launch "$T"; shot columns
+check "the columns view peeks the parent and the cursor's folder" "1 1" "$(grep -c "\"c\":\"peek\".*\"path\":\"$D\"" "$D/trace.log") $(grep -c "\"c\":\"peek\".*\"path\":\"$T/alpha\"" "$D/trace.log")"
+n=$(mark); k -k Down; sleep 0.5
+check "and a move onto another folder peeks that one" 1 "$(since "$n" | grep -c "\"c\":\"peek\".*\"path\":\"$T/beta\"")"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 APP=""
 
 # The chooser, the window tools/flea-portal opens through flea --pick.

@@ -23,6 +23,8 @@ pub enum Effect {
     Send(Request),
     ScrollTo(usize),
     OpenFile(String),
+    // A folder somewhere other than the cursor's row, entered: a neighbour column's tap.
+    OpenDir(String),
     WatchTimer,
     Message(String),
     // The same slot, drawn in the error role; Escape dismisses it first.

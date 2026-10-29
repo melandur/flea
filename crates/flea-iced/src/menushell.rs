@@ -132,7 +132,8 @@ impl Flea {
             (below, view.map_or(0.0, |v| (v % g.columns) as f32 * g.cell_w), ROW_H)
         } else {
             let below = view.map_or(self.pane.view_total(), |v| v + 1) as f32 * ROW_H;
-            (below, 0.0, 2.0 * ROW_H)
+            // The columns view's listing is its middle third, with no header band above it.
+            if self.columns_mode() { (below, (self.pane_width() / 3.0).floor(), ROW_H) } else { (below, 0.0, 2.0 * ROW_H) }
         };
         let y_in = (below - self.scroll_y).clamp(0.0, self.viewport_h);
         let window_h = self.viewport_h + 3.0 * ROW_H;
