@@ -31,6 +31,11 @@ impl Flea {
         if let Some(task) = self.action_key(&key) {
             return task;
         }
+        // KeymapSheet: any key closes it, because it is a reference and not a mode.
+        if self.sheet_open {
+            self.sheet_open = false;
+            return Task::none();
+        }
         // The context menu takes every key while it is up, Tab included, as its keyCatcher does.
         if self.menu.is_some() {
             return self.menu_key(&key);
@@ -40,10 +45,15 @@ impl Flea {
             return self.panel_key(&key);
         }
         // "," opens the panel from anywhere in the window that is not a field being typed in.
-        if text.as_deref() == Some(",") && !modifiers.control() && self.dialog.is_none() && !self.chrome.editing
-            && self.pane.renaming.is_none() && self.rail.renaming.is_none() && self.pane.search.mode != crate::search::Mode::Typing
-        {
+        let typing = self.dialog.is_some() || self.chrome.editing || self.pane.renaming.is_some() || self.rail.renaming.is_some()
+            || self.pane.search.mode == crate::search::Mode::Typing || self.pane.filter_typing;
+        if text.as_deref() == Some(",") && !modifiers.control() && !typing {
             return self.open_panel();
+        }
+        // "?" is the sheet's own key, from anywhere the panel's "," would also reach.
+        if text.as_deref() == Some("?") && !modifiers.control() && !typing && !self.panel.open {
+            self.sheet_open = true;
+            return Task::none();
         }
         // The dialog owns the keyboard while it is up: Escape closes it, Tab walks its fields, and
         // its fields take everything else, Enter included through their on_submit.
@@ -80,6 +90,9 @@ impl Flea {
             // An error is dismissed before anything else Escape unwinds.
             self.message = None;
             return Task::none();
+        }
+        if let Some(task) = self.filter_key(&key, modifiers, text.as_deref()) {
+            return task;
         }
         if let Some(task) = self.search_key(&key, modifiers, text.as_deref()) {
             return task;
@@ -145,6 +158,31 @@ impl Flea {
             _ => return Task::none(),
         };
         self.run(effects)
+    }
+
+    // The filter's query line owns every key while it has the caret (Focus.js handleKey), except the
+    // cursor keys of LEAVES_LINE, which commit it and then mean what they mean in the listing.
+    fn filter_key(&mut self, key: &Key, modifiers: keyboard::Modifiers, text: Option<&str>) -> Option<Task<Message>> {
+        if !self.pane.filter_typing {
+            return None;
+        }
+        let effects = match key.as_ref() {
+            Key::Named(Named::Enter) => {
+                self.pane.filter_commit();
+                vec![]
+            }
+            Key::Named(Named::Escape) => self.pane.escape(),
+            Key::Named(Named::Backspace) => self.pane.filter_backspace(),
+            Key::Named(Named::ArrowDown | Named::ArrowUp | Named::ArrowRight) => {
+                self.pane.filter_commit();
+                return None;
+            }
+            _ => match text.filter(|t| !modifiers.control() && !modifiers.logo() && t.chars().next().is_some_and(|c| !c.is_control())) {
+                Some(t) => self.pane.filter_typed(t),
+                None => vec![],
+            },
+        };
+        Some(self.run(effects))
     }
 
     // ui/js/Tap.js reads a tap count, and iced's press arrives on both clicks of a double, so the

@@ -88,6 +88,16 @@ pub struct Pane {
     pub renaming: Option<Rename>,
     // The context menu is up over this pane: its rows were built from these indices (watch_busy).
     pub menu_open: bool,
+    // filter.rs: the query, whether its line has the caret, and the listing rows it leaves standing.
+    pub filter_query: String,
+    pub filter_typing: bool,
+    pub(crate) filter_shown: Option<Vec<usize>>,
+    // A watched re-read narrows the same directory again, so it alone keeps the filter (Anchor.js).
+    pub(crate) keep_filter: bool,
+    // Nav.js history: the directories left, and those a back press left, newest last.
+    pub history: Vec<String>,
+    pub forward: Vec<String>,
+    pub(crate) without_history: bool,
     // The status bar's sticky line, what a running transfer says while it runs.
     pub sticky: String,
     pub(crate) ops: Ops,
@@ -167,6 +177,16 @@ impl Pane {
         // The watch debt does not travel: it belonged to the directory being left.
         if path != self.path {
             self.watch_debt = false;
+            // Nav.open: going somewhere pushes where it left and forgets what was ahead.
+            if !self.path.is_empty() && !std::mem::take(&mut self.without_history) {
+                self.history.push(self.path.clone());
+                self.forward.clear();
+            }
+        }
+        self.without_history = false;
+        // A filter narrows the rows already listed, so a new listing is exactly what forgets it.
+        if !std::mem::take(&mut self.keep_filter) {
+            self.filter_close();
         }
         self.anchor = anchor;
         self.locating = None;
@@ -227,6 +247,7 @@ impl Pane {
                 self.thumbs.clear();
                 self.thumb_order.clear();
                 self.settle_ms = FIRST_SETTLE_MS;
+                self.refilter();
                 out.push(self.restart_settle());
                 out.push(Effect::ScrollTo(0));
                 out.extend(self.apply_anchor());
@@ -242,6 +263,7 @@ impl Pane {
                 self.held = start;
                 self.rows = rows;
                 self.kinds = kinds;
+                self.refilter();
                 out.push(self.restart_settle());
                 out.extend(self.request_if_drifted());
             }
@@ -319,7 +341,9 @@ impl Pane {
     }
 
     fn request_if_drifted(&mut self) -> Vec<Effect> {
-        if self.total == 0 || self.in_flight.is_some() {
+        // A filter tests the rows the pane holds and says so in its summary; moving the window under
+        // it would change which rows it is testing while the operator scrolls through its answer.
+        if self.total == 0 || self.in_flight.is_some() || self.filtering() {
             return vec![];
         }
         let first = self.first_visible.min(self.total - 1);
@@ -339,16 +363,18 @@ impl Pane {
         vec![Effect::Send(Request::Window { start: want.0, count: want.1 })]
     }
 
+    // The scroll is in view positions, which are listing rows unless a filter stands.
     pub(crate) fn place_cursor(&mut self, index: usize) -> Vec<Effect> {
         if self.total == 0 {
             return vec![];
         }
         self.cursor = index.min(self.total - 1);
+        let Some(view) = self.view_of(self.cursor) else { return vec![] };
         let mut out = vec![];
-        if self.cursor < self.first_visible {
-            out.push(Effect::ScrollTo(self.cursor));
-        } else if self.cursor >= self.first_visible + self.visible_rows {
-            out.push(Effect::ScrollTo(self.cursor + 1 - self.visible_rows));
+        if view < self.first_visible {
+            out.push(Effect::ScrollTo(view));
+        } else if view >= self.first_visible + self.visible_rows {
+            out.push(Effect::ScrollTo(view + 1 - self.visible_rows));
         }
         out
     }

@@ -4,12 +4,33 @@
 // gestures and answer the first one early (AGENTS.md "The key table is generated", the crumb note).
 use crate::pathbar::{self, Crumb};
 use crate::wire::{Reply, Request};
-use crate::{sleep, Flea, Message, DOUBLE_TAP, PAD_X, ROW_H, TEXT_PX};
-use iced::widget::{container, mouse_area, row, text, text_input, Id, Row};
+use crate::{marks, sleep, Flea, Message, DOUBLE_TAP, MARK, PAD_X, ROW_H, TEXT_PX};
+use iced::widget::{container, mouse_area, row, space, svg, text, text_input, Id, Row};
 use iced::{Element, Length, Task};
 use std::time::Instant;
 
 pub const PATH_ID: &str = "path-bar";
+
+// The chrome's buttons and the two other surfaces it opens or answers for: ChromeBar's back, up,
+// search, view modes and settings, the key sheet's close, and the mouse's back button.
+#[derive(Debug, Clone)]
+pub enum Act {
+    Back,
+    Up,
+    Search,
+    Mode(&'static str),
+    Settings,
+    SheetClose,
+    MouseBack,
+}
+
+// The mouse's back button, which belongs to no row: keys.toml's [[pointer]] where = "window".
+pub(crate) fn mouse_back(event: iced::Event, _: iced::event::Status, _: iced::window::Id) -> Option<Act> {
+    match event {
+        iced::Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Back)) => Some(Act::MouseBack),
+        _ => None,
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct Chrome {
@@ -27,6 +48,36 @@ fn home() -> String {
 }
 
 impl Flea {
+    pub(crate) fn chrome_act(&mut self, act: Act) -> Task<Message> {
+        // Nav.mouseBack: a press behind an open menu, card or panel goes nowhere.
+        let covered = self.menu.is_some() || self.card.is_some() || self.panel.open || self.dialog.is_some() || self.sheet_open;
+        let effects = match act {
+            Act::SheetClose => {
+                self.sheet_open = false;
+                return Task::none();
+            }
+            _ if covered => return Task::none(),
+            Act::Back => self.pane.back(),
+            Act::MouseBack => self.pane.mouse_back(),
+            Act::Up => self.pane.up(),
+            Act::Search => self.pane.search_start(false),
+            Act::Settings => return self.open_panel(),
+            // ViewState: the split is a toggle of its own; list is the view this build draws.
+            Act::Mode("dual") if self.other.is_none() => return self.toggle_split(),
+            Act::Mode("list") if self.other.is_some() => return self.toggle_split(),
+            Act::Mode("list") | Act::Mode("dual") => vec![],
+            Act::Mode(mode) => return self.say(format!("The {mode} view is not in this build yet.")),
+        };
+        self.run(effects)
+    }
+
+    fn chrome_button(&self, glyph: &'static str, enabled: bool, ink: iced::Color, act: Act) -> Element<'_, Message> {
+        let p = self.palette;
+        let mark = svg(marks::handle(glyph, if enabled { ink } else { iced::Color { a: 0.35, ..p.muted } })).width(MARK).height(MARK);
+        let area = mouse_area(container(mark).padding(4));
+        if enabled { area.on_press(Message::Chrome(act)).into() } else { area.into() }
+    }
+
     pub(crate) fn crumbs(&self) -> Vec<Crumb> {
         pathbar::crumbs(&self.pane.path, &home())
     }
@@ -143,7 +194,21 @@ impl Flea {
             }
             strip.into()
         };
-        container(row![body].align_y(iced::Center))
+        let p2 = p;
+        let mode = if self.other.is_some() { "dual" } else { "list" };
+        let mut right = row![self.chrome_button("search", true, p.foreground, Act::Search)].spacing(4).align_y(iced::Center);
+        for m in ["list", "columns", "grid", "dual"] {
+            right = right.push(self.chrome_button(m, true, if m == mode { p.foreground } else { p.muted }, Act::Mode(m)));
+        }
+        let rule = container(space().width(1).height(MARK - 1.0)).style(move |_| iced::widget::container::Style::default().background(iced::Color { a: 0.12, ..p2.foreground }));
+        right = right.push(rule).push(self.chrome_button("sliders", true, p.foreground, Act::Settings));
+        let left = row![
+            self.chrome_button("arrow-left", !self.pane.history.is_empty(), p.foreground, Act::Back),
+            self.chrome_button("arrow-up", crate::pane::parent(&self.pane.path).is_some(), p.foreground, Act::Up),
+        ]
+        .spacing(4)
+        .align_y(iced::Center);
+        container(row![left, container(body).width(Length::Fill), right].spacing(12).align_y(iced::Center))
             .padding([0.0, PAD_X])
             .height(ROW_H)
             .width(Length::Fill)

@@ -185,6 +185,12 @@ k m; for _ in $(seq 20); do k -k Down; done; k -k Return; sleep 1
 check "and the same row, relabelled, hides them" false "$(jq -r .hidden "$D/state/flea/ui.json")"
 top; ctrl b; sleep 1
 check "Ctrl+B copies the cursor row's path" "$T/alpha" "$(WAYLAND_DISPLAY=$SOCK timeout 3 wl-paste -n 2> /dev/null)"
+# The key sheet: ? opens it, and the key that closes it reaches nothing else, so Right over a folder
+# behind it lists nothing; the next Right is the listing's again.
+top; k '?'; sleep 0.5; shot sheet; n=$(mark); k -k Right
+check "the key sheet takes the key that closes it" 0 "$(since "$n" | grep -c '"c":"list"')"
+k -k Right; k -k Left
+check "and the listing has the keyboard back" 2 "$(since "$n" | grep -c '"c":"list"')"
 # The dialog rows: Compress, Add to shelf, then Trash and Delete permanently, then Open in terminal,
 # Move to, Copy to and Properties, so Delete permanently is ten Downs and Properties fourteen.
 top; k -k Down -k Down; n=$(mark); k m; for _ in $(seq 14); do k -k Down; done; k -k Return; sleep 1; shot properties

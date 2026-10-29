@@ -35,7 +35,7 @@ impl Flea {
             .style(move |_| container::Style::default().background(p.background).color(p.foreground))
             .width(Length::Fill)
             .height(Length::Fill);
-        self.dialog_layer(self.panel_layer(self.job_layer(self.action_layer(self.menu_layer(window.into())))))
+        self.dialog_layer(self.sheet_layer(self.panel_layer(self.job_layer(self.action_layer(self.menu_layer(window.into()))))))
     }
 
     fn status_view(&self) -> Element<'_, Message> {
@@ -50,8 +50,20 @@ impl Flea {
             None if self.pane.search_listed() && self.pane.search.mode == crate::search::Mode::Results => (self.pane.search_status(), p.foreground),
             None => (self.pane.sticky.clone(), p.foreground),
         };
-        // The query line takes the path's place while it is being typed in.
-        let left: Element<'_, Message> = if self.pane.search.mode == crate::search::Mode::Typing {
+        // The query line takes the path's place while it is being typed in; a filter's stays while it stands.
+        let left: Element<'_, Message> = if self.pane.filter_typing || !self.pane.filter_query.is_empty() {
+            let caret = if self.pane.filter_typing { "▏" } else { "" };
+            let hint = if self.pane.filter_typing { "" } else { "   esc clears" };
+            row![
+                text("Filter").color(p.muted),
+                text(format!("{}{caret}", self.pane.filter_query)).color(p.foreground),
+                text(self.pane.filter_summary()).color(p.muted),
+                text(hint).color(p.muted),
+            ]
+            .spacing(10)
+            .width(Length::Fill)
+            .into()
+        } else if self.pane.search.mode == crate::search::Mode::Typing {
             let s = &self.pane.search;
             let scope = format!("Search {}{}", self.pane.path, if s.deep { " and subfolders" } else { "" });
             row![text(scope).color(p.muted), text(format!("{}▏", s.query)).color(p.foreground)].spacing(10).width(Length::Fill).into()
@@ -85,6 +97,16 @@ impl Flea {
             (Some(b), true) => self.share_browser_view(b),
             _ if v.pane.error.is_some() => container(text(v.pane.error.clone().unwrap_or_default()).color(p.muted)).center(Length::Fill).into(),
             _ if v.pane.listed_once && v.pane.total == 0 => self.background(v, container(text("This folder is empty.").color(p.muted)).center(Length::Fill).into()),
+            // StateMessage's nothingMatched: the query named back, and how many rows it tested.
+            _ if v.pane.filtering() && v.pane.view_total() == 0 => {
+                let tile = column![
+                    text(format!("Nothing matched {}", v.pane.filter_query)).color(p.foreground),
+                    text(crate::filter::no_match(v.pane.rows.len())).size(11.0).color(p.muted),
+                ]
+                .spacing(6)
+                .align_x(iced::Center);
+                self.background(v, container(tile).center(Length::Fill).into())
+            }
             _ => self.background(v, self.listing(v)),
         };
         let body = if v.focused { self.preview_layer(body) } else { body };
@@ -97,13 +119,17 @@ impl Flea {
     }
 
     // Rule 2: a spacer above, the rows on screen, a spacer below. Nothing else is ever built.
+    // Under a filter these are view positions, each drawing the listing row the filter kept there.
     fn listing<'a>(&'a self, v: PaneView<'a>) -> Element<'a, Message> {
-        let total = v.pane.total;
+        let total = v.pane.view_total();
         let first = ((v.scroll_y / ROW_H).floor().max(0.0) as usize).min(total);
         let shown = ((self.viewport_h / ROW_H).ceil() as usize + 1).min(total - first);
         let mut rows = column![space().height(first as f32 * ROW_H)];
-        for i in first..first + shown {
-            rows = rows.push(self.row(v, i));
+        for at in first..first + shown {
+            rows = rows.push(match v.pane.at_view(at) {
+                Some(i) => self.row(v, i),
+                None => space().height(ROW_H).into(),
+            });
         }
         rows = rows.push(space().height((total - first - shown) as f32 * ROW_H));
         let side = v.side;

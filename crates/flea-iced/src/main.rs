@@ -20,6 +20,7 @@ mod dialog;
 mod dialogview;
 mod effects;
 mod form;
+mod filter;
 mod format;
 #[cfg(test)]
 mod live_tests;
@@ -79,6 +80,7 @@ mod theme;
 mod thumbs;
 mod watch;
 mod keys;
+mod keysheet;
 mod kinds;
 mod view;
 mod wire;
@@ -145,6 +147,7 @@ struct Flea {
     card_ids: u64,
     jobs: jobshell::Jobs,
     sends: sendshell::Sends,
+    sheet_open: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -214,6 +217,7 @@ enum Message {
     Action(cardshell::Msg),
     Job(jobkeys::Msg),
     Send(sendshell::Msg),
+    Chrome(chrome::Act),
 }
 
 impl Flea {
@@ -272,6 +276,7 @@ impl Flea {
             Message::Action(msg) => self.action_message(msg),
             Message::Job(msg) => self.job_message(msg),
             Message::Send(msg) => self.send_message(msg),
+            Message::Chrome(act) => self.chrome_act(act),
             m @ (Message::PanelLoaded(..)
             | Message::PanelSaved(_)
             | Message::PanelClose
@@ -353,6 +358,7 @@ impl Flea {
             ),
             keyboard::listen().map(Message::Key),
             iced::event::listen_with(keys::captured_escape).map(Message::Key),
+            iced::event::listen_with(chrome::mouse_back).map(Message::Chrome),
             window::close_requests().map(|_| Message::CloseRequested),
             window::resize_events().map(|(_, size)| Message::Resized(size)),
             // A playing file is drawn at its own pace, about 30 frames a second; a paused one is

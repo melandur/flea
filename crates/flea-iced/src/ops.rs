@@ -75,8 +75,12 @@ impl Pane {
         vec![]
     }
 
+    // Marks.selectAll: under a filter, everything it shows and nothing it hides.
     pub fn select_all(&mut self) -> Vec<Effect> {
-        self.selection = (0..self.total).collect();
+        self.selection = match &self.filter_shown {
+            Some(list) => list.iter().copied().collect(),
+            None => (0..self.total).collect(),
+        };
         vec![]
     }
 
@@ -97,8 +101,7 @@ impl Pane {
                 }
                 self.select_anchor = index;
             } else {
-                let (lo, hi) = (index.min(self.select_anchor), index.max(self.select_anchor));
-                self.selection = (lo..=hi).collect();
+                self.selection = self.between(index, self.select_anchor);
             }
             out.extend(self.pay_debt());
             return out;
@@ -230,6 +233,11 @@ impl Pane {
     pub fn escape(&mut self) -> Vec<Effect> {
         if self.renaming.is_some() {
             return self.cancel_rename();
+        }
+        // Focus.act "escape": a filter, typed or standing, goes before anything else it unwinds.
+        if self.filter_typing || !self.filter_query.is_empty() {
+            self.filter_close();
+            return vec![Effect::ScrollTo(self.cursor.saturating_sub(self.visible_rows / 2))];
         }
         if !self.selection.is_empty() {
             self.selection.clear();

@@ -37,18 +37,22 @@ impl Pane {
     // Thumbs.js plan and applied: ask for visible rows not yet in the map, cancel rows still waiting
     // that left the viewport. Nothing outside the viewport is ever named (rule 1).
     pub fn settled(&mut self, generation: u64) -> Vec<Effect> {
-        if generation != self.settle_gen || self.total == 0 || self.list_in_flight() {
+        let count = self.view_total();
+        if generation != self.settle_gen || count == 0 || self.list_in_flight() {
             return vec![];
         }
-        let first = self.first_visible.min(self.total - 1);
-        let last = self.last_partial.max(first).min(self.total - 1);
-        let ask: Vec<usize> = (first..=last)
+        // The viewport is in view positions; under a filter they name a set of rows, not a run
+        // (Filter.keep and Filter.cut), so the plan is made over the rows those positions draw.
+        let first = self.first_visible.min(count - 1);
+        let last = self.last_partial.max(first).min(count - 1);
+        let visible: Vec<usize> = (first..=last).filter_map(|v| self.at_view(v)).collect();
+        let ask: Vec<usize> = visible.iter().copied()
             .filter(|i| !self.thumbs.contains_key(i) && self.allowed(self.row_at(*i)))
             .collect();
         let mut drop: Vec<usize> = self
             .thumbs
             .iter()
-            .filter(|(i, t)| **t == Thumb::Asked && (**i < first || **i > last))
+            .filter(|(i, t)| **t == Thumb::Asked && !visible.contains(i))
             .map(|(i, _)| *i)
             .collect();
         drop.sort_unstable();

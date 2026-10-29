@@ -57,6 +57,8 @@ impl Pane {
     }
 
     pub fn search_start(&mut self, deep: bool) -> Vec<Effect> {
+        // Focus.act "search": the search replaces the listing, so the filter over it goes first.
+        self.filter_close();
         let changed = self.search.deep != deep;
         self.search.deep = deep;
         self.search.mode = Mode::Typing;

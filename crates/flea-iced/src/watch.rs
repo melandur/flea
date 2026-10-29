@@ -6,7 +6,7 @@ impl Pane {
     // PaneWire's watchBusy: a re-read renumbers every row, so it waits while anything holds an index.
     pub(crate) fn watch_busy(&self) -> bool {
         // A search listing is not a directory, so a change under it is owed to the folder it left.
-        self.in_flight.is_some() || !self.selection.is_empty() || self.renaming.is_some() || self.menu_open || self.search_listed()
+        self.in_flight.is_some() || !self.selection.is_empty() || self.renaming.is_some() || self.menu_open || self.filter_typing || self.search_listed()
     }
 
     // onWatchBusyChanged: the debt is paid the moment the last thing holding it clears. The shell
@@ -14,7 +14,7 @@ impl Pane {
     pub fn pay_debt(&mut self) -> Vec<Effect> {
         if self.watch_debt && !self.watch_busy() {
             self.watch_debt = false;
-            return self.reread();
+            return self.watched_reread();
         }
         vec![]
     }
@@ -47,6 +47,12 @@ impl Pane {
             self.watch_debt = true;
             return vec![];
         }
+        self.watched_reread()
+    }
+
+    // Anchor.refreshWatched: the same directory read again, the filter standing over its new rows.
+    fn watched_reread(&mut self) -> Vec<Effect> {
+        self.keep_filter = true;
         self.reread()
     }
 }

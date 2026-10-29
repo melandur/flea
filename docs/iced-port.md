@@ -385,5 +385,25 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      **Deliberate deviation:** QML asks the services a second time just before validating a chosen
      Taildrop, Dropbox or share link row; this asks once, when the menu opens, and the backend's
      own destination check and the send script's own report stand behind that.
-   - **8d**, tabs, the trash view, the grid and columns views, the stored display settings
-     (density, columns, text size), the key sheet and the filter.
+   - **8d-i, the chrome's buttons, history, the filter and the key sheet (done; the buttons are
+     pointer-only and undriven).** The chrome draws ChromeBar's Back and Up beside the crumbs, and
+     Search, the four view modes and Settings at its right; Back follows `nav.rs`'s history, which
+     ports Nav.js's back and forward stacks, and the mouse's back button follows history or climbs
+     (Nav.mouseBack), refused behind an open menu, card or panel. List and the split are the two
+     modes this build draws; columns and grid say so until 8d-ii. `filter.rs` ports ui/js/Filter.js:
+     a query narrows the rows the pane holds in their own order, the cursor and every scroll move in
+     view positions, the selection loses what the filter hides, a shift range and Select all take only
+     what it shows, thumbnails are asked for the rows it draws, Escape takes it off first, a search
+     or any new listing forgets it and a watched re-read keeps it, and a typing filter owes the
+     watch. The status bar carries its query line and summary, and the no-match tile names the query
+     back. **The filter is not reachable in this build, faithfully:** ChromeBar draws its button in
+     the grid view alone and no key opens it, so it arrives with the grid; the unit tests drive it
+     whole. **Deviation:** while a filter stands the held window does not move, where QML lets it
+     drift under the filter; the summary already says the filter tests the rows held. `keysheet.rs`
+     is KeymapSheet.qml over sheetFor("default", "gui")'s own rows, read by running that function,
+     with a test that checks the groups, their order and every base label against ui/js/Keymap.js;
+     `?` opens it and any key closes it without reaching the listing. 44 headless checks.
+   - **8d-ii**, the grid and columns views, and with the grid the filter and sort buttons.
+   - **8d-iii**, the trash view.
+   - **8d-iv**, tabs with the Places menu, and the stored display settings (density, columns, text
+     size).

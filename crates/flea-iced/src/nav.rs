@@ -3,13 +3,15 @@
 use crate::pane::{join, parent, Effect, Pane};
 
 impl Pane {
+    // Filter.moveCursor: the cursor is a listing row but it moves through what is drawn.
     pub fn step(&mut self, delta: isize) -> Vec<Effect> {
-        if self.total == 0 {
+        let count = self.view_total();
+        if count == 0 {
             return vec![];
         }
         // ui/js/Focus.js step: off, a step past an end clamps; on, a step taken FROM an end comes round.
-        let last = self.total as isize - 1;
-        let here = self.cursor as isize;
+        let last = count as isize - 1;
+        let here = self.view_of(self.cursor).unwrap_or(0) as isize;
         let next = if self.wrap_at_ends && delta.abs() == 1 && here + delta < 0 && here == 0 {
             last
         } else if self.wrap_at_ends && delta.abs() == 1 && here + delta > last && here == last {
@@ -17,7 +19,27 @@ impl Pane {
         } else {
             (here + delta).clamp(0, last)
         } as usize;
-        self.place_cursor(next)
+        match self.at_view(next) {
+            Some(row) => self.place_cursor(row),
+            None => vec![],
+        }
+    }
+
+    // Nav.back: to the directory left last, keeping where this one was for forward.
+    pub fn back(&mut self) -> Vec<Effect> {
+        if self.list_in_flight() {
+            return vec![Effect::Message("A directory is already loading.".into())];
+        }
+        let Some(target) = self.history.pop() else { return vec![] };
+        self.forward.push(self.path.clone());
+        self.search_leave();
+        self.without_history = true;
+        self.open(target, None)
+    }
+
+    // Nav.mouseBack: the mouse's back button follows history, or climbs when there is none.
+    pub fn mouse_back(&mut self) -> Vec<Effect> {
+        if self.history.is_empty() { self.up() } else { self.back() }
     }
 
     // Enter, and a double click: a directory row navigates, every other row goes to `flea --open`.
