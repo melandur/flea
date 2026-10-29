@@ -3,10 +3,9 @@
 // row's own availability rule, and the stored hidden set as the only visibility state. Toolkit free,
 // so every rule here is a unit test rather than a window.
 //
-// What this build cannot offer yet follows the QML's own two rules for a missing capability. A row
-// whose capability is probed (archives, scripts, the shelf and the three send providers) is absent,
-// as the QML's is when the probe finds nothing, because nothing here has probed it. A row whose
-// dialog is not ported is offered and says so when chosen, rather than vanishing from the menu.
+// The archive, convert and script rows are probed (Facts), and absent when the probe finds nothing,
+// as the QML's are. The shelf and the three send providers are not probed in this build, so they are
+// absent until stage 8c does; that is the same rule, applied to a probe that has not run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     File,
@@ -22,6 +21,15 @@ pub struct Facts {
     pub row_mode: u32,
     pub clipboard: bool,
     pub show_hidden: bool,
+    // The backend's `formats` answer: what bsdtar writes, whether it reads, whether ImageMagick runs.
+    pub archive_formats: Vec<String>,
+    pub can_extract: bool,
+    pub can_convert: bool,
+    // Archive.isArchive over the cursor row's name, and its icon being image-x-generic.
+    pub row_is_archive: bool,
+    pub row_is_image: bool,
+    // ~/.config/flea/scripts as (id, label), sorted, read when the menu opens.
+    pub scripts: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -33,8 +41,8 @@ pub struct Entry {
     pub disabled: bool,
     pub danger: bool,
     pub hint: &'static str,
-    // A flyout's rows as (id, label); only Sort by carries one in this build.
-    pub sub: Vec<(&'static str, &'static str)>,
+    // A flyout's rows as (id, label): Sort by's orders, Compress's formats, Run script's scripts.
+    pub sub: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -83,13 +91,13 @@ const INVENTORY: &[(&str, &str, &str, &str, &str, &str)] = &[
 ];
 
 // The capability-probed rows, absent until a later stage probes them (docs/iced-port.md stage 8).
-const UNPROBED: &[&str] = &["compress", "extract", "convert", "runScript", "addToShelf", "taildrop", "localsend", "dropbox", "sharelink"];
+const UNPROBED: &[&str] = &["addToShelf", "taildrop", "localsend", "dropbox", "sharelink"];
 
 // The rows this build performs; every other row that survives is offered and says it is not here.
 pub const PORTED: &[&str] = &[
     "open", "newFolder", "cut", "copy", "paste", "duplicate", "rename", "selectAll", "trash", "openTerminal", "copypath",
     "addFavourite", "sort", "toggleHidden", "settings", "properties", "newFile", "deletePermanently", "moveTo", "copyTo",
-    "permissions",
+    "permissions", "openWith", "compress", "extract", "convert", "runScript",
 ];
 
 // Sort.ORDERS with Menu.js SORT_LABELS: only an order the backend produces is ever offered.
@@ -148,7 +156,14 @@ fn available(e: &mut Entry, f: &Facts, kind: Kind) -> bool {
             e.hint = if !one { "Unavailable" } else if t == S_IFLNK { "Symlink target not changed" } else if e.disabled { "Unavailable" } else { "" };
         }
         "trash" if !trashable(&f.path) => return false,
-        "sort" => e.sub = SORTS.to_vec(),
+        "sort" => e.sub = SORTS.iter().map(|(k, l)| (k.to_string(), l.to_string())).collect(),
+        "runScript" if f.scripts.is_empty() => return false,
+        "runScript" => e.sub = f.scripts.clone(),
+        // The submenu is exactly the table the backend probed, never a fixed list.
+        "compress" if f.archive_formats.is_empty() => return false,
+        "compress" => e.sub = f.archive_formats.iter().map(|x| (x.clone(), format!(".{x}"))).collect(),
+        "extract" if !(f.row_is_archive && f.can_extract && one) => return false,
+        "convert" if !(f.row_is_image && f.can_convert && one) => return false,
         // The label flips with the state; MenuRow draws no checkmark.
         "toggleHidden" if f.show_hidden => {
             e.label = "Hide hidden files";

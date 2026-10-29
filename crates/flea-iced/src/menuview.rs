@@ -26,7 +26,7 @@ impl Flea {
                     if i == m.cursor {
                         flyout_y = y - FRAME_PAD;
                     }
-                    let line = self.menu_line(e, i == m.cursor, !e.sub.is_empty());
+                    let line = self.menu_line(e, e.label.to_string(), i == m.cursor, !e.sub.is_empty());
                     rows = rows.push(if e.disabled { line } else { mouse_area(line).on_press(Message::Menu(Msg::Chose(i))).into() });
                     y += ITEM_H;
                 }
@@ -35,9 +35,15 @@ impl Flea {
         let mut layers = vec![base, opaque(backdrop), pin(self.frame(rows)).x(m.x).y(m.y).into()];
         if let (true, Some(Item::Row(e))) = (m.flyout, m.items.get(m.cursor)) {
             let mut sub = Column::new().padding(FRAME_PAD);
-            for (k, &(_, label)) in e.sub.iter().enumerate() {
-                let entry = Entry { label, glyph: "sort", ..e.clone() };
-                sub = sub.push(mouse_area(self.menu_line(&entry, k == m.sub_cursor, false)).on_press(Message::Menu(Msg::SubChose(k))));
+            // Menu.submenuGlyph: one mark for every row of the flyout, keyed on the row that opened it.
+            let glyph = match e.action {
+                "runScript" => "terminal",
+                "sort" => "sort",
+                _ => "archive",
+            };
+            for (k, (_, label)) in e.sub.iter().enumerate() {
+                let entry = Entry { glyph, ..e.clone() };
+                sub = sub.push(mouse_area(self.menu_line(&entry, label.clone(), k == m.sub_cursor, false)).on_press(Message::Menu(Msg::SubChose(k))));
             }
             let height = 2.0 * FRAME_PAD + e.sub.len() as f32 * ITEM_H;
             // ContextMenu's flyout: right of the frame when it fits, else left of it, and held inside.
@@ -63,10 +69,10 @@ impl Flea {
         container(rule).height(SEPARATOR_H).width(Length::Fill).padding([4.0, 10.0]).into()
     }
 
-    fn menu_line<'a>(&self, e: &Entry, chosen: bool, flyout: bool) -> Element<'a, Message> {
+    fn menu_line<'a>(&self, e: &Entry, label: String, chosen: bool, flyout: bool) -> Element<'a, Message> {
         let p = self.palette;
         let ink = if e.disabled { p.muted } else if e.danger { p.error } else { p.foreground };
-        let mut line = row![svg(marks::handle(e.glyph, ink)).width(MARK).height(MARK), text(e.label).color(ink).width(Length::Fill)]
+        let mut line = row![svg(marks::handle(e.glyph, ink)).width(MARK).height(MARK), text(label).color(ink).width(Length::Fill)]
             .spacing(10)
             .align_y(iced::Center);
         if !e.hint.is_empty() {

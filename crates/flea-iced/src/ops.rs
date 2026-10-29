@@ -43,6 +43,8 @@ pub struct Ops {
     pub transfer: Option<Transfer>,
     pub queued: Vec<Queued>,
     pub(crate) trashed_first: Option<usize>,
+    // The archive job this pane started: its status line, and whether it extracts.
+    pub archive: Option<(String, bool)>,
 }
 
 fn valid_name(name: &str) -> bool {

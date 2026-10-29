@@ -336,7 +336,30 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      the same bits, because iced's check box takes no focus; the survivors of a partial permanent
      deletion are not re-selected through the batched `locate` this crate does not send yet; and a
      re-review that finds nothing left says so and closes rather than asking to delete 0 items.
-   - **8b-ii**, the rest of the dialog rows: Open with, Compress, Extract, Convert and Run script.
+   - **8b-ii, the job rows (done, driven headless and against the real backend).** The menu now
+     reads its probes when it opens, the backend's `formats` answer (asked with the first list and
+     again on every menu) and `~/.config/flea/scripts` (`scripts.rs`, ui/Scripts.qml's `find`), and
+     offers Compress with the formats bsdtar writes, Extract on a row `archives.rs` names an
+     archive, Convert on one image row, and Run script with one row per script, each absent when its
+     probe finds nothing, as in QML. Compress, Extract, Convert and Run script go through
+     `activation.rs`, PaneMenuActions' snapshot and `activate`, which answers the captured paths,
+     and the archive and convert requests carry its id as their `menuId`. `jobshell.rs` holds the
+     archive job's status line with its progress, the done sentences of ui/js/Ops.js and the
+     convert answers. `convertcard.rs` ports ConvertDialog.qml and ui/js/Convert.js: the formats,
+     the destination name that never overwrites its source, and the `convert` check before anything
+     is written. `openwith.rs` ports OpenWithDialog.qml and ui/js/OpenWith.js: the registry first
+     with the default marked, every installed application after it, the search over both, and the
+     "always" box. `card_live_tests.rs` drives compress, extract, convert and the catalogue through
+     the real backend (nothing is launched from a test), and a mutation of the `activate` op turns
+     it red; `tests/iced-headless.sh` gives Run script a config home of its own and drives
+     Compress, Extract, Run script and an Open with that is cancelled, 41 checks.
+     **Deliberate deviations:** Open with has no flyout of registered applications on the menu
+     row itself; the row opens the card, which lists those same applications first. The Open with
+     search is not a text field: the card reads the key's own text, which is the QML card's rule 8
+     ("typing anywhere goes to the search") and keeps Space and Enter meaning the focused control,
+     at the cost of pasting into the search. A script runs without a timeout, as ui/Scripts.qml's
+     `Process` does, but on a worker thread, so a script that never exits ties up one thread and not
+     the window.
    - **8c**, the send rows: the shelf, Taildrop, LocalSend, Dropbox and the share link.
    - **8d**, tabs, the trash view, the grid and columns views, the stored display settings
      (density, columns, text size), the key sheet and the filter.

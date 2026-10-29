@@ -15,7 +15,7 @@ fn row<'a>(items: &'a [Item], id: &str) -> &'a Entry {
 }
 
 fn file(targets: usize, mode: u32) -> Facts {
-    Facts { path: "/home/u".into(), targets, row_mode: mode, clipboard: false, show_hidden: false }
+    Facts { path: "/home/u".into(), targets, row_mode: mode, ..Default::default() }
 }
 
 // uischema.rs DEFAULT's menu.hidden, the set a first run reads.
@@ -36,7 +36,8 @@ fn the_background_menu_carries_its_own_rows_and_no_file_rows() {
         ids(&items),
         ["newFolder", "newFile", "|", "paste", "selectAll", "|", "openTerminal", "addFavourite", "|", "sort", "toggleHidden", "|", "settings"]
     );
-    assert_eq!(row(&items, "sort").sub, SORTS.to_vec());
+    let orders: Vec<&str> = row(&items, "sort").sub.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(orders, ["name", "size", "mtime", "kind"]);
 }
 
 #[test]
@@ -98,9 +99,29 @@ fn a_camera_mount_offers_no_trash_and_the_two_destroyers_are_marked() {
 }
 
 #[test]
-fn the_capability_probed_rows_are_absent_until_something_probes_them() {
+fn the_probed_rows_follow_their_probe_and_the_unprobed_ones_stay_absent() {
     let items = ids(&entries(Kind::File, &file(1, 0o100644), &[]));
     for id in ["compress", "extract", "convert", "runScript", "shelf", "taildrop", "localsend", "dropbox", "sharelink"] {
+        assert!(!items.contains(&id), "{id}");
+    }
+    let mut f = file(1, 0o100644);
+    f.archive_formats = vec!["zip".into(), "tar.zst".into()];
+    f.can_extract = true;
+    f.can_convert = true;
+    f.scripts = vec![("ocr.sh".into(), "ocr".into())];
+    let items = entries(Kind::File, &f, &[]);
+    assert_eq!(row(&items, "compress").sub, vec![("zip".to_string(), ".zip".to_string()), ("tar.zst".to_string(), ".tar.zst".to_string())]);
+    assert_eq!(row(&items, "runScript").sub, vec![("ocr.sh".to_string(), "ocr".to_string())]);
+    // Extract wants an archive row and Convert an image row, each one at a time.
+    assert!(!ids(&items).contains(&"extract") && !ids(&items).contains(&"convert"));
+    f.row_is_archive = true;
+    f.row_is_image = true;
+    let items = ids(&entries(Kind::File, &f, &[]));
+    assert!(items.contains(&"extract") && items.contains(&"convert"));
+    f.targets = 2;
+    let items = ids(&entries(Kind::File, &f, &[]));
+    assert!(!items.contains(&"extract") && !items.contains(&"convert") && items.contains(&"compress"));
+    for id in ["shelf", "taildrop", "localsend", "dropbox", "sharelink"] {
         assert!(!items.contains(&id), "{id}");
     }
 }

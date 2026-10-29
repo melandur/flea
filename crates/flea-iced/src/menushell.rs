@@ -120,6 +120,13 @@ impl Flea {
             row_mode: cursor_row.map(|r| r.p).unwrap_or(0),
             clipboard: self.pane.ops.clipboard.as_ref().is_some_and(|c| !c.paths.is_empty()),
             show_hidden: self.pane.hidden,
+            archive_formats: self.jobs.formats.archive.clone(),
+            can_extract: self.jobs.formats.extract,
+            can_convert: self.jobs.formats.convert,
+            row_is_archive: cursor_row.is_some_and(|r| !r.d && crate::archives::is_archive(&r.n)),
+            row_is_image: cursor_row.is_some_and(|r| r.i == "image-x-generic"),
+            // Read when a menu opens rather than watched, as ui/Scripts.qml does.
+            scripts: if kind == Kind::File { crate::scripts::list() } else { vec![] },
         };
         let items = menu::entries(kind, &facts, &self.prefs.menu_hidden);
         let Some(cursor) = menu::first(&items) else { return Task::none() };
@@ -137,7 +144,8 @@ impl Flea {
         let y = menu::clamp(listing_top + y_in, frame_height(&items), window_h);
         self.menu = Some(ListMenu { kind, items, cursor, flyout: false, sub_cursor: 0, x, y, path: self.pane.path.clone(), names: self.targets() });
         self.pane.menu_open = true;
-        Task::none()
+        // Asked again on every menu, so a tool installed while the window was open counts next time.
+        self.ask_formats()
     }
 
     pub(crate) fn close_menu(&mut self) {
@@ -210,14 +218,22 @@ impl Flea {
     fn menu_choose_sub(&mut self, index: usize) -> Task<Message> {
         let Some(m) = self.menu.as_ref() else { return Task::none() };
         let Some(Item::Row(e)) = m.items.get(m.cursor) else { return Task::none() };
-        let Some(&(id, _)) = e.sub.get(index) else { return Task::none() };
-        if e.action != "sort" {
-            return Task::none();
+        let Some((id, _)) = e.sub.get(index).cloned() else { return Task::none() };
+        let action = e.action;
+        if m.kind == Kind::File && (m.path != self.pane.path || m.names != self.targets()) {
+            self.close_menu();
+            return self.show("Selected items changed; reopen the menu.".into(), true);
         }
         self.close_menu();
-        // Focus.act routes "sort:<key>" to the header click's own function, Sort.column.
-        let effects = self.pane.sort_column(id);
-        self.run(effects)
+        match action {
+            // Focus.act routes "sort:<key>" to the header click's own function, Sort.column.
+            "sort" => {
+                let effects = self.pane.sort_column(&id);
+                self.run(effects)
+            }
+            "compress" | "runScript" => self.activate_row(format!("{action}:{id}")),
+            _ => Task::none(),
+        }
     }
 
     fn menu_act(&mut self, action: &'static str, label: &'static str) -> Task<Message> {
@@ -250,6 +266,8 @@ impl Flea {
             "moveTo" => return self.open_action(crate::actioncard::Kind::MoveTo),
             "copyTo" => return self.open_action(crate::actioncard::Kind::CopyTo),
             "permissions" => return self.open_action(crate::actioncard::Kind::Permissions),
+            "openWith" => return self.open_with_row(),
+            "extract" | "convert" => return self.activate_row(action.to_string()),
             _ => vec![],
         };
         self.run(effects)

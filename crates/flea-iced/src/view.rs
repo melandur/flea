@@ -35,7 +35,7 @@ impl Flea {
             .style(move |_| container::Style::default().background(p.background).color(p.foreground))
             .width(Length::Fill)
             .height(Length::Fill);
-        self.dialog_layer(self.panel_layer(self.action_layer(self.menu_layer(window.into()))))
+        self.dialog_layer(self.panel_layer(self.job_layer(self.action_layer(self.menu_layer(window.into())))))
     }
 
     fn status_view(&self) -> Element<'_, Message> {

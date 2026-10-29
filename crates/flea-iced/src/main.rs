@@ -1,10 +1,16 @@
 // Flea's window in iced: the listing pane and the write operations over the unchanged `flea --backend`.
 // Everything the QML tree does that is not here yet says so rather than doing nothing.
 mod actioncard;
+mod activation;
+mod archives;
 mod backend;
 mod boot;
 mod cardshell;
 mod cardview;
+mod convertcard;
+mod jobkeys;
+mod jobshell;
+mod jobview;
 mod chrome;
 mod contrast;
 mod devices;
@@ -30,6 +36,7 @@ mod nav;
 mod netopen;
 mod netshell;
 mod network;
+mod openwith;
 mod openrulecard;
 mod openrules;
 mod opreplies;
@@ -48,6 +55,7 @@ mod protocols;
 mod rail;
 mod railshell;
 mod railview;
+mod scripts;
 mod search;
 mod searchkeys;
 mod sentence;
@@ -131,6 +139,7 @@ struct Flea {
     // The menu's dialog row on screen, or the deletion it started while that runs; one at a time.
     card: Option<actioncard::Card>,
     card_ids: u64,
+    jobs: jobshell::Jobs,
 }
 
 #[derive(Debug, Clone)]
@@ -198,6 +207,7 @@ enum Message {
     QuitDeadline,
     Menu(menushell::Msg),
     Action(cardshell::Msg),
+    Job(jobkeys::Msg),
 }
 
 impl Flea {
@@ -217,16 +227,6 @@ impl Flea {
         let task = self.handle(message);
         let owed = self.pane.pay_debt();
         Task::batch([task, self.run(owed)])
-    }
-
-    fn report_viewport(&mut self) -> Task<Message> {
-        let first = (self.scroll_y / ROW_H).floor().max(0.0) as usize;
-        // Fully visible rows, which is what the cursor clamp wants; the view draws one more.
-        let visible = (self.viewport_h / ROW_H).floor().max(1.0) as usize;
-        // Thumbs.viewport: measured in pixels, so a row straddling the bottom edge is asked for.
-        let last = ((self.scroll_y + self.viewport_h) / ROW_H).ceil().max(1.0) as usize - 1;
-        let effects = self.pane.viewport(first, visible, last);
-        self.run(effects)
     }
 
     fn handle(&mut self, message: Message) -> Task<Message> {
@@ -275,6 +275,7 @@ impl Flea {
             Message::Dialog(msg) => self.dialog_message(msg),
             Message::Menu(msg) => self.menu_message(msg),
             Message::Action(msg) => self.action_message(msg),
+            Message::Job(msg) => self.job_message(msg),
             m @ (Message::PanelLoaded(..)
             | Message::PanelSaved(_)
             | Message::PanelClose

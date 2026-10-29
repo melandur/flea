@@ -29,6 +29,10 @@ mkdir -p "$T/alpha" "$T/beta" "$D/state" "$D/cache" "$D/data" "$D/shots" "$D/bin
 for i in $(seq -w 1 40); do echo "file $i" > "$T/note-$i.txt"; done
 echo hidden > "$T/.secret"
 echo inner > "$T/alpha/inside.txt"
+# Run script's one script, in a config home of the suite's own: it writes the paths it was given.
+mkdir -p "$D/config/flea/scripts"
+printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "%s/script.out"\n' "$D" > "$D/config/flea/scripts/mark.sh"
+chmod +x "$D/config/flea/scripts/mark.sh"
 
 pass=0
 fail=0
@@ -76,7 +80,7 @@ shot() { WAYLAND_DISPLAY=$SOCK grim "$D/shots/$1.png"; }
 launch() {
     rm -f "$D/reply.json"
     env -u DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY="$SOCK" \
-        XDG_STATE_HOME="$D/state" XDG_CACHE_HOME="$D/cache" XDG_DATA_HOME="$D/data" \
+        XDG_STATE_HOME="$D/state" XDG_CACHE_HOME="$D/cache" XDG_DATA_HOME="$D/data" XDG_CONFIG_HOME="$D/config" \
         FLEA_BIN="$BIN" FLEA_ICED_TRACE=1 FLEA_PICKER_REPLY="$D/reply.json" \
         "$ICED" "$@" > "$D/out.log" 2> "$D/trace.log" &
     APP=$!
@@ -177,17 +181,29 @@ k m; for _ in $(seq 20); do k -k Down; done; k -k Return; sleep 1
 check "and the same row, relabelled, hides them" false "$(jq -r .hidden "$D/state/flea/ui.json")"
 top; ctrl b; sleep 1
 check "Ctrl+B copies the cursor row's path" "$T/alpha" "$(WAYLAND_DISPLAY=$SOCK timeout 3 wl-paste -n 2> /dev/null)"
-# The dialog rows, nothing hidden: Trash, Delete permanently, then Open in terminal, Move to, Copy
-# to and Properties, so Delete permanently is eight Downs and Properties twelve.
-top; k -k Down -k Down; n=$(mark); k m; for _ in $(seq 12); do k -k Down; done; k -k Return; sleep 1; shot properties
+# The dialog rows, nothing hidden: Compress, then Trash and Delete permanently, then Open in terminal,
+# Move to, Copy to and Properties, so Delete permanently is nine Downs and Properties thirteen.
+top; k -k Down -k Down; n=$(mark); k m; for _ in $(seq 13); do k -k Down; done; k -k Return; sleep 1; shot properties
 k -k Escape; sleep 0.5
 check "Properties snapshots, asks, and Escape closes it" "1 1 1" "$(since "$n" | grep -c '"op":"snapshot"') $(since "$n" | grep -c '"op":"properties"') $(since "$n" | grep -c '"op":"close"')"
 ctrl m; ctrl a; k made.txt; k -k Return; sleep 1
 check "Ctrl+M's card creates the file" yes "$(exists "$T/made.txt")"
-k m; for _ in $(seq 8); do k -k Down; done; k -k Return; sleep 1; shot delete; k -k Return; sleep 1
+k m; for _ in $(seq 9); do k -k Down; done; k -k Return; sleep 1; shot delete; k -k Return; sleep 1
 check "Enter on the confirmation's first focus cancels" yes "$(exists "$T/made.txt")"
-k m; for _ in $(seq 8); do k -k Down; done; k -k Return; sleep 1; k -k Tab; k -k Return; sleep 1
+k m; for _ in $(seq 9); do k -k Down; done; k -k Return; sleep 1; k -k Tab; k -k Return; sleep 1
 check "Tab to Delete and Enter deletes it from disk" no "$(exists "$T/made.txt")"
+# The job rows. Compress is seven Downs and Right opens its formats; the first one is taken. The new
+# archive sorts straight after its source, and an archive row's Extract sits right under Compress.
+top; k -k Down -k Down; n=$(mark); k m; for _ in $(seq 7); do k -k Down; done; k -k Right; shot compress; k -k Return; sleep 2
+check "Compress snapshots, activates and writes an archive" "1 2" "$(since "$n" | grep -c '"op":"compress"') $(ls "$T" | grep -c '^note-02 copy\.')"
+top; k -k Down -k Down -k Down; k m; for _ in $(seq 8); do k -k Down; done; k -k Return; sleep 2
+check "Extract unpacks it beside itself" yes "$(exists "$T/note-02 copy/note-02 copy.txt")"
+# Run script is the row after Copy path: sixteen Downs on a file row whose archive group has no Extract.
+top; k -k Down -k Down; k m; for _ in $(seq 16); do k -k Down; done; k -k Right; k -k Return; sleep 2
+check "Run script runs it over the cursor row" "$T/note-02 copy" "$(cat "$D/script.out" 2> /dev/null)"
+# Open with reads the catalogue and launches nothing here: Escape closes it.
+n=$(mark); k m; k -k Down; k -k Return; sleep 2; shot openwith; for _ in $(seq 10); do k -k Down; done; shot openwith-scrolled; k -k Escape; sleep 0.5
+check "Open with reads the whole catalogue and Escape closes it" "1 1" "$(since "$n" | grep -c '"installed":true') $(since "$n" | grep -c '"op":"close"')"
 k -k Tab; k -k Down -k Down; shot rail; k -k Tab
 n=$(mark); backend=$(pgrep -P "$APP" -x flea)
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3

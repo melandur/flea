@@ -124,3 +124,120 @@ fn every_dialog_row_round_trips_through_the_real_backend() {
     drop(live);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// Read the backend's lines until one parses to a JSON object `pick` accepts, which it returns.
+fn wait_line(live: &mut Live, what: &str, pick: impl Fn(&serde_json::Value) -> bool) -> serde_json::Value {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        let line = live.lines.recv_timeout(left).unwrap_or_else(|_| panic!("timed out waiting for {what}"));
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
+            if pick(&v) {
+                return v;
+            }
+        }
+    }
+}
+
+fn send(live: &mut Live, v: serde_json::Value) {
+    live.stdin.write_all(Request::Json(v).line().as_bytes()).unwrap();
+}
+
+// The snapshot and activate exchange, through activation.rs, to the paths the backend vouched for.
+fn activate(live: &mut Live, id: u64, action: &str, rows: &[usize]) -> Vec<String> {
+    use crate::activation::{Activation, Step};
+    let (mut a, snapshot) = Activation::open(id, action, rows, rows[0]);
+    send(live, snapshot);
+    loop {
+        let v = wait_line(live, action, |v| v["t"] == "menuaction" && v["id"] == id);
+        match a.receive(&v) {
+            Step::Send(next) => send(live, next),
+            Step::Done { paths, .. } => return paths,
+            Step::Refused(why) => panic!("{action} refused: {why}"),
+            Step::Nothing => {}
+        }
+    }
+}
+
+#[test]
+fn the_job_rows_round_trip_through_the_real_backend() {
+    let Some(bin) = std::env::var("FLEA_BIN").ok().filter(|b| !b.is_empty()) else {
+        eprintln!("live: FLEA_BIN is not set, so the job round trip was skipped");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("flea-iced-jobs-{}", std::process::id()));
+    let dir = root.join("dir");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.txt"), b"alpha").unwrap();
+    ::image::RgbImage::from_pixel(8, 8, ::image::Rgb([10, 200, 10])).save(dir.join("b.png")).unwrap();
+    let dir_s = dir.to_str().unwrap().to_string();
+    let mut live = Live::start_with(&bin, &[]);
+    let out = live.pane.open(dir_s.clone(), None);
+    live.run(out);
+    live.until("the listing", |p| p.listed_once && !p.list_in_flight());
+    assert_eq!(live.names(), ["a.txt", "b.png"]);
+
+    // The probe the menu reads.
+    send(&mut live, serde_json::json!({"c": "formats", "id": 1}));
+    let formats = wait_line(&mut live, "formats", |v| v["t"] == "formats");
+    let archive: Vec<String> = formats["archive"].as_array().unwrap().iter().map(|f| f.as_str().unwrap().to_string()).collect();
+    assert!(archive.contains(&"zip".to_string()), "no zip writer on this box: {formats}");
+
+    // Compress row 0 under its own name, then extract it beside itself.
+    let paths = activate(&mut live, 2, "compress:zip", &[0]);
+    assert_eq!(paths, vec![format!("{dir_s}/a.txt")]);
+    send(&mut live, serde_json::json!({"c": "archive", "op": "compress", "paths": paths, "dest": format!("{dir_s}/a.zip"), "format": "zip", "menuId": 2}));
+    let done = wait_line(&mut live, "the archive", |v| v["t"] == "archivedone");
+    assert_eq!(done["ok"], true, "{done}");
+    assert!(dir.join("a.zip").is_file());
+    let out = live.pane.refresh_here();
+    live.run(out);
+    live.until("the archive listed", |p| !p.list_in_flight() && p.rows.iter().any(|r| r.n == "a.zip"));
+    let zip_row = live.names().iter().position(|n| n == "a.zip").unwrap();
+    activate(&mut live, 3, "extract", &[zip_row]);
+    send(&mut live, serde_json::json!({"c": "archive", "op": "extract", "path": format!("{dir_s}/a.zip"), "dest": format!("{dir_s}/{}", crate::archives::extract_dir("a.zip")), "menuId": 3}));
+    let done = wait_line(&mut live, "the extract", |v| v["t"] == "archivedone");
+    assert_eq!(done["ok"], true, "{done}");
+    assert_eq!(std::fs::read(dir.join("a/a.txt")).unwrap(), b"alpha");
+
+    // Convert: the card's check, then the conversion, through convertcard.rs.
+    if formats["convert"] == true {
+        let png_row = live.names().iter().position(|n| n == "b.png").unwrap();
+        activate(&mut live, 4, "convert", &[png_row]);
+        let (mut card, out) = crate::convertcard::Convert::open(&format!("{dir_s}/b.png"), "b.png", 4);
+        for v in out {
+            send(&mut live, v);
+        }
+        let checked = wait_line(&mut live, "the check", |v| v["t"] == "convertchecked");
+        assert!(card.checked(&checked).is_empty());
+        assert!(card.can_convert(), "{checked}");
+        for v in card.commit() {
+            send(&mut live, v);
+        }
+        // The wire orders started before done, and the card only believes the operation it saw start.
+        let started = wait_line(&mut live, "the start", |v| v["t"] == "convertstarted");
+        card.started(&started);
+        let done = wait_line(&mut live, "the conversion", |v| v["t"] == "convertdone");
+        assert_eq!(card.done(&done), Some(true), "{done}");
+        assert!(dir.join("b (converted).jpg").is_file());
+    } else {
+        eprintln!("live: ImageMagick is not here, so convert was skipped");
+    }
+
+    // Open with: the catalogue only. Nothing is launched from a test.
+    let (mut card, snapshot) = crate::openwith::OpenWith::open(5, &[0], 0);
+    send(&mut live, snapshot);
+    while card.busy {
+        let v = wait_line(&mut live, "the catalogue", |v| v["t"] == "menuaction" && v["id"] == 5);
+        for o in card.receive(&v) {
+            if let crate::openwith::Out::Send(next) = o {
+                send(&mut live, next);
+            }
+        }
+    }
+    assert!(card.error.is_empty(), "{}", card.error);
+    assert_eq!(card.name(), "a.txt");
+    assert!(!card.installed.is_empty() && !card.kind.is_empty());
+    drop(live);
+    let _ = std::fs::remove_dir_all(&root);
+}

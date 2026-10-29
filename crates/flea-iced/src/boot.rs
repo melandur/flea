@@ -76,6 +76,7 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         opening_terminal: false,
         card: None,
         card_ids: 0,
+        jobs: Default::default(),
         backend_key: 0,
         side: 0,
         other: None,
@@ -95,7 +96,8 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         Ok(b) => {
             flea.backend = Some(b);
             let effects = flea.pane.open(start.clone(), None);
-            let first = flea.run(effects);
+            // The menu's archive and convert rows read this probe, so it goes out with the first list.
+            let first = Task::batch([flea.run(effects), flea.ask_formats()]);
             // A window left split opens both panes on the start path (the 2026-10-08 ruling), the
             // keyboard on the pane that held it.
             if prefs.view == "dual" {

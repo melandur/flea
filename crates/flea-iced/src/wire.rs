@@ -61,6 +61,8 @@ pub enum Reply {
     // A menuaction answer other than installed, and a permissions answer, for actioncard.rs.
     MenuAction(Value),
     Permissions(Value),
+    // The archive and convert jobs' lines and the formats probe, for jobshell.rs.
+    Job(Value),
     Other,
 }
 
@@ -146,6 +148,7 @@ pub fn parse(line: &str) -> Option<Reply> {
         },
         // Every other menuaction op and the permissions service: the card reads them whole.
         "menuaction" => Reply::MenuAction(v.clone()),
+        "formats" | "archivestarted" | "archiveprogress" | "archivedone" | "convertstarted" | "convertchecked" | "convertdone" => Reply::Job(v.clone()),
         "permissions" => Reply::Permissions(v.clone()),
         "peeked" => Reply::Peeked {
             path: field("path"),

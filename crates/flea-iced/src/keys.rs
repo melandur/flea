@@ -25,6 +25,9 @@ impl Flea {
         if std::env::var_os("FLEA_ICED_TRACE").is_some_and(|v| !v.is_empty()) {
             eprintln!("flea-iced: key {key:?} {modifiers:?} repeat={repeat} text={text:?}");
         }
+        if let Some(task) = self.job_key(&key, modifiers, text.as_deref()) {
+            return task;
+        }
         if let Some(task) = self.action_key(&key) {
             return task;
         }

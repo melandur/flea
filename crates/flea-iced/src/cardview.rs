@@ -30,7 +30,7 @@ impl Flea {
             body = body
                 .push(text(format!("Delete {n} {} permanently?", if n == 1 { "item" } else { "items" })).color(p.foreground))
                 .push(text("These items are deleted from disk. This cannot be undone.").color(p.foreground));
-            body = body.push(row![space().width(Length::Fill), self.card_button("Cancel", c.focus == 0, false, Some(Msg::Close)), self.card_button("Delete", c.focus == 1, true, Some(Msg::Confirm))].spacing(8));
+            body = body.push(row![space().width(Length::Fill), self.card_button("Cancel", c.focus == 0, false, Some(Message::Action(Msg::Close))), self.card_button("Delete", c.focus == 1, true, Some(Message::Action(Msg::Confirm)))].spacing(8));
             return self.card_frame(body, 420.0);
         }
         body = body.push(text(title(c.kind)).color(p.foreground)).push(rule());
@@ -63,7 +63,7 @@ impl Flea {
             body = body.push(text(line).size(11.0).color(ink));
         }
         let close_label = if c.kind == Kind::Properties { "Close" } else { "Cancel" };
-        let mut buttons = row![space().width(Length::Fill), self.card_button(close_label, !c.can_submit(), false, Some(Msg::Close))].spacing(8);
+        let mut buttons = row![space().width(Length::Fill), self.card_button(close_label, !c.can_submit(), false, Some(Message::Action(Msg::Close)))].spacing(8);
         let submit = match c.kind {
             Kind::NewFile => Some("Create"),
             Kind::MoveTo => Some("Move"),
@@ -72,12 +72,12 @@ impl Flea {
             _ => None,
         };
         if let Some(label) = submit {
-            buttons = buttons.push(self.card_button(label, c.can_submit(), false, c.can_submit().then_some(Msg::Submit)));
+            buttons = buttons.push(self.card_button(label, c.can_submit(), false, c.can_submit().then_some(Message::Action(Msg::Submit))));
         }
         self.card_frame(body.push(buttons), if c.kind == Kind::Permissions { 440.0 } else { 420.0 })
     }
 
-    fn card_frame<'a>(&self, body: Column<'a, Message>, width: f32) -> Element<'a, Message> {
+    pub(crate) fn card_frame<'a>(&self, body: Column<'a, Message>, width: f32) -> Element<'a, Message> {
         let p = self.palette;
         container(body)
             .padding(PAD_X + 2.0)
@@ -87,11 +87,11 @@ impl Flea {
     }
 
     // DialogButton: the focused one is primary, a destructive one draws in the error ink.
-    fn card_button<'a>(&self, label: &'a str, primary: bool, danger: bool, msg: Option<Msg>) -> Element<'a, Message> {
+    pub(crate) fn card_button<'a>(&self, label: &'a str, primary: bool, danger: bool, msg: Option<Message>) -> Element<'a, Message> {
         let p = self.palette;
         let tone = if danger { p.error } else { p.accent };
         button(text(label).size(TEXT_PX))
-            .on_press_maybe(msg.map(Message::Action))
+            .on_press_maybe(msg)
             .style(move |_, _| button::Style {
                 background: Some(if primary { Color { a: 0.25, ..tone } } else { p.background }.into()),
                 text_color: if danger { p.error } else { p.foreground },

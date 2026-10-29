@@ -59,6 +59,17 @@ impl Flea {
         Task::batch(tasks)
     }
 
+    // The scrollable's rows on screen, reported to the pane, out of main.rs whole.
+    pub(crate) fn report_viewport(&mut self) -> Task<Message> {
+        let first = (self.scroll_y / ROW_H).floor().max(0.0) as usize;
+        // Fully visible rows, which is what the cursor clamp wants; the view draws one more.
+        let visible = (self.viewport_h / ROW_H).floor().max(1.0) as usize;
+        // Thumbs.viewport: measured in pixels, so a row straddling the bottom edge is asked for.
+        let last = ((self.scroll_y + self.viewport_h) / ROW_H).ceil().max(1.0) as usize - 1;
+        let effects = self.pane.viewport(first, visible, last);
+        self.run(effects)
+    }
+
     // ui/Opener.qml: one `flea --open` at a time, and a second press while it runs says so.
     fn open_file(&mut self, path: String) -> Task<Message> {
         if self.opening {
