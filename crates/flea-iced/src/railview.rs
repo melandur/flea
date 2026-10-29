@@ -113,12 +113,16 @@ impl Flea {
         // The folder the listing is on is the place the rail marks, whatever holds the keyboard.
         let here = !e.path.is_empty() && e.path == self.pane.path;
         let ink = if here { p.accent } else { p.foreground };
-        let line = row![
+        let mut line = row![
             svg(marks::handle(e.glyph, if here { p.accent } else { p.dim })).width(MARK).height(MARK),
-            text(elide(&e.label, self.rail.width)).color(ink).wrapping(iced::widget::text::Wrapping::None),
+            text(elide(&e.label, self.rail.width)).color(ink).wrapping(iced::widget::text::Wrapping::None).width(Length::Fill),
         ]
         .spacing(10)
         .align_y(iced::Center);
+        // SidebarRow's detail: the Trash row's count when places.trashCount is on and it holds any.
+        if let (crate::rail::Kind::Trash, true, Some(n)) = (&e.kind, self.prefs.trash_count_shown, self.trash.count.filter(|n| *n > 0)) {
+            line = line.push(text(n.to_string()).size(11.0).color(p.muted));
+        }
         let band = container(line).padding([0.0, PAD_X]).height(ROW_H).width(Length::Fill).align_y(iced::Center).clip(true).style(move |_| {
             if cursor {
                 container::Style::default().background(Background::Color(Color { a: 0.18, ..p.accent }))

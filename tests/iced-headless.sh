@@ -297,7 +297,7 @@ TRASH_BUS=$(printf '%s\n' "$BUSOUT" | sed -n 1p); BUS_PID=$(printf '%s\n' "$BUSO
 pgio() { DBUS_SESSION_BUS_ADDRESS="$TRASH_BUS" XDG_DATA_HOME="$D/data" gio "$@" 2> /dev/null; }
 alone() { [ "$(pgio trash --list)" = "$(printf 'trash:///%s\t%s' "$1" "$T/trashbin/$1")" ] && echo yes || echo no; }
 rail_trash() { WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 60 137; sleep 1.5; }
-jq '.view = "list"' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+jq '.view = "list" | .places.trashCount = true' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
 mkdir -p "$T/trashbin"; echo one > "$T/trashbin/keep-me.txt"; echo two > "$T/trashbin/gone.txt"
 launch "$T/trashbin"
 k -k Delete; sleep 1
@@ -310,7 +310,7 @@ if [ "$(alone gone.txt)" = yes ]; then
     check "Enter on the card's Cancel deletes nothing" yes "$(exists "$D/data/Trash/files/gone.txt")"
     k -k Delete; sleep 1; k -k Right; k -k Return; sleep 1.5
     check "the destructive button, reached deliberately, deletes it from disk" no "$(exists "$D/data/Trash/files/gone.txt")"
-    k -k Escape; sleep 0.5; k -k Delete; sleep 1
+    k -k Escape; sleep 0.5; k -k Delete; sleep 1; shot trash-badge
     if [ "$(alone keep-me.txt)" = yes ]; then
         rail_trash; k -k space; k m; k -k Return; sleep 1.5
         check "Restore from the selection's menu puts it back" "yes no" "$(exists "$T/trashbin/keep-me.txt") $(exists "$D/data/Trash/files/keep-me.txt")"
@@ -322,6 +322,27 @@ else
     echo "skip  the Trash view's destructive checks: the private Trash lists more than this suite's own file"
 fi
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+
+# The 30 day sweep, opt in: one item backdated past thirty days and one fresh. It is switched on
+# only when the private Trash holds exactly those two, because it deletes without asking.
+echo old > "$T/trashbin/old.txt"; echo new > "$T/trashbin/fresh.txt"
+pgio trash "$T/trashbin/old.txt" "$T/trashbin/fresh.txt"
+sed -i 's/^DeletionDate=.*/DeletionDate=2020-01-01T00:00:00/' "$D/data/Trash/info/old.txt.trashinfo" 2> /dev/null
+two=$(printf 'trash:///fresh.txt\t%s\ntrash:///old.txt\t%s' "$T/trashbin/fresh.txt" "$T/trashbin/old.txt")
+if [ "$(pgio trash --list | sort)" = "$two" ]; then
+    jq '.trashAutoEmpty = true | .trashSweptOn = 0' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+    launch "$T/trashbin"; sleep 4
+    today=$(( $(date -d 'today 00:00' +%s) / 86400 ))
+    check "the sweep deletes what is past thirty days and keeps the rest" "no yes" "$(exists "$D/data/Trash/files/old.txt") $(exists "$D/data/Trash/files/fresh.txt")"
+    check "and records the day it ran" "$today" "$(jq -r '.trashSweptOn' "$D/state/flea/ui.json")"
+    comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+    launch "$T/trashbin"; sleep 4
+    check "a second launch the same day sweeps nothing" 0 "$(grep -c '"recover":false' "$D/trace.log")"
+    comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+    jq '.trashAutoEmpty = false' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+else
+    echo "skip  the sweep: the private Trash does not hold exactly this suite's two files"
+fi
 kill "$BUS_PID" 2> /dev/null; BUS_PID=""; TRASH_BUS=""
 rm -rf "$T/trashbin"
 APP=""

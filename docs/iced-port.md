@@ -513,6 +513,20 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      Delete trashes the cursor row, the rail's row opens the view, Enter on the card's Cancel deletes
      nothing, the destructive button deletes from disk, and Restore from the menu puts a file back,
      57 checks.
-   - **8d-iii-b**, the Trash count's live monitor and the rail's badge, and the opt-in 30-day sweep.
+   - **8d-iii-b, the Trash count's monitor, the badge and the 30-day sweep (done).** `trashwatch.rs`
+     is ui/TrashMonitor.qml: `gio monitor --dir=trash:///` while the Trash row is shown or the view is
+     up, tied to the window by setpriv's parent-death signal and a parent check as TrashMonitor's is,
+     and killed when the subscription drops; each change settles 120 ms, then the count is read again
+     with `gio info` (LC_ALL=C, bounded at 10 s) and an open view re-lists or re-prepares. The rail's
+     Trash row draws the count when `places.trashCount` is on; a failed count or monitor is said only
+     where it shows, the view or the badge. `trashsweep.rs` is TrashHost's sweep and TrashDates'
+     expired and dayNumber: opt in through `trashAutoEmpty`, once a day by `trashSweptOn`, two seconds
+     after the window opens, never once the view was used, and stopped by the view reaching for the
+     Trash; it lists, prepares only what is past thirty days by its own unreadable-is-never-expired
+     rule, deletes through the reviewed token, and records the day only when it ran to its end. Its
+     replies are told from the view's by the sweep being in flight, as TrashHost does. Driven headless
+     on the private bus: the badge after a Delete, and with one item backdated to 2020 and one fresh,
+     the sweep deletes the old, keeps the fresh, writes today's day, and a second launch that day
+     sweeps nothing; switched on only when the private Trash holds exactly those two, 60 checks.
    - **8d-iv**, tabs with the Places menu, and the stored display settings (density, columns, text
      size).

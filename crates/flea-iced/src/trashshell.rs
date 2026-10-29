@@ -9,32 +9,13 @@ use crate::{blocking, Flea, Message, ROW_H};
 use iced::keyboard::{key::Named, Key, Modifiers};
 use iced::widget::{operation, scrollable};
 use iced::Task;
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use crate::trashsweep;
+use crate::trashwatch::Watch;
+use crate::sleep;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-// TrashMonitor's query: GIO's own count, Trash on other mounted volumes included, bounded at 10 s.
-fn trash_count() -> Option<usize> {
-    let mut child = Command::new("gio")
-        .args(["info", "--attributes=trash::item-count", "trash:///"])
-        .env("LC_ALL", "C")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while child.try_wait().ok()?.is_none() {
-        if Instant::now() > deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    let out = child.wait_with_output().ok()?;
-    // Sample GIO output: "  trash::item-count: 12".
-    let text = String::from_utf8_lossy(&out.stdout);
-    out.status.success().then_some(())?;
-    text.lines().find_map(|l| l.trim().strip_prefix("trash::item-count:")).and_then(|n| n.trim().parse().ok())
+fn now_ms() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
 }
 
 impl Flea {
@@ -64,8 +45,10 @@ impl Flea {
         if self.trash.confirming() {
             return Task::none();
         }
+        let stopped = self.trash.sweep.stop();
+        let stopped = self.run_sweep(stopped);
         if self.trash.opened {
-            return self.trash_action(if action.is_empty() { "openTrash" } else { action });
+            return Task::batch([stopped, self.trash_action(if action.is_empty() { "openTrash" } else { action })]);
         }
         let closed = if self.preview.active {
             let effects = self.preview.close();
@@ -81,7 +64,7 @@ impl Flea {
         self.trash.window_rows = (rows + 2).clamp(1, crate::trash::MAX_WINDOW);
         self.trash.visible = rows.max(1);
         let outs = self.trash.open(action);
-        Task::batch([closed, self.run_trash(outs)])
+        Task::batch([stopped, closed, self.run_trash(outs)])
     }
 
     // TrashHost.action: a row from either menu, or the view's own Empty Trash.
@@ -129,21 +112,66 @@ impl Flea {
             }
             Msg::Tick => self.trash.check_tick(),
             Msg::Count(n, menu) => {
-                self.trash.count = n;
-                return if menu { self.open_rail_trash_menu() } else { Task::none() };
+                // TrashMonitor's failure is said only where it shows: the view, or a badge drawn.
+                let said = if n.is_none() && (self.trash.opened || self.prefs.trash_count_shown) {
+                    self.show("Could not read the Trash count.".into(), true)
+                } else {
+                    Task::none()
+                };
+                self.trash.count = n.or(self.trash.count);
+                return Task::batch([said, if menu { self.open_rail_trash_menu() } else { Task::none() }]);
+            }
+            Msg::Watched(Watch::Changed) => {
+                self.trash.settle_gen += 1;
+                let gen = self.trash.settle_gen;
+                return Task::perform(sleep(Duration::from_millis(120)), move |_| Message::Trash(Msg::Settled(gen)));
+            }
+            Msg::Watched(Watch::Failed) => {
+                return if self.trash.opened || self.prefs.trash_count_shown { self.show("Trash monitoring is unavailable.".into(), true) } else { Task::none() };
+            }
+            Msg::Settled(gen) if gen == self.trash.settle_gen => {
+                let count = self.refresh_trash_count(false);
+                let outs = self.trash.source_changed();
+                return Task::batch([count, self.run_trash(outs)]);
+            }
+            Msg::Settled(_) => vec![],
+            Msg::SweepDue => {
+                let outs = self.trash.sweep.start(self.prefs.trash_auto_empty, self.prefs.trash_swept_on, self.trash.used(), now_ms());
+                return self.run_sweep(outs);
             }
         };
         self.run_trash(outs)
     }
 
     pub(crate) fn trash_reply(&mut self, v: &serde_json::Value) -> Task<Message> {
+        // Every reply while a sweep is in flight is the sweep's: the view cannot be open then.
+        if self.trash.sweep.sweeping() {
+            let outs = self.trash.sweep.receive(v, now_ms());
+            return self.run_sweep(outs);
+        }
         let outs = self.trash.receive(v);
         self.run_trash(outs)
     }
 
+    fn run_sweep(&mut self, outs: Vec<trashsweep::Out>) -> Task<Message> {
+        let mut tasks = vec![];
+        for out in outs {
+            tasks.push(match out {
+                trashsweep::Out::Send(v) => self.run(vec![crate::pane::Effect::Send(Request::Json(v))]),
+                trashsweep::Out::Finished(day, changed) => {
+                    self.prefs.trash_swept_on = day;
+                    let bin = crate::backend::binary();
+                    let saved = Task::perform(blocking(move || crate::prefs::save_swept(&bin, day)), Message::Saved);
+                    Task::batch([saved, if changed { self.refresh_trash_count(false) } else { Task::none() }])
+                }
+            });
+        }
+        Task::batch(tasks)
+    }
+
     // The count is read again before the rail's Trash menu opens, so its rows grey on what is there now.
     pub(crate) fn refresh_trash_count(&mut self, then_menu: bool) -> Task<Message> {
-        Task::perform(blocking(trash_count), move |n| Message::Trash(Msg::Count(n, then_menu)))
+        Task::perform(blocking(crate::trashwatch::count), move |n| Message::Trash(Msg::Count(n, then_menu)))
     }
 
     fn open_rail_trash_menu(&mut self) -> Task<Message> {

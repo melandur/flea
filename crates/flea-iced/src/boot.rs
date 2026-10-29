@@ -121,5 +121,8 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
             Task::none()
         }
     };
-    (flea, Task::batch([task, polling]))
+    // The 30 day sweep runs off the startup path, two seconds in, as shell.qml's trashSweep does.
+    let sweep = Task::perform(crate::sleep(std::time::Duration::from_secs(2)), |_| Message::Trash(crate::trashview::Msg::SweepDue));
+    let count = flea.refresh_trash_count(false);
+    (flea, Task::batch([task, polling, sweep, count]))
 }

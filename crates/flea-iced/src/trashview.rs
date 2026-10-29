@@ -26,6 +26,10 @@ pub enum Msg {
     Tick,
     // The count, and whether the rail's Trash menu was waiting on it.
     Count(Option<usize>, bool),
+    // The monitor's report, its settle, and the sweep's start two seconds after the window opens.
+    Watched(crate::trashwatch::Watch),
+    Settled(u64),
+    SweepDue,
 }
 
 impl Flea {

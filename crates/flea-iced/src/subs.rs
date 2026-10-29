@@ -17,6 +17,12 @@ impl Flea {
             iced::event::listen_with(chrome::mouse_back).map(Message::Chrome),
             window::close_requests().map(|_| Message::CloseRequested),
             window::resize_events().map(|(_, size)| Message::Resized(size)),
+            // TrashMonitor runs while the Trash row is shown or the view is up.
+            if self.prefs.show_trash || self.trash.opened {
+                Subscription::run(crate::trashwatch::monitor)
+            } else {
+                Subscription::none()
+            },
             // TrashView's 2.5 s check while a confirmation is open: a nested change GIO's monitor misses.
             if self.trash.confirmation.is_some() {
                 iced::time::every(std::time::Duration::from_millis(2500)).map(|_| Message::Trash(crate::trashview::Msg::Tick))

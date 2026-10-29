@@ -43,6 +43,10 @@ pub struct Prefs {
     // cursor row loads into it on its own once the cursor settles.
     pub preview_column: bool,
     pub preview_automatic: bool,
+    // places.trashCount, the rail's Trash badge; trashAutoEmpty and trashSweptOn, the 30 day sweep.
+    pub trash_count_shown: bool,
+    pub trash_auto_empty: bool,
+    pub trash_swept_on: i64,
 }
 
 impl Default for Prefs {
@@ -80,6 +84,9 @@ impl Default for Prefs {
             thumb_size: "medium".into(),
             preview_column: true,
             preview_automatic: true,
+            trash_count_shown: false,
+            trash_auto_empty: false,
+            trash_swept_on: 0,
         }
     }
 }
@@ -130,6 +137,9 @@ impl Prefs {
             thumb_size: v.pointer("/preview/thumbSize").and_then(Value::as_str).unwrap_or("medium").to_string(),
             preview_column: v.pointer("/preview/column").and_then(Value::as_bool) != Some(false),
             preview_automatic: v.pointer("/preview/loadOn").and_then(Value::as_str) != Some("manual"),
+            trash_count_shown: v.pointer("/places/trashCount").and_then(Value::as_bool) == Some(true),
+            trash_auto_empty: v.pointer("/trashAutoEmpty").and_then(Value::as_bool) == Some(true),
+            trash_swept_on: v.pointer("/trashSweptOn").and_then(Value::as_i64).unwrap_or(0),
         }
     }
 
@@ -164,6 +174,12 @@ impl Prefs {
 
 pub fn save_rail(bin: &str, shown: bool) -> bool {
     let patch = serde_json::json!({ "places": { "rail": if shown { "shown" } else { "hidden" } } }).to_string();
+    Command::new(bin).arg("--ui-state").arg(patch).output().map(|o| o.status.success()).unwrap_or(false)
+}
+
+// ViewState.recordTrashSweep: the day the sweep ran to its end, so it runs again tomorrow.
+pub fn save_swept(bin: &str, day: i64) -> bool {
+    let patch = serde_json::json!({ "trashSweptOn": day }).to_string();
     Command::new(bin).arg("--ui-state").arg(patch).output().map(|o| o.status.success()).unwrap_or(false)
 }
 

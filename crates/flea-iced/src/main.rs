@@ -93,6 +93,8 @@ mod tasks;
 mod theme;
 mod trash;
 mod trashshell;
+mod trashsweep;
+mod trashwatch;
 mod trashview;
 mod thumbs;
 mod watch;

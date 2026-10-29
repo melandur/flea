@@ -21,7 +21,7 @@ pub struct Row {
     pub bulk_selected: bool,
 }
 
-fn row(v: &Value) -> Row {
+pub(crate) fn row(v: &Value) -> Row {
     let s = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
     Row {
         uri: s("uri"),
@@ -82,8 +82,11 @@ pub struct Trash {
     selection_token: u64,
     selection_count: usize,
     pub cursor: usize,
-    // TrashMonitor's count, which the rail's Trash menu greys its rows on.
+    // TrashMonitor's count, which the rail's Trash menu greys its rows on and its badge draws.
     pub count: Option<usize>,
+    pub sweep: crate::trashsweep::Sweep,
+    // The monitor's 120 ms settle, restarted by every change it reports.
+    pub settle_gen: u64,
     request_id: u64,
     pending_op: String,
     operation_active: bool,
@@ -110,6 +113,11 @@ impl Trash {
 
     pub fn confirming(&self) -> bool {
         self.confirming
+    }
+
+    // TrashHost's Loader once active: a window whose view was ever opened never sweeps.
+    pub fn used(&self) -> bool {
+        self.request_id > 0
     }
 
     fn send(&mut self, op: &str, mut fields: Value) -> Out {
