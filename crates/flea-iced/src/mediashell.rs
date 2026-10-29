@@ -85,7 +85,7 @@ impl Flea {
         self.render_pdf()
     }
 
-    fn render_pdf(&mut self) -> Task<Message> {
+    pub(crate) fn render_pdf(&mut self) -> Task<Message> {
         let Some(v) = &self.pdf else { return Task::none() };
         let (path, index, zoom, frame) = (v.path.clone(), v.index, v.zoom, self.pdf_frame());
         Task::perform(blocking(move || pdf::page(&path, index, frame, zoom)), Message::PdfRendered)
@@ -133,6 +133,7 @@ impl Flea {
     }
 
     pub(crate) fn media_tick(&mut self) -> Task<Message> {
+        self.column_media_tick();
         let Some(m) = self.playback.media.as_mut() else { return Task::none() };
         m.poll();
         self.playback.failed |= m.failed;

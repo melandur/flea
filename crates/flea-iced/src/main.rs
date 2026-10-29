@@ -14,6 +14,7 @@ mod jobshell;
 mod jobview;
 mod chrome;
 mod colpreview;
+mod columnmedia;
 mod columnpreview;
 mod columns;
 mod columnsview;

@@ -43,13 +43,14 @@ pub enum Frame {
     Failed,
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct ColumnShell {
     pub model: ColPreview,
     pub surface: Option<(String, Surface)>,
     pub frame: Option<(String, Frame)>,
     // The token whose meta has been in flight past the hold-off.
     armed: u64,
+    pub play: crate::columnmedia::ColumnPlay,
 }
 
 fn read_lines(path: &str, sheet: bool) -> Surface {
@@ -75,6 +76,8 @@ impl Flea {
         let readable = self.preview_shown() && !self.pane.list_in_flight();
         let outs = self.colprev.model.follow(&self.pane, readable, self.prefs.preview_automatic);
         let mut tasks = vec![self.column_outs(outs)];
+        let shown = self.preview_shown();
+        tasks.push(self.column_play_follow(shown));
         let file = self.colprev.model.loaded.as_ref().and_then(|l| self.pane.thumb_file(l.index)).map(String::from);
         match file {
             Some(f) if self.colprev.frame.as_ref().map(|(k, _)| k) != Some(&f) => {
@@ -138,6 +141,7 @@ impl Flea {
                 Task::none()
             }
             Msg::Tap(..) | Msg::Menu(..) => Task::none(),
+            other => self.column_media_message(other),
         }
     }
 
@@ -154,7 +158,9 @@ impl Flea {
         let lined = matches!(row_state, Some(State::Text | State::Code));
         let too_large = lined && loaded.is_some_and(|l| !is_sheet(&l.row.n) && l.row.s > MAX_BYTES);
         let meta = c.model.meta.as_ref();
-        let failure = if lined && matches!(surface, Some(Surface::Failed)) {
+        let pdf = c.play.pdf.as_ref().filter(|_| row_state == Some(State::Pdf));
+        let pages = pdf.map_or(0, |v| v.count);
+        let failure = if (lined && matches!(surface, Some(Surface::Failed))) || pdf.is_some_and(|v| v.failed) {
             "This file could not be read."
         } else if meta.is_some_and(|m| m.archive_failed) {
             "This archive could not be read."
@@ -167,7 +173,7 @@ impl Flea {
         let selected: Vec<&crate::wire::Row> = loaded.map(|l| l.selected.iter().collect()).unwrap_or_default();
         let fact_rows = match (st, loaded) {
             (State::Multi, _) => facts::multi_facts(&selected, selection),
-            (_, Some(l)) => facts::facts(st, &l.row, meta, kind_name, 0),
+            (_, Some(l)) => facts::facts(st, &l.row, meta, kind_name, pages),
             _ => vec![],
         };
         // The thumbnail is wanted wherever the state draws a picture of the file itself.
@@ -175,6 +181,8 @@ impl Flea {
         let thumb = c.frame.as_ref().map(|(_, f)| f);
         let thumb_drawn = matches!(thumb, Some(Frame::Decoding | Frame::Ready(_)));
         let thumb_shown = wants_thumb && thumb_drawn;
+        // The player paints into the frame it was pressed in, over the thumbnail it replaces.
+        let video = if st == State::Video { self.column_video_layer() } else { None };
         let blank = too_large || matches!(surface, Some(Surface::Lines { empty: true, .. })) || matches!(surface, Some(Surface::Table(t)) if t.records() == 0);
         let multi_marks = if st == State::Multi { facts::multi_marks(&selected) } else { vec![] };
         let glyph_state = match st {
@@ -182,6 +190,7 @@ impl Flea {
             State::Text | State::Code => blank,
             State::Archive => meta.is_none(),
             State::Multi => multi_marks.is_empty(),
+            State::Pdf => pages == 0,
             _ => true,
         };
         let pictures = matches!(st, State::Image | State::Video);
@@ -197,7 +206,7 @@ impl Flea {
         let inner = width - 2.0 * PAD_X;
         let frame_h = (inner * 10.0 / 16.0).round();
         let mut layers: Vec<Element<'a, Message>> = vec![];
-        if let (true, Some(Frame::Ready(h))) = (thumb_shown, thumb) {
+        if let (true, Some(Frame::Ready(h)), false) = (thumb_shown, thumb, video.is_some()) {
             layers.push(container(image(h.clone()).content_fit(iced::ContentFit::Contain).width(Length::Fill).height(Length::Fill)).padding(1).into());
         }
         if !thumb_shown && glyph_state {
@@ -212,6 +221,14 @@ impl Flea {
                 col = col.push(text(note).size(CAPTION).color(p.muted));
             }
             layers.push(container(col).center(Length::Fill).into());
+        }
+        if let Some(v) = video {
+            layers.push(v);
+        }
+        if st == State::Pdf {
+            if let Some(page) = self.column_pdf_layer() {
+                layers.push(page);
+            }
         }
         if !multi_marks.is_empty() {
             layers.push(container(kind_stack(&multi_marks, p.muted)).center(Length::Fill).into());
@@ -251,7 +268,16 @@ impl Flea {
                     .height((CAPTION * 1.5).round()),
             );
         }
-        container(column![frame, text(name).size(TEXT_PX).color(p.foreground).wrapping(text::Wrapping::None), table].spacing(GAP))
+        let mut body = column![frame].spacing(GAP);
+        if st == State::Pdf {
+            if let Some(toolbar) = self.column_pdf_toolbar() {
+                body = body.push(toolbar);
+            }
+        }
+        if matches!(st, State::Video | State::Audio) {
+            body = body.push(self.column_media_strip());
+        }
+        container(column![body, text(name).size(TEXT_PX).color(p.foreground).wrapping(text::Wrapping::None), table].spacing(GAP))
             .padding(PAD_X)
             .width(width)
             .height(Length::Fill)

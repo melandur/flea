@@ -31,6 +31,10 @@ roxmltree = "0.20"
 # The PDF test writes its own two-page fixture through cairo, which only a test needs.
 [dev-dependencies]
 cairo-rs = { version = "0.22", features = ["pdf"] }
+# examples/test-pointer.rs: a wlroots virtual pointer for tests/iced-headless.sh, whose private sway
+# has no pointer device of its own. Both are already in the tree through winit, at these versions.
+wayland-client = "0.31"
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 
 [profile.release]
 opt-level = 3

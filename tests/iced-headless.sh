@@ -14,9 +14,11 @@ REPO=$PWD
 
 BIN=$REPO/target/debug/flea
 ICED=$REPO/crates/flea-iced/target/debug/flea-iced
+POINTER=$REPO/crates/flea-iced/target/debug/examples/test-pointer
 [ -x "$BIN" ] || { echo "iced-headless.sh: $BIN is missing, run cargo build" >&2; exit 1; }
 [ -x "$ICED" ] || { echo "iced-headless.sh: $ICED is missing, run cargo build in crates/flea-iced" >&2; exit 1; }
-for tool in sway swaymsg wtype grim jq wl-paste; do
+[ -x "$POINTER" ] || { echo "iced-headless.sh: $POINTER is missing, run cargo build --example test-pointer in crates/flea-iced" >&2; exit 1; }
+for tool in sway swaymsg wtype grim jq wl-paste magick gst-launch-1.0; do
     command -v "$tool" > /dev/null || { echo "iced-headless.sh: $tool is not installed" >&2; exit 1; }
 done
 [ -n "${XDG_RUNTIME_DIR:-}" ] || { echo "iced-headless.sh: XDG_RUNTIME_DIR is not set" >&2; exit 1; }
@@ -257,6 +259,28 @@ n=$(mark); for _ in $(seq 2 "$(find "$T" -mindepth 1 -maxdepth 1 -type d ! -name
 sleep 1; shot columns-preview
 check "a settled file row asks for its meta with a line count" 1 "$(since "$n" | grep -c "\"c\":\"meta\".*\"text\":true.*\"token\":[1-9]")"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+
+# The column's two readers that own a resource: a PDF draws its own page, and a clip builds no player
+# until play is pressed. The press is the compositor's own seat cursor, so it never leaves this sway.
+# The play mark sits in the last third of 1408 px of pane past the 192 px rail, under a 16 by 10 frame.
+mkdir -p "$T/media"
+magick -size 400x300 xc:white -fill red -draw "rectangle 40,40 360,260" xc:white "$T/media/a-doc.pdf"
+gst-launch-1.0 -q videotestsrc num-buffers=50 pattern=ball ! video/x-raw,width=320,height=240,framerate=25/1 \
+    ! videoconvert ! jpegenc ! matroskamux ! filesink location="$T/media/b-clip.mkv" > /dev/null
+launch "$T/media"; sleep 1; shot columns-pdf
+check "a PDF in the column builds no player" 0 "$(grep -c libgstplayback "/proc/$APP/maps")"
+# The toolbar's next chevron, then maximize, which opens the overlay on the column's page; Escape.
+WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 1346 347; sleep 0.5; shot columns-pdf-turned
+WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 1447 347; sleep 1; shot columns-pdf-expanded
+k -k Escape; sleep 0.5
+k -k Down; sleep 1
+check "nor does moving onto a clip" 0 "$(grep -c libgstplayback "/proc/$APP/maps")"
+WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 1158 353
+sleep 1.5; shot columns-play
+check "a press of play builds one and plays" yes "$(grep -q libgstplayback "/proc/$APP/maps" && echo yes || echo no)"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+# The chooser below counts rows in the tree, so the folder goes with the window.
+rm -rf "$T/media"
 APP=""
 
 # The chooser, the window tools/flea-portal opens through flea --pick.

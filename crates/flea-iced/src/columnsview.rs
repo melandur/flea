@@ -20,6 +20,15 @@ pub enum Msg {
     Read(String, crate::columnpreview::Surface),
     Frame(String, Option<iced::widget::image::Handle>),
     Armed(u64),
+    // columnmedia.rs: the PDF's page and toolbar, and the media strip.
+    PdfRendered(Result<crate::pdf::Page, ()>),
+    PdfTurn(i32),
+    PdfZoom(i32),
+    PdfExpand,
+    Play,
+    Scrub(f32),
+    ScrubDone,
+    Mute,
 }
 
 impl Flea {

@@ -19,9 +19,9 @@ impl Flea {
             window::resize_events().map(|(_, size)| Message::Resized(size)),
             // A playing file is drawn at its own pace, about 30 frames a second; a paused one is
             // only polled for its bus, and nothing ticks at all without media open.
-            match &self.playback.media {
-                Some(m) if m.playing => iced::time::every(std::time::Duration::from_millis(33)).map(|_| Message::MediaTick),
-                Some(_) => iced::time::every(std::time::Duration::from_millis(250)).map(|_| Message::MediaTick),
+            match self.playback.media.as_ref().map(|m| m.playing).or(self.column_media_playing()) {
+                Some(true) => iced::time::every(std::time::Duration::from_millis(33)).map(|_| Message::MediaTick),
+                Some(false) => iced::time::every(std::time::Duration::from_millis(250)).map(|_| Message::MediaTick),
                 None => Subscription::none(),
             },
         ])

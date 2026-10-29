@@ -454,8 +454,27 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      alike. A selection's Newest and Oldest skip rows with no mtime, where Facts.js let a zero reset
      the oldest. Driven headless: a settled text row asks for its meta with a line count and draws
      its first line and four facts, 49 checks.
-   - **8d-ii-b-3**, the preview column's PDF page with its toolbar and its media transport, the
-     syntax colours, and the keyboard's way into the column (focusPreview, unbound today).
+   - **8d-ii-b-3, the preview column's PDF page and media strip (done).** `columnmedia.rs` is
+     PreviewColumn.qml's pdfLoader and playerLoader. A PDF row renders its page on the poppler worker
+     into the frame, centred and fitted, scrollable both ways once zoomed, again when the column is
+     resized; under the frame the toolbar turns pages (each end greyed), zooms in quarter steps from
+     1 to 4, and maximize opens the overlay on that file at the column's page and zoom, filling the
+     window (SelectionPreview.onExpandRequested). The page count is the Pages fact, and a document
+     poppler refuses is the Error tile's "This file could not be read.". A video or audio row draws
+     MediaStrip under the frame: play, a hairline seek with a square accent handle that seeks once on
+     release, the clock and the session's one mute flag shared with the overlay. **No player exists
+     until play is pressed**, so browsing clips builds nothing, and it is dropped the moment the
+     column leaves that file, the cursor leaves the column's subject, or the overlay opens; a video
+     plays into the frame over its thumbnail. The duration is the probe's until the player knows its
+     own. Driven headless through `examples/test-pointer.rs`, a zwlr_virtual_pointer_v1 click inside
+     the private sway (which has no pointer device, and ydotool would click on the desktop instead):
+     the PDF draws page 1 of 2 with Pages 2, next turns to 2 / 2, maximize opens the overlay there,
+     and GStreamer's playbin is not loaded by a PDF or by moving onto a clip and is loaded by a
+     press of play, 52 checks. **Not yet:** ui/js/Syntax.js's colours, for the overlay and the column
+     alike, as their own step; and the column's own keys, which only focusPreview reaches and the
+     Default preset binds nothing to, so the column is pointer-only here as it is in QML. **Seen in
+     passing, not this stage's:** the overlay draws a page that fits its frame at the left rather
+     than centred.
    - **8d-iii**, the trash view.
    - **8d-iv**, tabs with the Places menu, and the stored display settings (density, columns, text
      size).

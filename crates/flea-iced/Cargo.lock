@@ -1075,6 +1075,8 @@ dependencies = [
  "roxmltree",
  "serde",
  "serde_json",
+ "wayland-client",
+ "wayland-protocols-wlr",
 ]
 
 [[package]]
