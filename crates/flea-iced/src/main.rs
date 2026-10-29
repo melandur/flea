@@ -8,10 +8,15 @@ mod format;
 #[cfg(test)]
 mod live_tests;
 mod marks;
+mod mounts;
+mod netshell;
+mod network;
 mod opreplies;
 mod ops;
 mod pane;
 mod prefs;
+mod process;
+mod protocols;
 mod rail;
 mod railshell;
 mod railview;
@@ -76,6 +81,8 @@ struct Flea {
     decoded_order: VecDeque<String>,
     rail: railshell::Rail,
     devices: devices::Devices,
+    network: network::Network,
+    share_browser: Option<netshell::ShareBrowser>,
 }
 
 #[derive(Debug, Clone)]
@@ -99,6 +106,13 @@ enum Message {
     RailMenu(usize),
     RailChose(rail::Action),
     RailMenuClosed,
+    NetTick,
+    NetListed(process::Ran),
+    NetLeg(network::Leg, process::Ran),
+    NetUnmounted(process::Ran),
+    RailRenameInput(String),
+    RailRenameSubmit,
+    ShareChosen(usize),
     Decoded(String, Option<image::Handle>),
     Expired(u64),
     Saved(bool),
@@ -279,6 +293,18 @@ impl Flea {
             Message::RailPressed(i) => self.rail_activate(i, false),
             Message::RailMenu(i) => self.rail_open_menu(i),
             Message::RailChose(action) => self.rail_choose(action),
+            Message::NetTick => self.net_tick(),
+            Message::NetListed(ran) => self.net_listed(ran),
+            Message::NetLeg(leg, ran) => self.net_leg(leg, ran),
+            Message::NetUnmounted(ran) => self.net_unmounted(ran),
+            Message::RailRenameInput(draft) => {
+                if let Some(r) = self.rail.renaming.as_mut() {
+                    r.1 = draft;
+                }
+                Task::none()
+            }
+            Message::RailRenameSubmit => self.commit_rail_rename(),
+            Message::ShareChosen(i) => self.share_chosen(i),
             Message::RailMenuClosed => {
                 self.rail.menu = None;
                 Task::none()

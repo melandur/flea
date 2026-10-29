@@ -19,7 +19,9 @@ impl Flea {
             .style(move |_| container::Style::default().color(p.muted))
             .width(Length::Fill);
 
-        let body: Element<'_, Message> = if let Some(err) = &self.pane.error {
+        let body: Element<'_, Message> = if let Some(b) = &self.share_browser {
+            self.share_browser_view(b)
+        } else if let Some(err) = &self.pane.error {
             container(text(err.clone()).color(p.muted)).center(Length::Fill).into()
         } else if self.pane.listed_once && self.pane.total == 0 {
             container(text("This folder is empty.").color(p.muted)).center(Length::Fill).into()
@@ -160,5 +162,25 @@ impl Flea {
             }
         });
         slot.width(ICON_SLOT).height(ICON_SLOT).center_x(ICON_SLOT).center_y(ICON_SLOT).into()
+    }
+
+    // ui/ShareBrowser.qml: the server's shares over the listing, one row each, Enter or a click opens.
+    fn share_browser_view(&self, b: &'_ crate::netshell::ShareBrowser) -> Element<'_, Message> {
+        let p = self.palette;
+        let mut rows = column![];
+        for (i, name) in b.names.iter().enumerate() {
+            let picked = i == b.cursor;
+            let line = row![
+                svg(marks::handle("server", p.dim)).width(MARK).height(MARK),
+                text(name.clone()).color(p.foreground),
+            ]
+            .spacing(10)
+            .align_y(iced::Center);
+            let band = container(line).padding([0.0, PAD_X]).height(ROW_H).width(Length::Fill).align_y(iced::Center).style(move |_| {
+                if picked { container::Style::default().background(Color { a: 0.18, ..p.accent }) } else { container::Style::default() }
+            });
+            rows = rows.push(mouse_area(band).on_press(Message::ShareChosen(i)));
+        }
+        container(scrollable(rows)).height(Length::Fill).width(Length::Fill).into()
     }
 }

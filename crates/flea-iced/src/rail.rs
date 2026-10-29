@@ -1,7 +1,7 @@
 // The rail: ui/Sidebar.qml's groups, ui/js/Places.js for what PLACES and FAVORITES hold, and
 // ui/js/RailKeys.js plus Mounts.railMenu for what the keyboard and the menu do with a row.
-// NETWORK is Stage 4b; until then its heading and rows are not drawn at all.
 use crate::devices::Device;
+use crate::network::Share;
 use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -10,6 +10,7 @@ pub enum Kind {
     Trash,
     // A favourite carries its record's own index and the reason it cannot be opened, if any.
     Favourite { index: usize, error: String },
+    Share(usize),
     Device(usize),
 }
 
@@ -25,6 +26,7 @@ pub struct Entry {
 pub enum Group {
     Places,
     Favourites,
+    Network,
     Devices,
 }
 
@@ -33,6 +35,7 @@ impl Entry {
         match self.kind {
             Kind::Home | Kind::Trash => Group::Places,
             Kind::Favourite { .. } => Group::Favourites,
+            Kind::Share(_) => Group::Network,
             Kind::Device(_) => Group::Devices,
         }
     }
@@ -104,6 +107,8 @@ pub struct Inputs<'a> {
     pub user_dirs: &'a str,
     pub favourites: &'a [Value],
     pub devices: &'a [Device],
+    pub shares: &'a [Share],
+    pub show_network: bool,
     pub show_trash: bool,
     pub show_devices: bool,
 }
@@ -133,6 +138,11 @@ pub fn entries(i: &Inputs) -> Vec<Entry> {
             path: resolved,
         });
     }
+    if i.show_network {
+        for (index, s) in i.shares.iter().enumerate() {
+            out.push(Entry { kind: Kind::Share(index), label: s.label.clone(), path: String::new(), glyph: "server" });
+        }
+    }
     if i.show_devices {
         for (index, d) in i.devices.iter().enumerate() {
             out.push(Entry { kind: Kind::Device(index), label: d.label.clone(), path: d.path.clone(), glyph: "drive" });
@@ -146,6 +156,7 @@ pub fn entries(i: &Inputs) -> Vec<Entry> {
 pub enum Activation {
     Open(String),
     Device(usize),
+    Share(usize),
     Say(String, bool),
 }
 
@@ -185,6 +196,7 @@ pub fn activate(entry: &Entry) -> Activation {
         }
         Kind::Favourite { .. } => Activation::Open(entry.path.clone()),
         Kind::Device(i) => Activation::Device(*i),
+        Kind::Share(i) => Activation::Share(*i),
     }
 }
 
@@ -194,6 +206,10 @@ pub enum Action {
     MountVolume,
     OpenVolume,
     UnmountVolume,
+    // A network share's own rows: the release, then the two a saved place owns.
+    Unmount,
+    Rename,
+    Remove,
 }
 
 impl Action {
@@ -202,12 +218,16 @@ impl Action {
             Action::Eject => "Eject",
             Action::MountVolume => "Mount",
             Action::OpenVolume => "Open",
-            Action::UnmountVolume => "Unmount",
+            Action::UnmountVolume | Action::Unmount => "Unmount",
+            Action::Rename => "Rename",
+            Action::Remove => "Remove",
         }
     }
     pub fn glyph(self) -> &'static str {
         match self {
-            Action::Eject | Action::UnmountVolume => "eject",
+            Action::Eject | Action::UnmountVolume | Action::Unmount => "eject",
+            Action::Rename => "rename",
+            Action::Remove => "minus",
             Action::MountVolume => "drive",
             Action::OpenVolume => "folder",
         }
@@ -230,6 +250,14 @@ pub fn menu(d: &Device) -> Vec<Action> {
         return vec![Action::Eject];
     }
     vec![]
+}
+
+// Mounts.rowMenu for a share: Unmount while mounted, then Rename and Remove for any share. Edit,
+// which reopens the connect form on the place, arrives with the form in Stage 4b-ii.
+pub fn share_menu(s: &Share) -> Vec<Action> {
+    let mut rows = if s.mounted { vec![Action::Unmount] } else { vec![] };
+    rows.extend([Action::Rename, Action::Remove]);
+    rows
 }
 
 // Places.sidebarWidth: the stored width snapped to the nearest of four stops.

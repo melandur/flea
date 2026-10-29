@@ -81,8 +81,26 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      clips besides; the first live run showed a 37-character drive name painting over the listing.
      Not ported: Trash view (says so), the trash count, phones, drive size, rail scrolling,
      favourite editing and the rail cursor's identity-preserving move across a poll (it clamps).
-   - **4b, network (next).** `gio mount -l`, the connect dialog, credentials through
-     `tools/flea-gio-auth`, the share browser, the bookmarks file and its edits.
+   - **4b-i, network places (done, menu and rename undriven live).** `protocols.rs` and
+     `mounts.rs` port the URI and listing halves of `ui/js/Protocols.js` and `ui/js/Mounts.js`:
+     the measured default-port table, the authority-first host and port reading (PR #21's
+     `inbox@2026` trap is a test), `shareName`'s one-word connector cut against the URI's own host
+     (issue #36's labels are tests), the canonical form, and the bookmark line edits. `network.rs`
+     is `ui/NetworkMounts.qml` and `ui/MountListing.qml` as a state machine: the poll that keeps
+     its rows on a failed listing and runs a re-read asked for mid-listing, one row per normalized
+     place with a saved label winning, and an open of up to three legs each bounded at 15 s, where
+     `gio info` decides and the mount's exit code never does. `process.rs` runs every gio call
+     under its deadline with `LC_ALL=C`. `netshell.rs` reads the bookmarks file before every edit
+     and refuses on a read that fails for any reason but absence, writes through an exclusive temp
+     and a rename, answers Remove's three ways, and holds the rail's rename field and the share
+     browser. A stubbed `gio` that speaks Spanish unless the locale is pinned drives a bare root to
+     its share list and a share past a Spanish already-mounted refusal to its folder, and turns
+     red when the pin is removed. **Deviation:** the unmount is bounded too, which QML's is not.
+     **Gap:** a place that needs a password says signing in is not here yet, unless
+     `places.rememberPasswords` is on, in which case a plain mount reads the keyring as QML does.
+   - **4b-ii, signing in (next).** The connect dialog and its form, the password prompt and its
+     per-window memory, `tools/flea-gio-auth` with its exit codes 3 to 6, the host key question
+     and its one-shot trust, the menu's Edit row, and Dropbox.
 
    **The file budget is held here too.** `tools/flea-file-budget` does not scan `crates/`, but four
    files had passed its 400-line hard cap, `pane.rs` at 836. Tests moved to `*_tests.rs` beside each

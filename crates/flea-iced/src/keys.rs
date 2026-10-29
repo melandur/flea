@@ -11,6 +11,13 @@ impl Flea {
             return Task::none();
         }
         let keyboard::Event::KeyPressed { key, modifiers, repeat, .. } = event else { return Task::none() };
+        // The rail's rename field owns the keys while it is open; Escape is the one it hands back.
+        if self.rail.renaming.is_some() {
+            if key == Key::Named(Named::Escape) {
+                self.rail.renaming = None;
+            }
+            return Task::none();
+        }
         if key == Key::Named(Named::Escape) && self.message.as_ref().is_some_and(|m| m.2) {
             // An error is dismissed before anything else Escape unwinds.
             self.message = None;
@@ -27,6 +34,9 @@ impl Flea {
             return self.toggle_rail();
         }
         if let Some(task) = self.rail_key(&key) {
+            return task;
+        }
+        if let Some(task) = self.share_key(&key) {
             return task;
         }
         if key == Key::Named(Named::Escape) {

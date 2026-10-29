@@ -21,7 +21,7 @@ fn user_dirs_skip_home_and_expand_home() {
 #[test]
 fn the_groups_come_in_order_and_a_bad_favourite_says_why() {
     let favs = vec![json!({"label": "Work", "path": "~/work"}), json!({"label": "", "path": "/x"}), json!({"label": "Rel", "path": "rel"})];
-    let e = entries(&Inputs { home: "/home/u", user_dirs: DIRS, favourites: &favs, devices: &[], show_trash: true, show_devices: true });
+    let e = entries(&Inputs { home: "/home/u", user_dirs: DIRS, favourites: &favs, devices: &[], shares: &[], show_network: true, show_trash: true, show_devices: true });
     let labels: Vec<_> = e.iter().map(|e| e.label.as_str()).collect();
     assert_eq!(labels, vec!["Home", "Downloads", "Pictures", "music", "Trash", "Work", "Invalid favorite", "Rel"]);
     assert_eq!(e[5].path, "/home/u/work");
@@ -34,7 +34,7 @@ fn the_groups_come_in_order_and_a_bad_favourite_says_why() {
 #[test]
 fn a_file_uri_favourite_opens_its_decoded_path() {
     let favs = vec![json!({"label": "Sp", "path": "file:///home/u/a%20b"})];
-    let e = entries(&Inputs { home: "/home/u", user_dirs: "", favourites: &favs, devices: &[], show_trash: false, show_devices: false });
+    let e = entries(&Inputs { home: "/home/u", user_dirs: "", favourites: &favs, devices: &[], shares: &[], show_network: true, show_trash: false, show_devices: false });
     assert_eq!(activate(&e[1]), Activation::Open("/home/u/a b".into()));
 }
 

@@ -52,17 +52,22 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
             favourites: prefs.favourites.clone(),
             show_trash: prefs.show_trash,
             show_devices: prefs.show_devices,
+            show_network: prefs.show_network,
             ..Default::default()
         },
         devices: devices::Devices::new(
             std::fs::read_to_string("/etc/hostname").map(|h| h.trim().to_string()).unwrap_or_default(),
             prefs.show_unmounted,
         ),
+        network: crate::network::Network::new(prefs.remember_passwords),
+        share_browser: None,
     };
     flea.rebuild_rail();
     // The device poll starts at once and re-arms itself, the Timer's triggeredOnStart in QML.
     let poll = if flea.rail.show_devices { flea.devices.tick() } else { vec![] };
     let polling = flea.run_devices(poll);
+    let net = if flea.rail.show_network { flea.net_tick() } else { Task::none() };
+    let polling = Task::batch([polling, net]);
     let task = match Backend::spawn() {
         Ok(b) => {
             flea.backend = Some(b);

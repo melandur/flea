@@ -24,6 +24,9 @@ pub struct Rail {
     pub shown: bool,
     pub width: f32,
     pub menu: Option<Menu>,
+    // The inline editor on a share's row: which entry, and the draft.
+    pub renaming: Option<(usize, String)>,
+    pub show_network: bool,
     pub home: String,
     pub user_dirs: String,
     pub favourites: Vec<Value>,
@@ -66,6 +69,8 @@ impl Flea {
             user_dirs: &r.user_dirs,
             favourites: &r.favourites,
             devices: &self.devices.entries,
+            shares: &self.network.entries,
+            show_network: r.show_network,
             show_trash: r.show_trash,
             show_devices: r.show_devices,
         });
@@ -73,6 +78,10 @@ impl Flea {
         // The poll can renumber the rows under an open menu, so a menu whose row moved closes.
         if self.rail.menu.as_ref().is_some_and(|m| m.entry >= self.rail.entries.len()) {
             self.rail.menu = None;
+        }
+        // A poll that rebinds the rows would leave a rename standing on a different share.
+        if self.rail.renaming.as_ref().is_some_and(|(i, _)| *i >= self.rail.entries.len()) {
+            self.rail.renaming = None;
         }
     }
 
@@ -132,6 +141,7 @@ impl Flea {
                 let effects = self.devices.activate(i);
                 self.run_devices(effects)
             }
+            Activation::Share(i) => self.open_share(i),
             Activation::Say(text, alert) => {
                 // Nothing opened, so nothing is handed the keyboard.
                 return self.show(text, alert);
@@ -150,6 +160,7 @@ impl Flea {
         let Some(entry) = self.rail.entries.get(index) else { return Task::none() };
         let actions = match entry.kind {
             rail::Kind::Device(i) => self.devices.entries.get(i).map(rail::menu).unwrap_or_default(),
+            rail::Kind::Share(i) => self.network.entries.get(i).map(rail::share_menu).unwrap_or_default(),
             _ => vec![],
         };
         if actions.is_empty() {
@@ -161,11 +172,24 @@ impl Flea {
 
     pub(crate) fn rail_choose(&mut self, action: Action) -> Task<Message> {
         let Some(menu) = self.rail.menu.take() else { return Task::none() };
-        let Some(rail::Kind::Device(i)) = self.rail.entries.get(menu.entry).map(|e| e.kind.clone()) else { return Task::none() };
+        let kind = self.rail.entries.get(menu.entry).map(|e| e.kind.clone());
+        if let Some(rail::Kind::Share(i)) = kind {
+            return match action {
+                Action::Unmount => {
+                    let effects = self.network.unmount(i);
+                    self.run_network(effects)
+                }
+                Action::Rename => self.start_rail_rename(menu.entry),
+                Action::Remove => self.forget_share(i),
+                _ => Task::none(),
+            };
+        }
+        let Some(rail::Kind::Device(i)) = kind else { return Task::none() };
         let effects = match action {
             Action::Eject => self.devices.eject(i),
             Action::UnmountVolume => self.devices.unmount(i),
             Action::MountVolume | Action::OpenVolume => self.devices.activate(i),
+            Action::Unmount | Action::Rename | Action::Remove => vec![],
         };
         self.run_devices(effects)
     }

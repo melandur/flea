@@ -3,8 +3,10 @@
 // The rail does not scroll yet, which is what lets the menu sit at the row's own laid-out height.
 use crate::rail::{Entry, Group};
 use crate::{marks, Flea, Message, MARK, PAD_X, ROW_H, TEXT_PX};
-use iced::widget::{container, mouse_area, opaque, pin, row, space, stack, svg, text, Column};
+use iced::widget::{container, mouse_area, opaque, pin, row, space, stack, svg, text, text_input, Column, Id};
 use iced::{Background, Color, Element, Length};
+
+pub const RAIL_RENAME_ID: &str = "rail-rename";
 
 // iced 0.14 draws no ellipsis, so a label is cut to what the rail can hold, from an average glyph
 // width of 0.55 em. That is an estimate, and the band clips besides, so a wide label can never
@@ -25,19 +27,26 @@ impl Flea {
         let mut y = 8.0;
         let mut menu_y = None;
         let mut last_group = None;
+        // NETWORK is drawn whenever its switch is on, rows or none: it is the way into the connect
+        // dialog, and a heading that carries an action may not hide itself (AGENTS.md, 2026-09-18).
+        let empty_network = self.rail.show_network && !self.rail.entries.iter().any(|e| e.group() == Group::Network);
         for (i, e) in self.rail.entries.iter().enumerate() {
             let group = e.group();
+            if empty_network && group == Group::Devices && last_group != Some(Group::Network) {
+                col = col.push(self.heading("NETWORK"));
+                y += ROW_H;
+                last_group = Some(Group::Network);
+            }
             if last_group != Some(group) {
                 // Headings follow their rows: an empty group draws no heading, as DEVICES and
                 // FAVORITES do in QML.
                 let title = match group {
                     Group::Places => "PLACES",
                     Group::Favourites => "FAVORITES",
+                    Group::Network => "NETWORK",
                     Group::Devices => "DEVICES",
                 };
-                col = col.push(
-                    container(text(title).size(11.0).color(p.muted)).padding([0.0, PAD_X]).height(ROW_H).align_y(iced::Bottom),
-                );
+                col = col.push(self.heading(title));
                 y += ROW_H;
                 last_group = Some(group);
             }
@@ -46,6 +55,9 @@ impl Flea {
             if self.rail.menu.as_ref().is_some_and(|m| m.entry == i) {
                 menu_y = Some(y);
             }
+        }
+        if empty_network && last_group != Some(Group::Network) && last_group != Some(Group::Devices) {
+            col = col.push(self.heading("NETWORK"));
         }
         let base = container(col)
             .width(self.rail.width)
@@ -74,8 +86,20 @@ impl Flea {
         stack![base, opaque(backdrop), pin(card).x(PAD_X).y(y)].into()
     }
 
+    fn heading(&self, title: &'static str) -> Element<'_, Message> {
+        container(text(title).size(11.0).color(self.palette.muted)).padding([0.0, PAD_X]).height(ROW_H).align_y(iced::Bottom).into()
+    }
+
     fn rail_row(&self, i: usize, e: &Entry) -> Element<'_, Message> {
         let p = self.palette;
+        if let Some((_, draft)) = self.rail.renaming.as_ref().filter(|(at, _)| *at == i) {
+            let field = text_input("Name", draft)
+                .id(Id::new(RAIL_RENAME_ID))
+                .on_input(Message::RailRenameInput)
+                .on_submit(Message::RailRenameSubmit)
+                .size(TEXT_PX);
+            return container(field).padding([0.0, PAD_X]).height(ROW_H).align_y(iced::Center).into();
+        }
         let cursor = self.rail.focused && i == self.rail.cursor;
         // The folder the listing is on is the place the rail marks, whatever holds the keyboard.
         let here = !e.path.is_empty() && e.path == self.pane.path;
