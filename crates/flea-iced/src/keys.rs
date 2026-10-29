@@ -54,6 +54,10 @@ impl Flea {
         // a place it can go (ui/js/Focus.js next).
         if key == Key::Named(Named::Tab) && !modifiers.control() && self.pane.renaming.is_none() {
             self.rail.menu = None;
+            // ui/js/Focus.js: in the split, Tab from the listing goes to the other pane.
+            if self.dual() && !self.rail.focused {
+                return self.switch_pane();
+            }
             self.rail.focused = !self.rail.focused && self.rail.shown;
             return Task::none();
         }
@@ -98,7 +102,8 @@ impl Flea {
             (Key::Character("j"), true) => self.pane.sort_chord("name"),
             (Key::Character("k"), true) => self.pane.sort_chord("size"),
             (Key::Character("l"), true) => self.pane.sort_chord("mtime"),
-            (Key::Character(c), true) if "btm".contains(c) => {
+            (Key::Character("t"), true) => return self.toggle_split(),
+            (Key::Character(c), true) if "bm".contains(c) => {
                 return self.say(format!("Ctrl+{} is not in this build yet.", c.to_uppercase()));
             }
             _ => return Task::none(),

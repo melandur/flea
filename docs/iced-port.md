@@ -176,7 +176,23 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      **Not ported:** the filter, which the Default keymap no longer reaches and which arrives with
      the chrome's buttons; the search's location column as its own column (it is drawn muted beside
      the name).
-   - **6b, tabs and split (next).**
+   - **6b, split (done, Ctrl+T and Tab undriven live); tabs (not ported).** `split.rs` gives each
+     pane its own backend child, as QML does. The focused pane is the shell's own `pane`, the other
+     waits in a `Slot`, and a message for the other is run by swapping it in, handling it exactly as
+     the focused pane's would be, and swapping back, so neither pane has a lesser code path; every
+     message a pane schedules for itself carries its side, and every backend line its spawn key.
+     Ctrl+T enters the split on the folder it was pressed in (2026-10-08) and hands the keyboard to
+     the new pane (2026-09-18), leaving puts it back on the primary; Tab in the listing switches
+     panes; a click in the other pane focuses it first; the view and the focused side are saved as
+     one-leaf patches, and a window left split reopens split on the start path with its focus. A
+     close quits both children and waits for exactly the ones it asked, so a dropped second pane's
+     late exit cannot end the window before the primary has drained. Each spawn has its own
+     subscription key, because a key per pane would never restart once that pane's child had exited.
+     **Deviation:** leaving the split drops the second pane and its child rather than keeping it
+     hidden, AGENTS.md rule 6; re-entering lists the folder again. **Tabs** have no key in the
+     Default preset since the key cut and are opened from the listing's context menu, which is not
+     ported; they arrive with it. Measured once: a sandboxed launch with `view: "dual"` drew both
+     panes with the focus restored, and killing the window left no backend child behind.
    - **6c, the settings panel and the theme catalog.**
 7. The picker for `tools/flea-portal`, then `flea --gui` switches to the iced binary, after a
    field-bench run says the switch does not lose a column Flea wins today.

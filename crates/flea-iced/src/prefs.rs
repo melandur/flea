@@ -28,6 +28,10 @@ pub struct Prefs {
     pub sidebar_width: Option<f64>,
     // open.rules: an ending and the application the operator chose for it.
     pub open_rules: Vec<(String, String)>,
+    // view and dual: a window left split reopens split, with the pane that held the keyboard.
+    pub view: String,
+    pub dual_from: String,
+    pub dual_focus: u8,
 }
 
 impl Default for Prefs {
@@ -53,6 +57,9 @@ impl Default for Prefs {
             rail_shown: true,
             sidebar_width: None,
             open_rules: vec![],
+            view: "list".into(),
+            dual_from: "list".into(),
+            dual_focus: 0,
         }
     }
 }
@@ -91,6 +98,9 @@ impl Prefs {
             open_rules: v.pointer("/open/rules").and_then(Value::as_array).into_iter().flatten()
                 .filter_map(|r| Some((r.get("ends")?.as_str()?.to_lowercase(), r.get("app")?.as_str()?.to_string())))
                 .collect(),
+            view: Some(s("view")).filter(|x| !x.is_empty()).unwrap_or_else(|| "list".into()),
+            dual_from: v.pointer("/dual/from").and_then(Value::as_str).unwrap_or("list").to_string(),
+            dual_focus: u8::from(v.pointer("/dual/focus").and_then(Value::as_u64) == Some(1)),
         }
     }
 

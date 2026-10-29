@@ -71,6 +71,13 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         pdf: None,
         playback: Default::default(),
         chrome: Default::default(),
+        backend_key: 0,
+        side: 0,
+        other: None,
+        spawns: 0,
+        // A grid or columns view this port does not draw yet still comes back on leaving the split.
+        dual_from: if prefs.view == "dual" { prefs.dual_from.clone() } else { prefs.view.clone() },
+        quit_keys: vec![],
     };
     flea.rebuild_rail();
     // The device poll starts at once and re-arms itself, the Timer's triggeredOnStart in QML.
@@ -78,11 +85,23 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
     let polling = flea.run_devices(poll);
     let net = if flea.rail.show_network { flea.net_tick() } else { Task::none() };
     let polling = Task::batch([polling, net]);
-    let task = match Backend::spawn() {
+    flea.backend_key = flea.spawn_key();
+    let task = match Backend::spawn(flea.backend_key) {
         Ok(b) => {
             flea.backend = Some(b);
-            let effects = flea.pane.open(start, None);
-            flea.run(effects)
+            let effects = flea.pane.open(start.clone(), None);
+            let first = flea.run(effects);
+            // A window left split opens both panes on the start path (the 2026-10-08 ruling), the
+            // keyboard on the pane that held it.
+            if prefs.view == "dual" {
+                let second = flea.open_second(start, false);
+                if prefs.dual_focus == 1 {
+                    flea.swap_other();
+                }
+                Task::batch([first, second])
+            } else {
+                first
+            }
         }
         Err(e) => {
             flea.pane.error = Some(pane::sentence("backend", &e, ""));

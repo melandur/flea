@@ -7,6 +7,7 @@ use iced::futures::channel::mpsc;
 use iced::futures::{SinkExt, Stream, StreamExt};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
 #[derive(Debug, Clone)]
@@ -21,14 +22,21 @@ pub struct Backend {
     stdin: Mutex<Option<ChildStdin>>,
 }
 
-static EVENTS: OnceLock<Mutex<Option<mpsc::UnboundedReceiver<Event>>>> = OnceLock::new();
+// One receiver per spawned child, keyed by a number no other spawn reuses: a split view runs two
+// backends, and a subscription keyed by its pane alone would never restart once that pane's child
+// had exited, so leaving and re-entering the split would listen to a stream that had ended.
+static EVENTS: OnceLock<Mutex<HashMap<u64, mpsc::UnboundedReceiver<Event>>>> = OnceLock::new();
+
+fn events_map() -> &'static Mutex<HashMap<u64, mpsc::UnboundedReceiver<Event>>> {
+    EVENTS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 pub fn binary() -> String {
     std::env::var("FLEA_BIN").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "flea".into())
 }
 
 impl Backend {
-    pub fn spawn() -> Result<Arc<Backend>, String> {
+    pub fn spawn(key: u64) -> Result<Arc<Backend>, String> {
         let mut child: Child = Command::new(binary())
             .arg("--backend")
             .stdin(Stdio::piped())
@@ -39,7 +47,7 @@ impl Backend {
         let stdout = child.stdout.take().ok_or("the backend has no stdout")?;
         let stdin = child.stdin.take();
         let (tx, rx) = mpsc::unbounded();
-        EVENTS.get_or_init(|| Mutex::new(None)).lock().unwrap().replace(rx);
+        events_map().lock().unwrap().insert(key, rx);
         std::thread::spawn(move || {
             for line in BufReader::new(stdout).lines() {
                 let Ok(line) = line else { break };
@@ -72,10 +80,11 @@ impl Backend {
     }
 }
 
-// Subscription::run takes a plain fn, so the receiver is handed over through the static.
-pub fn events() -> impl Stream<Item = Event> {
-    iced::stream::channel(64, async |mut out| {
-        let rx = EVENTS.get().and_then(|m| m.lock().unwrap().take());
+// Subscription::run_with takes a plain fn and a key, so the receiver is handed over through the map.
+pub fn events(key: &u64) -> impl Stream<Item = Event> {
+    let key = *key;
+    iced::stream::channel(64, async move |mut out| {
+        let rx = events_map().lock().unwrap().remove(&key);
         let Some(mut rx) = rx else { return };
         while let Some(event) = rx.next().await {
             if out.send(event).await.is_err() {

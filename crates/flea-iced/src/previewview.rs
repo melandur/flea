@@ -23,7 +23,7 @@ impl Flea {
             container::Style::default().background(Color { a: 0.5, ..p.background })
         }))
         .on_press(Message::PreviewClose);
-        let area_w = self.window_w - if self.rail.shown { self.rail.width } else { 0.0 };
+        let area_w = self.pane_width();
         let (w, h) = if self.preview.expanded { (Length::Fill, Length::Fill) } else { (Length::Fixed(area_w * INSET), Length::Fixed((self.viewport_h + ROW_H) * INSET)) };
         let card = container(column![self.preview_header(), self.preview_body()].spacing(8))
             .padding(PAD_X)

@@ -47,14 +47,15 @@ pub fn one_line(text: &str) -> String {
 impl Flea {
     pub(crate) fn search_message(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::SearchLive(generation) => {
-                let effects = self.pane.search_live(generation);
-                self.run(effects)
-            }
+            Message::SearchLive(side, generation) => self.with_side(side, |f| {
+                let effects = f.pane.search_live(generation);
+                f.run(effects)
+            }),
             Message::SearchPaste(text) => self.search_paste(text),
-            Message::SortColumn(key) => {
+            Message::SortColumn(side, key) => {
+                let focused = self.focus_side(side);
                 let effects = self.pane.sort_column(key);
-                self.run(effects)
+                Task::batch([focused, self.run(effects)])
             }
             Message::CrumbPressed(i) => self.crumb_pressed(i),
             Message::CrumbSettle(generation) => self.crumb_settled(generation),

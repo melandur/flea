@@ -1,7 +1,7 @@
 // What the pane asks for, carried out: requests to the backend, scrolling, the opener, timers, the
 // status line, saving a setting and decoding a thumbnail.
 use crate::pane::Effect;
-use crate::{backend, blocking, decode, pane, prefs, sleep, Flea, Message, LIST_ID, RENAME_ID, ROW_H};
+use crate::{backend, blocking, decode, list_id, pane, prefs, sleep, Flea, Message, RENAME_ID, ROW_H};
 use iced::widget::{operation, scrollable};
 use iced::Task;
 use std::time::Duration;
@@ -19,7 +19,7 @@ impl Flea {
                 }
                 Effect::ScrollTo(index) => {
                     let y = index as f32 * ROW_H;
-                    tasks.push(operation::scroll_to(LIST_ID, scrollable::AbsoluteOffset { x: 0.0, y }));
+                    tasks.push(operation::scroll_to(list_id(self.side), scrollable::AbsoluteOffset { x: 0.0, y }));
                 }
                 // Nav.openCursor: an archive nobody claimed opens Flea's own view and launches nothing.
                 Effect::OpenFile(path) if self.archive_routes_here(&path) => tasks.push(self.open_preview()),
@@ -27,17 +27,24 @@ impl Flea {
                 Effect::Preview => tasks.push(self.open_preview()),
                 Effect::SearchTimer(generation) => tasks.push(Task::perform(
                     sleep(Duration::from_millis(crate::search::LIVE_MS)),
-                    move |_| Message::SearchLive(generation),
+                    {
+                        let side = self.side;
+                        move |_| Message::SearchLive(side, generation)
+                    },
                 )),
                 Effect::WatchTimer => tasks.push(Task::perform(
                     sleep(Duration::from_millis(pane::WATCH_MS)),
-                    |_| Message::WatchFired,
+                    {
+                        let side = self.side;
+                        move |_| Message::WatchFired(side)
+                    },
                 )),
                 Effect::Message(text) => tasks.push(self.show(text, false)),
                 Effect::Alert(text) => tasks.push(self.show(text, true)),
                 Effect::FocusRename => tasks.push(operation::focus(RENAME_ID)),
                 Effect::Settle(generation, ms) => {
-                    tasks.push(Task::perform(sleep(Duration::from_millis(ms)), move |_| Message::Settled(generation)));
+                    let side = self.side;
+                    tasks.push(Task::perform(sleep(Duration::from_millis(ms)), move |_| Message::Settled(side, generation)));
                 }
                 Effect::DecodeThumb(path) => {
                     let key = path.clone();
@@ -64,7 +71,10 @@ impl Flea {
                 let code = std::process::Command::new(&bin).arg("--open").arg(&path).status().ok().and_then(|s| s.code());
                 (code, path)
             }),
-            |(code, path)| Message::Opened(code, path),
+            {
+                let side = self.side;
+                move |(code, path)| Message::Opened(side, code, path)
+            },
         )
     }
 }

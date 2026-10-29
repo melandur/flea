@@ -66,7 +66,7 @@ impl Flea {
 
     // The page's frame: the card's inner box less the header row and the strip under the page.
     fn pdf_frame(&self) -> (f32, f32) {
-        let area_w = self.window_w - if self.rail.shown { self.rail.width } else { 0.0 };
+        let area_w = self.pane_width();
         let area_h = self.viewport_h + ROW_H;
         let share = if self.preview.expanded { 1.0 } else { crate::preview::INSET };
         ((area_w * share - 2.0 * PAD_X).max(64.0), (area_h * share - 2.0 * PAD_X - 2.0 * ROW_H - 16.0).max(64.0))
