@@ -142,3 +142,26 @@ fn a_plain_double_tap_selects_and_opens() {
     assert_eq!(p.selection, [2].into());
     assert_eq!(out.last(), Some(&Effect::OpenFile("/d/f000002".into())));
 }
+
+#[test]
+fn duplicate_names_the_cursor_row_alone_and_its_answer_lands_on_the_copy() {
+    let mut p = pane(5);
+    p.tap(1, 1, false, false);
+    p.tap(3, 1, true, false);
+    assert_eq!(sends(&p.duplicate()), vec![Request::Duplicate { path: "/d/f000003".into() }]);
+    let out = p.receive(Reply::Duplicated { path: "/d/f000003 copy".into() });
+    assert_eq!(out[0], Effect::Message("Duplicated to f000003 copy · Ctrl+Z undoes".into()));
+    assert!(matches!(sends(&out)[..], [Request::List { .. }]));
+    assert!(Pane::new(false, 10).duplicate().is_empty());
+}
+
+#[test]
+fn an_open_menu_owes_the_watched_reread_and_closing_it_pays() {
+    let mut p = pane(5);
+    p.menu_open = true;
+    assert!(p.receive(Reply::Changed { path: "/d".into() }).iter().all(|e| !matches!(e, Effect::Send(_))));
+    p.watch_fired();
+    assert!(sends(&p.pay_debt()).is_empty());
+    p.menu_open = false;
+    assert!(matches!(sends(&p.pay_debt())[..], [Request::List { .. }]));
+}

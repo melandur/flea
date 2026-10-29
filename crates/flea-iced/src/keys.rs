@@ -25,6 +25,10 @@ impl Flea {
         if std::env::var_os("FLEA_ICED_TRACE").is_some_and(|v| !v.is_empty()) {
             eprintln!("flea-iced: key {key:?} {modifiers:?} repeat={repeat} text={text:?}");
         }
+        // The context menu takes every key while it is up, Tab included, as its keyCatcher does.
+        if self.menu.is_some() {
+            return self.menu_key(&key);
+        }
         // An open settings panel takes every key, so none reaches the listing behind it.
         if self.panel.open && self.dialog.is_none() {
             return self.panel_key(&key);
@@ -120,16 +124,18 @@ impl Flea {
             (Key::Named(Named::F2), false) => self.pane.start_rename(),
             // A held Space toggles once; the paint gesture of ui/js/Marks.js is not ported yet.
             (Key::Named(Named::Space), false) if !repeat => self.pane.toggle_select(),
-            (Key::Character("m"), false) => return self.say("The listing menu is not in this build yet.".into()),
+            // m, the Menu key and Shift+F10 raise the cursor row's menu (keys.toml "menu").
+            (Key::Character("m") | Key::Named(Named::ContextMenu), false) => return self.open_cursor_menu(),
+            (Key::Named(Named::F10), false) if modifiers.shift() => return self.open_cursor_menu(),
+            (Key::Character("b"), true) => return self.copy_path(),
             // Ctrl+F searches this folder, Ctrl+Shift+F it and every folder below (2026-09-23).
             (Key::Character("f" | "F"), true) => self.pane.search_start(modifiers.shift()),
             (Key::Character("j"), true) => self.pane.sort_chord("name"),
             (Key::Character("k"), true) => self.pane.sort_chord("size"),
             (Key::Character("l"), true) => self.pane.sort_chord("mtime"),
             (Key::Character("t"), true) => return self.toggle_split(),
-            (Key::Character(c), true) if "bm".contains(c) => {
-                return self.say(format!("Ctrl+{} is not in this build yet.", c.to_uppercase()));
-            }
+            // Ctrl+M is New File, whose name dialog is stage 8b's.
+            (Key::Character("m"), true) => return self.say("New File is not in this build yet.".into()),
             _ => return Task::none(),
         };
         self.run(effects)

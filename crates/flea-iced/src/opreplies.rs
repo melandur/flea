@@ -170,6 +170,11 @@ impl Pane {
                 out.extend(self.refresh_on(leaf(&path), self.cursor, true));
                 out
             }
+            Reply::Duplicated { path } => {
+                let mut out = vec![Effect::Message(format!("Duplicated to {}{UNDO_HINT}", leaf(&path)))];
+                out.extend(self.refresh_on(leaf(&path), self.cursor, false));
+                out
+            }
             Reply::Undone { op } => {
                 self.sticky.clear();
                 let mut out = vec![Effect::Message(undone(&op))];

@@ -86,6 +86,8 @@ pub struct Pane {
     pub selection: BTreeSet<usize>,
     pub(crate) select_anchor: usize,
     pub renaming: Option<Rename>,
+    // The context menu is up over this pane: its rows were built from these indices (watch_busy).
+    pub menu_open: bool,
     // The status bar's sticky line, what a running transfer says while it runs.
     pub sticky: String,
     pub(crate) ops: Ops,

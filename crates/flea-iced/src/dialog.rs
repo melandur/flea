@@ -257,7 +257,7 @@ impl Flea {
 }
 
 // `flea --favourites` prints the whole merged document on success and one "flea: " line on failure.
-fn add_favourite(bin: &str, op: &str) -> Result<Vec<Value>, String> {
+pub(crate) fn add_favourite(bin: &str, op: &str) -> Result<Vec<Value>, String> {
     let out = std::process::Command::new(bin).arg("--favourites").arg(op).output().map_err(|_| "Favorites updater could not start.".to_string())?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);

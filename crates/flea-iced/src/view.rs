@@ -35,7 +35,7 @@ impl Flea {
             .style(move |_| container::Style::default().background(p.background).color(p.foreground))
             .width(Length::Fill)
             .height(Length::Fill);
-        self.dialog_layer(self.panel_layer(window.into()))
+        self.dialog_layer(self.panel_layer(self.menu_layer(window.into())))
     }
 
     fn status_view(&self) -> Element<'_, Message> {
@@ -84,11 +84,16 @@ impl Flea {
         let body: Element<'a, Message> = match (&self.share_browser, v.focused) {
             (Some(b), true) => self.share_browser_view(b),
             _ if v.pane.error.is_some() => container(text(v.pane.error.clone().unwrap_or_default()).color(p.muted)).center(Length::Fill).into(),
-            _ if v.pane.listed_once && v.pane.total == 0 => container(text("This folder is empty.").color(p.muted)).center(Length::Fill).into(),
-            _ => self.listing(v),
+            _ if v.pane.listed_once && v.pane.total == 0 => self.background(v, container(text("This folder is empty.").color(p.muted)).center(Length::Fill).into()),
+            _ => self.background(v, self.listing(v)),
         };
         let body = if v.focused { self.preview_layer(body) } else { body };
         column![header, body].width(Length::Fill).into()
+    }
+
+    // A right click a row did not take is the background menu's: the empty space below the rows.
+    fn background<'a>(&self, v: PaneView<'a>, body: Element<'a, Message>) -> Element<'a, Message> {
+        mouse_area(body).on_right_press(Message::Menu(crate::menushell::Msg::Background(v.side))).into()
     }
 
     // Rule 2: a spacer above, the rows on screen, a spacer below. Nothing else is ever built.
@@ -178,7 +183,10 @@ impl Flea {
                 container::Style::default()
             }
         });
-        mouse_area(band).on_press(Message::RowPressed(v.side, i)).into()
+        mouse_area(band)
+            .on_press(Message::RowPressed(v.side, i))
+            .on_right_press(Message::Menu(crate::menushell::Msg::Row(v.side, i)))
+            .into()
     }
 
     // The icon slot: the thumbnail when the pane holds a decoded one, the row's mark otherwise. One

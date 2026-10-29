@@ -1,0 +1,189 @@
+// The listing's context menu, as ui/js/Menu.js builds it: one inventory in the order the Menus
+// settings section shares, the file rows over a row and the background rows over empty space, each
+// row's own availability rule, and the stored hidden set as the only visibility state. Toolkit free,
+// so every rule here is a unit test rather than a window.
+//
+// What this build cannot offer yet follows the QML's own two rules for a missing capability. A row
+// whose capability is probed (archives, scripts, the shelf and the three send providers) is absent,
+// as the QML's is when the probe finds nothing, because nothing here has probed it. A row whose
+// dialog is not ported is offered and says so when chosen, rather than vanishing from the menu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    File,
+    Background,
+}
+
+// What the rules read. `targets` is ui/js/Ops.js targetIndices' length: the selection when there is
+// one, the cursor row otherwise, so a file menu never counts zero.
+#[derive(Debug, Clone, Default)]
+pub struct Facts {
+    pub path: String,
+    pub targets: usize,
+    pub row_mode: u32,
+    pub clipboard: bool,
+    pub show_hidden: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Entry {
+    pub id: &'static str,
+    pub action: &'static str,
+    pub label: &'static str,
+    pub glyph: &'static str,
+    pub disabled: bool,
+    pub danger: bool,
+    pub hint: &'static str,
+    // A flyout's rows as (id, label); only Sort by carries one in this build.
+    pub sub: Vec<(&'static str, &'static str)>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Item {
+    Separator,
+    Row(Entry),
+}
+
+// id, label, glyph, kinds (F file, B background, P places, T trash), group, action when not the id.
+const INVENTORY: &[(&str, &str, &str, &str, &str, &str)] = &[
+    ("open", "Open", "folder-open", "FTP", "open", ""),
+    ("openTab", "Open in new tab", "app-window", "P", "open", ""),
+    ("openwith", "Open with", "app-window", "F", "open", "openWith"),
+    ("newFolder", "New Folder", "folder-plus", "B", "open", ""),
+    ("newFile", "New File", "file-plus", "B", "open", ""),
+    ("cut", "Cut", "scissors", "F", "basic", ""),
+    ("copy", "Copy", "copy", "F", "basic", ""),
+    ("paste", "Paste", "clipboard", "FB", "basic", ""),
+    ("duplicate", "Duplicate", "file-plus", "F", "basic", ""),
+    ("rename", "Rename", "rename", "F", "basic", ""),
+    ("selectAll", "Select all", "check", "B", "basic", ""),
+    ("compress", "Compress", "archive", "F", "archive", ""),
+    ("extract", "Extract", "archive-out", "F", "archive", ""),
+    ("convert", "Convert", "sliders", "F", "archive", ""),
+    ("shelf", "Add to shelf", "file", "F", "share", "addToShelf"),
+    ("taildrop", "Send with Taildrop", "tailscale", "F", "share", ""),
+    ("localsend", "Send with LocalSend", "localsend", "F", "share", ""),
+    ("dropbox", "Move to Dropbox", "dropbox", "F", "share", ""),
+    ("sharelink", "Copy Share Link", "network", "F", "share", ""),
+    ("trash", "Move to Trash", "trash", "F", "trash", ""),
+    ("delete", "Delete permanently", "trash", "F", "trash", "deletePermanently"),
+    ("openTerminal", "Open in terminal", "terminal", "FBP", "inspect", ""),
+    ("moveto", "Move to", "folder-plus", "F", "inspect", "moveTo"),
+    ("copyto", "Copy to", "copy", "F", "inspect", "copyTo"),
+    ("properties", "Properties", "info", "F", "inspect", ""),
+    ("permissions", "Permissions", "lock", "F", "inspect", ""),
+    ("copypath", "Copy path", "file-text", "FP", "inspect", ""),
+    ("runScript", "Run script", "terminal", "F", "inspect", ""),
+    ("addFavourite", "Add to Favorites", "star", "FBP", "inspect", ""),
+    ("removeFavourite", "Remove from Favorites", "minus", "P", "inspect", ""),
+    ("sort", "Sort by", "sort", "B", "view", ""),
+    ("toggleHidden", "Show hidden files", "eye", "FB", "view", ""),
+    ("settings", "Settings", "sliders", "B", "settings", ""),
+    ("restoreAll", "Restore all", "undo", "T", "restore", ""),
+    ("emptyTrash", "Empty Trash", "trash", "T", "empty", ""),
+];
+
+// The capability-probed rows, absent until a later stage probes them (docs/iced-port.md stage 8).
+const UNPROBED: &[&str] = &["compress", "extract", "convert", "runScript", "addToShelf", "taildrop", "localsend", "dropbox", "sharelink"];
+
+// The rows this build performs; every other row that survives is offered and says it is not here.
+pub const PORTED: &[&str] = &[
+    "open", "newFolder", "cut", "copy", "paste", "duplicate", "rename", "selectAll", "trash", "openTerminal", "copypath",
+    "addFavourite", "sort", "toggleHidden", "settings",
+];
+
+// Sort.ORDERS with Menu.js SORT_LABELS: only an order the backend produces is ever offered.
+pub const SORTS: &[(&str, &str)] = &[("name", "Name"), ("size", "Size"), ("mtime", "Modified"), ("kind", "Kind")];
+
+const S_IFMT: u32 = 0o170000;
+const S_IFDIR: u32 = 0o040000;
+const S_IFREG: u32 = 0o100000;
+const S_IFLNK: u32 = 0o120000;
+
+// Open and the hidden toggle are never hidden, so a hand-edited state file cannot empty the menu.
+pub fn is_hidden(hidden: &[String], id: &str) -> bool {
+    id != "open" && id != "toggleHidden" && hidden.iter().any(|h| h == id)
+}
+
+// Mounts.trashable: an MTP or gphoto2 mount has no trash directory, so it never offers the row.
+pub fn trashable(path: &str) -> bool {
+    let lower = path.to_lowercase();
+    !(lower.contains("/gvfs/mtp:") || lower.contains("/gvfs/gphoto2:"))
+}
+
+pub fn entries(kind: Kind, f: &Facts, hidden: &[String]) -> Vec<Item> {
+    let letter = if kind == Kind::File { 'F' } else { 'B' };
+    let mut out = vec![];
+    let mut group = "";
+    for &(id, label, glyph, kinds, grp, action) in INVENTORY {
+        if !kinds.contains(letter) || is_hidden(hidden, id) {
+            continue;
+        }
+        let action = if action.is_empty() { id } else { action };
+        let mut e = Entry { id, action, label, glyph, disabled: false, danger: false, hint: "", sub: vec![] };
+        if !available(&mut e, f, kind) {
+            continue;
+        }
+        if !out.is_empty() && group != grp {
+            out.push(Item::Separator);
+        }
+        group = grp;
+        out.push(Item::Row(e));
+    }
+    out
+}
+
+fn available(e: &mut Entry, f: &Facts, kind: Kind) -> bool {
+    if UNPROBED.contains(&e.action) {
+        return false;
+    }
+    let one = f.targets == 1;
+    match e.action {
+        "addFavourite" if kind == Kind::File => e.disabled = !one || f.row_mode & S_IFMT != S_IFDIR,
+        "paste" => e.disabled = !f.clipboard,
+        "duplicate" | "rename" | "properties" | "openWith" => e.disabled = !one,
+        "permissions" => {
+            let t = f.row_mode & S_IFMT;
+            e.disabled = !(one && (t == S_IFREG || t == S_IFDIR));
+            e.hint = if !one { "Unavailable" } else if t == S_IFLNK { "Symlink target not changed" } else if e.disabled { "Unavailable" } else { "" };
+        }
+        "trash" if !trashable(&f.path) => return false,
+        "sort" => e.sub = SORTS.to_vec(),
+        // The label flips with the state; MenuRow draws no checkmark.
+        "toggleHidden" if f.show_hidden => {
+            e.label = "Hide hidden files";
+            e.glyph = "eye-off";
+        }
+        _ => {}
+    }
+    e.danger = matches!(e.action, "trash" | "deletePermanently");
+    true
+}
+
+// ContextMenu.stepCursor: a separator or a disabled row is never where the cursor rests, and the
+// ends hold rather than wrap.
+pub fn step(items: &[Item], from: usize, delta: isize) -> usize {
+    let mut at = from as isize;
+    loop {
+        at += delta;
+        if at < 0 || at as usize >= items.len() {
+            return from;
+        }
+        if matches!(&items[at as usize], Item::Row(e) if !e.disabled) {
+            return at as usize;
+        }
+    }
+}
+
+pub fn first(items: &[Item]) -> Option<usize> {
+    items.iter().position(|i| matches!(i, Item::Row(e) if !e.disabled))
+}
+
+// Menu.clamp: flip at the far edge first, then shift only when neither side fits.
+pub fn clamp(point: f32, size: f32, bounds: f32) -> f32 {
+    let start = if point + size <= bounds { point } else { point - size };
+    start.min((bounds - size).max(0.0)).max(0.0)
+}
+
+#[cfg(test)]
+#[path = "menu_tests.rs"]
+mod tests;

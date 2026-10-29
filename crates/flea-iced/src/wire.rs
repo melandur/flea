@@ -41,6 +41,8 @@ pub enum Reply {
     Trashed { ok: usize, failed: usize },
     Renamed { path: String },
     Made { path: String },
+    // A failure is an error line with where of duplicate, so this one only ever says ok.
+    Duplicated { path: String },
     Undone { op: String },
     // file is empty rather than absent on failure, so a row that was asked for always answers.
     Thumbed { row: usize, file: String },
@@ -126,6 +128,7 @@ pub fn parse(line: &str) -> Option<Reply> {
         // A refusal is an error line, never these with ok false, so ok is not read.
         "renamed" => Reply::Renamed { path: field("path") },
         "made" => Reply::Made { path: field("path") },
+        "duplicated" => Reply::Duplicated { path: field("path") },
         "undone" => Reply::Undone { op: field("op") },
         "thumbed" => Reply::Thumbed { row: uint("row")? as usize, file: field("file") },
         "menuaction" if v.get("op").and_then(Value::as_str) == Some("installed") => Reply::Installed {
@@ -208,6 +211,8 @@ pub enum Request {
     Rename { path: String, to: String },
     // No name: the backend answers with the first free "New Folder".
     Mkdir { path: String },
+    // One path, the cursor row's: Ops.duplicate never sends a batch.
+    Duplicate { path: String },
     Undo,
     // Never sent with an empty rows: thumbcancel with none cancels everything queued.
     Thumb { rows: Vec<usize> },
@@ -248,6 +253,7 @@ impl Request {
             Request::Trash { rows } => json!({"c": "trash", "rows": rows}),
             Request::Rename { path, to } => json!({"c": "rename", "path": path, "to": to}),
             Request::Mkdir { path } => json!({"c": "mkdir", "path": path}),
+            Request::Duplicate { path } => json!({"c": "duplicate", "path": path}),
             Request::Undo => json!({"c": "undo"}),
             Request::Thumb { rows } => json!({"c": "thumb", "rows": rows}),
             Request::ThumbCancel { rows } => json!({"c": "thumbcancel", "rows": rows}),

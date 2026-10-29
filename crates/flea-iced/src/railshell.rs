@@ -243,7 +243,8 @@ impl Flea {
                 self.rail.focused = false;
                 Task::none()
             }
-            Key::Character("m") => self.rail_open_menu(self.rail.cursor),
+            Key::Character("m") | Key::Named(Named::ContextMenu) => self.rail_open_menu(self.rail.cursor),
+            Key::Named(Named::F10) if self.modifiers.shift() => self.rail_open_menu(self.rail.cursor),
             // addNetwork: the dialog is reached from the rail, by its "+" or by this key.
             Key::Character("a") if self.rail.show_network => self.dialog_open(),
             _ => Task::none(),

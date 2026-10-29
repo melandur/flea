@@ -15,6 +15,10 @@ mod format;
 mod live_tests;
 mod marks;
 mod media;
+mod menu;
+mod menushell;
+mod menuview;
+mod metrics;
 mod mediashell;
 mod mounts;
 mod nav;
@@ -72,32 +76,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tasks::{blocking, decode, sleep};
 use theme::Palette;
-
-// ui/Theme.qml's measured box metrics at Omarchy's default text size: a 37 px row, read off the IPC
-// seam as Theme.rowHeight, around a bodySmall of 12 px drawn at a 1.8 line box.
-const TEXT_PX: f32 = 13.0;
-const ROW_H: f32 = 37.0;
-const PAD_X: f32 = 14.0;
-// Theme.iconSize, the row's own text line box: rowHeight less twice rowPaddingY, 23 px here.
-const ICON_SLOT: f32 = 23.0;
-// Theme.markSize, bodySmall * 1.45; Glyph.qml draws the mark at the smaller of this and the slot.
-const MARK: f32 = 12.0 * 1.45;
-// Decoded at twice the slot so a 1.25 or 2x output scale is not drawn soft; still about 9 kB a row
-// where the 256 px cache PNG would be 256 kB, the saving Image.sourceSize bought in QML.
-const THUMB_PX: u32 = 46;
-// Decoded thumbnails kept beyond the pane's own 240-row map, oldest out first.
-const DECODED_CAP: usize = 480;
-const SIZE_W: f32 = 90.0;
-const DATE_W: f32 = 140.0;
-// A pane's listing scrollable, one id per side, so a scroll lands on the pane it was meant for.
-fn list_id(side: u8) -> iced::widget::Id {
-    iced::widget::Id::from(format!("listing-{side}"))
-}
-const RENAME_ID: &str = "rename";
-// The second press of a double click lands inside this, iced's own mouse::click interval.
-const DOUBLE_TAP: Duration = Duration::from_millis(300);
-// Longer than the backend's own 25 s drain limit; see ui/Backend.qml quitDeadline.
-const QUIT_DEADLINE: Duration = Duration::from_secs(30);
+pub(crate) use metrics::*;
 
 struct Flea {
     // The focused pane and everything it owns; split.rs keeps the other one in `other`.
@@ -142,6 +121,8 @@ struct Flea {
     playback: mediashell::Playback,
     chrome: chrome::Chrome,
     panel: settingspanel::Panel,
+    menu: Option<menushell::ListMenu>,
+    opening_terminal: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -207,6 +188,7 @@ enum Message {
     Saved(bool),
     CloseRequested,
     QuitDeadline,
+    Menu(menushell::Msg),
 }
 
 impl Flea {
@@ -282,6 +264,7 @@ impl Flea {
             }
             Message::FavouriteSaved(result) => self.favourite_saved(result),
             Message::Dialog(msg) => self.dialog_message(msg),
+            Message::Menu(msg) => self.menu_message(msg),
             m @ (Message::PanelLoaded(..)
             | Message::PanelSaved(_)
             | Message::PanelClose

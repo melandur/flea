@@ -211,6 +211,14 @@ impl Pane {
         vec![Effect::Send(Request::Mkdir { path: self.path.clone() })]
     }
 
+    // Ops.duplicate: the cursor row alone, never the selection.
+    pub fn duplicate(&mut self) -> Vec<Effect> {
+        match self.row_at(self.cursor) {
+            Some(row) => vec![Effect::Send(Request::Duplicate { path: join(&self.path, &row.n) })],
+            None => vec![],
+        }
+    }
+
     pub fn undo(&mut self) -> Vec<Effect> {
         vec![Effect::Send(Request::Undo)]
     }

@@ -72,6 +72,8 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         playback: Default::default(),
         chrome: Default::default(),
         panel: Default::default(),
+        menu: None,
+        opening_terminal: false,
         backend_key: 0,
         side: 0,
         other: None,

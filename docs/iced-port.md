@@ -42,8 +42,7 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
    `live_tests.rs` drives new folder, rename, undo twice, copy and paste through the real
    `flea --backend` when `FLEA_BIN` is set, and a mutation of the mkdir request turns it red.
    **Deliberate deviation:** the hints say "Ctrl+Z undoes" and "Ctrl+V pastes"; ui/js/Status.js
-   still names `z` and `p`, bare letters the key cut removed. Not ported yet: duplicate (menu only),
-   the held-Space paint, the transfer card, retry selection, trash undriven live (`gio trash`
+   still names `z` and `p`, bare letters the key cut removed. Not ported yet: the held-Space paint, the transfer card, retry selection, trash undriven live (`gio trash`
    refuses /tmp).
 3. **Marks, the filetype tier and thumbnails (done, unmeasured).** `build.rs` generates the mark
    paths from `ui/js/Icons.js`, the families from `ui/js/FileTypes.js` and the colours from
@@ -293,3 +292,33 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      sandbox guard, listed in `tests/run-all.sh`'s not-run inventory because sway is no dependency.
    - **The default stays `qs`.** Switching it waits on a field-bench run showing the switch loses no
      column Flea wins today, which has not been done.
+8. **Parity, in four parts.** What the QML window does that the iced one does not, each part a
+   commit of its own.
+   - **8a, the listing menu (done, driven headless).** `menu.rs` ports ui/js/Menu.js: the one
+     inventory in the Menus section's order, the file rows over a row and the background rows over
+     empty space, each row's availability rule, `isHidden`'s lock on Open and the hidden toggle,
+     the separators between groups, `Mounts.trashable`, the step that skips separators and greyed
+     rows, and `Menu.clamp`, all unit tested. `menu.hidden` is read off `flea --ui-state` with the
+     other preferences and follows a save from the Menus section. `menushell.rs` opens it on a
+     right click, `m`, the Menu key and Shift+F10, with `Tap.tappedMenu`'s selection rule, takes
+     every key while it is up as ContextMenu's keyCatcher does, and refuses a choice whose
+     directory or target names changed since it opened. An open menu is one of the things that
+     owes the watched re-read rather than running it, which a mutation of that rule turns red.
+     Ported rows: Open, New Folder, Cut, Copy, Paste, Duplicate (the `duplicate` request, new to
+     this crate), Rename, Select all, Move to Trash, Open in terminal (`flea --terminal`), Copy path
+     (`wl-copy`, which outlives the window, and Ctrl+B with it), Add to Favorites, Sort by and its
+     flyout (Sort.column, as Focus.act routes `sort:`), Show hidden files and Settings. **Two rules
+     for what is not here yet**, the QML's own two for a missing capability: a row whose capability
+     is probed (Compress, Extract, Convert, Run script, the shelf and the three send providers) is
+     absent, because nothing has probed it; a row whose dialog is not ported (Open with, New File,
+     Delete permanently, Move to, Copy to, Properties, Permissions) is offered and says it is not in
+     this build yet. **Deliberate deviation:** a right click opens the menu under the clicked row,
+     or under the last row over empty space, rather than at the pointer, because iced reports no
+     position with the press and tracking the pointer would rebuild the view on every motion.
+     `tests/iced-headless.sh` drives it: Right swallowed while it is up, Escape closing it,
+     Duplicate, the hidden row both ways and Ctrl+B, 33 checks in all.
+   - **8b**, the dialog rows: Open with, Properties, Permissions, Convert, New File, Compress and
+     Extract, Delete permanently, Move to and Copy to, Run script.
+   - **8c**, the send rows: the shelf, Taildrop, LocalSend, Dropbox and the share link.
+   - **8d**, tabs, the trash view, the grid and columns views, the stored display settings
+     (density, columns, text size), the key sheet and the filter.

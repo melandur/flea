@@ -32,6 +32,8 @@ fn the_write_replies_from_the_protocol_parse() {
         Some(Reply::TransferQueued { id: 13, n: 1, moving: false, ahead: 1 })
     );
     assert_eq!(parse(r#"{"t":"made","ok":true,"path":"/home/gm/New Folder"}"#), Some(Reply::Made { path: "/home/gm/New Folder".into() }));
+    assert_eq!(parse(r#"{"t":"duplicated","ok":true,"path":"/home/gm/photo copy.jpg"}"#), Some(Reply::Duplicated { path: "/home/gm/photo copy.jpg".into() }));
+    assert_eq!(Request::Duplicate { path: "/home/gm/photo.jpg".into() }.line(), "{\"c\":\"duplicate\",\"path\":\"/home/gm/photo.jpg\"}\n");
     assert_eq!(parse(r#"{"t":"paths","paths":["/a","/b"]}"#), Some(Reply::Paths { paths: vec!["/a".into(), "/b".into()] }));
 }
 

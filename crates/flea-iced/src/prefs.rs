@@ -33,6 +33,8 @@ pub struct Prefs {
     pub dual_from: String,
     pub dual_focus: u8,
     pub theme_id: String,
+    // menu.hidden, the Menus section's whole visibility state, read by menu::entries alone.
+    pub menu_hidden: Vec<String>,
 }
 
 impl Default for Prefs {
@@ -62,6 +64,10 @@ impl Default for Prefs {
             dual_from: "list".into(),
             dual_focus: 0,
             theme_id: "omarchy".into(),
+            // src/uischema.rs DEFAULT's own set, for a window whose read of the file failed.
+            menu_hidden: ["delete", "openTerminal", "placeMenu", "runScript", "moveto", "copyto", "properties", "permissions", "copypath"]
+                .map(String::from)
+                .to_vec(),
         }
     }
 }
@@ -104,6 +110,10 @@ impl Prefs {
             dual_from: v.pointer("/dual/from").and_then(Value::as_str).unwrap_or("list").to_string(),
             theme_id: v.pointer("/display/theme").and_then(Value::as_str).unwrap_or("omarchy").to_string(),
             dual_focus: u8::from(v.pointer("/dual/focus").and_then(Value::as_u64) == Some(1)),
+            menu_hidden: match v.pointer("/menu/hidden").and_then(Value::as_array) {
+                Some(a) => a.iter().filter_map(|x| x.as_str().map(String::from)).collect(),
+                None => d.menu_hidden,
+            },
         }
     }
 
@@ -165,6 +175,13 @@ mod tests {
         let p = Prefs::from_json(r#"{"open":{"rules":[{"ends":".nii.gz","app":"itksnap.desktop"}]}}"#);
         assert!(p.claimed("BRAIN.NII.GZ") && p.claimed("a.nii.gz"));
         assert!(!p.claimed(".nii.gz") && !p.claimed("a.gz"));
+    }
+
+    #[test]
+    fn the_menu_hidden_set_is_read_as_stored_and_defaults_to_the_shipped_one() {
+        assert_eq!(Prefs::from_json(r#"{"menu":{"hidden":["trash"]}}"#).menu_hidden, vec!["trash".to_string()]);
+        assert_eq!(Prefs::from_json(r#"{"menu":{"hidden":[]}}"#).menu_hidden, Vec::<String>::new());
+        assert!(Prefs::from_json("{}").menu_hidden.contains(&"delete".to_string()));
     }
 
     #[test]

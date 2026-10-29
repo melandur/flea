@@ -16,7 +16,7 @@ BIN=$REPO/target/debug/flea
 ICED=$REPO/crates/flea-iced/target/debug/flea-iced
 [ -x "$BIN" ] || { echo "iced-headless.sh: $BIN is missing, run cargo build" >&2; exit 1; }
 [ -x "$ICED" ] || { echo "iced-headless.sh: $ICED is missing, run cargo build in crates/flea-iced" >&2; exit 1; }
-for tool in sway swaymsg wtype grim jq; do
+for tool in sway swaymsg wtype grim jq wl-paste; do
     command -v "$tool" > /dev/null || { echo "iced-headless.sh: $tool is not installed" >&2; exit 1; }
 done
 [ -n "${XDG_RUNTIME_DIR:-}" ] || { echo "iced-headless.sh: XDG_RUNTIME_DIR is not set" >&2; exit 1; }
@@ -156,6 +156,23 @@ check "the panel's hidden switch is stored" true "$(jq -r .hidden "$D/state/flea
 k -k Return; sleep 1
 check "and switched back" false "$(jq -r .hidden "$D/state/flea/ui.json")"
 k -k Escape
+# The context menu, raised from the keyboard. Every key goes to it while it is up, so Right over a
+# folder must not enter it; Escape must close it, which Ctrl+N being answered proves.
+top; k m; shot menu; n=$(mark); k -k Right; k -k Left; k -k Escape
+check "an open menu keeps Right from entering the folder" 0 "$(since "$n" | grep -c '"c":"list"')"
+n=$(mark); k m; k -k Escape; ctrl n; sleep 1
+check "Escape closes the menu, so Ctrl+N is answered" 1 "$(since "$n" | grep -c '"c":"mkdir"')"
+k -k Escape; ctrl z; sleep 1
+# The file menu here is Open, Open with, Cut, Copy, Paste (the copy above is still held), then
+# Duplicate: five Downs. Show hidden files is the last row, and Down holds at the end.
+top; k -k Down -k Down; k m; k -k Down -k Down -k Down -k Down -k Down; k -k Return; sleep 1
+check "the menu's Duplicate copies the cursor row" yes "$(exists "$T/note-02 copy.txt")"
+k m; for _ in 1 2 3 4 5 6 7 8 9 10; do k -k Down; done; k -k Return; sleep 1
+check "the menu's last row shows hidden files" true "$(jq -r .hidden "$D/state/flea/ui.json")"
+k m; for _ in 1 2 3 4 5 6 7 8 9 10; do k -k Down; done; k -k Return; sleep 1
+check "and the same row, relabelled, hides them" false "$(jq -r .hidden "$D/state/flea/ui.json")"
+top; ctrl b; sleep 1
+check "Ctrl+B copies the cursor row's path" "$T/alpha" "$(WAYLAND_DISPLAY=$SOCK timeout 3 wl-paste -n 2> /dev/null)"
 k -k Tab; k -k Down -k Down; shot rail; k -k Tab
 n=$(mark); backend=$(pgrep -P "$APP" -x flea)
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
