@@ -839,10 +839,14 @@ fi
 # a newer .qml is the thing being benched rather than a stale build, and checking it refused a run
 # that was measuring exactly the change it had just been handed.
 [ -x "$FLEA_BIN" ] || fail "$FLEA_BIN is missing, so run cargo build --release before benching"
-stale_src=$(find "$FLEA_REPO/src" "$FLEA_REPO/Cargo.toml" "$FLEA_REPO/Cargo.lock" -newer "$FLEA_BIN" -print -quit)
+# Tracked files, compared one by one, and never a directory's own mtime: makepkg run from the repo root
+# builds into ./src, which is this crate's source folder, and that build output made src newer than a
+# binary no source had changed since. git ls-files is exactly the set the binary was built from.
+newer_than() { local bin=$1; shift; git -C "$FLEA_REPO" ls-files -- "$@" | while IFS= read -r f; do [ "$FLEA_REPO/$f" -nt "$bin" ] && { echo "$FLEA_REPO/$f"; break; }; done; }
+stale_src=$(newer_than "$FLEA_BIN" src Cargo.toml Cargo.lock)
 [ -z "$stale_src" ] || fail "$stale_src is newer than $FLEA_BIN, so this run would bench a stale build"
 if [ -x "$FLEA_ICED_BIN" ]; then
-  stale_src=$(find "$FLEA_REPO/crates/flea-iced/src" "$FLEA_REPO/crates/flea-iced/Cargo.toml" "$FLEA_REPO/crates/flea-iced/Cargo.lock" -newer "$FLEA_ICED_BIN" -print -quit)
+  stale_src=$(newer_than "$FLEA_ICED_BIN" crates/flea-iced/src crates/flea-iced/Cargo.toml crates/flea-iced/Cargo.lock crates/flea-iced/build.rs)
   [ -z "$stale_src" ] || fail "$stale_src is newer than $FLEA_ICED_BIN, so this run would bench a stale build"
 fi
 
