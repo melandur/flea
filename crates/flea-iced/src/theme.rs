@@ -79,20 +79,63 @@ impl Palette {
         }
     }
 
-    pub fn load() -> Self {
+    // display.theme: "omarchy", "", or an id this catalog lost all follow the desktop. A catalog
+    // palette's eight keys go first, so they win the lookup, and every key it does not state, the
+    // selection fill among them, stays the desktop's (AGENTS.md "The theme catalog").
+    pub fn load(theme_id: &str) -> Self {
         let path = std::env::var_os("HOME")
             .map(PathBuf::from)
             .map(|h| h.join(".local/state/omarchy/current/theme/colors.toml"));
-        match path.and_then(|p| std::fs::read_to_string(p).ok()) {
-            Some(body) => Self::from_toml(&body),
-            None => Self::fallback(),
+        let desktop = path.and_then(|p| std::fs::read_to_string(p).ok());
+        let catalog = palette_body(theme_id);
+        match (catalog, desktop) {
+            (None, None) => Self::fallback(),
+            (Some(c), d) => Self::from_toml(&format!("{c}{}", d.unwrap_or_default())),
+            (None, Some(d)) => Self::from_toml(&d),
         }
     }
+}
+
+use crate::tables as catalog;
+
+// Themes.entries: every bundled palette as (id, name), in the catalog's own order.
+pub fn entries() -> impl Iterator<Item = (&'static str, &'static str)> {
+    catalog::THEMES.iter().map(|(id, name, _)| (*id, *name))
+}
+
+// Themes.resolve: an id the catalog carries, or None, which means following Omarchy.
+pub fn resolve(id: &str) -> Option<&'static str> {
+    catalog::THEMES.iter().find(|(i, _, _)| *i == id).map(|(i, _, _)| *i)
+}
+
+pub fn name_of(id: &str) -> Option<&'static str> {
+    catalog::THEMES.iter().find(|(i, _, _)| *i == id).map(|(_, n, _)| *n)
+}
+
+// Themes.paletteBody: one palette as the colors.toml text from_toml already reads.
+pub fn palette_body(id: &str) -> Option<String> {
+    let (_, _, colours) = catalog::THEMES.iter().find(|(i, _, _)| *i == id)?;
+    Some(catalog::THEME_KEYS.iter().zip(colours).map(|(k, v)| format!("{k} = \"{v}\"\n")).collect())
+}
+
+impl Palette {
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_catalog_palette_wins_its_eight_keys_and_leaves_the_rest_to_the_desktop() {
+        assert_eq!(entries().count(), 95);
+        assert_eq!(resolve("omarchy"), None);
+        assert_eq!(name_of("catppuccin-mocha"), Some("Catppuccin Mocha"));
+        let body = palette_body("3024").unwrap();
+        assert!(body.starts_with("background = \"#090300\"\n"));
+        let merged = Palette::from_toml(&format!("{body}background = \"#ffffff\"\nselection = \"#123456\"\n"));
+        assert_eq!(merged.background, Color::from_rgb8(0x09, 0x03, 0x00));
+        assert_eq!(merged.selection, Color::from_rgb8(0x12, 0x34, 0x56));
+    }
 
     #[test]
     fn roles_come_from_the_file_and_the_rest_fall_back() {

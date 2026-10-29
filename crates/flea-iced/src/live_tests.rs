@@ -280,3 +280,61 @@ fn a_deep_search_walks_ranks_and_returns_through_the_real_backend() {
     drop(live);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// Every row the settings panel draws writes a patch, and `flea --ui-state` refuses a whole patch that
+// names a key or a value it does not know, which in the window would be a toggle that silently never
+// lands. So every check, every value of every choice and both menu writers are put through the real
+// binary, against a state directory of the test's own so the operator's ui.json is never touched.
+#[test]
+fn every_settings_row_writes_a_patch_the_real_backend_accepts() {
+    let Some(bin) = std::env::var("FLEA_BIN").ok().filter(|b| !b.is_empty()) else {
+        eprintln!("live: FLEA_BIN is not set, so the settings round trip was skipped");
+        return;
+    };
+    use crate::settings::{self, Kind};
+    let state = std::env::temp_dir().join(format!("flea-iced-state-{}", std::process::id()));
+    std::fs::create_dir_all(&state).unwrap();
+    let write = |patch: &serde_json::Value| -> Result<serde_json::Value, String> {
+        let out = Command::new(&bin).env("XDG_STATE_HOME", &state).arg("--ui-state").arg(patch.to_string()).output().unwrap();
+        if out.status.success() { Ok(serde_json::from_slice(&out.stdout).unwrap()) } else { Err(format!("{patch}: {}", String::from_utf8_lossy(&out.stderr))) }
+    };
+    let doc = write(&serde_json::json!({})).unwrap();
+    let facts = settings::Facts { home: "/home/u".into(), base_size: 12, monitor_scale: 1.0, version: String::new(), handler: String::new(), save_status: String::new() };
+    let mut tried = 0;
+    let mut refused = vec![];
+    for (section, _, _) in settings::SECTIONS.iter().chain([("columns", "", "")].iter()) {
+        for r in settings::rows(section, &doc, &facts) {
+            let patches: Vec<serde_json::Value> = match r.kind {
+                Kind::Check if r.id.starts_with("column:") || r.id == "keyHints" => continue,
+                Kind::Check if *section == "menus" => vec![crate::places_rows::menu_patch(&doc, &[Box::leak(r.id.clone().into_boxed_str())], false)],
+                Kind::Check => vec![settings::patch(&r.id, serde_json::json!(!r.on)), settings::patch(&r.id, serde_json::json!(r.on))],
+                Kind::Choice if !r.values.is_empty() => r.values.iter().map(|v| settings::patch(&r.id, v.clone())).collect(),
+                Kind::Group if r.master && r.id != "shelf.enabled" => vec![crate::places_rows::menu_patch(&doc, &r.ids, true)],
+                _ => continue,
+            };
+            for p in patches {
+                tried += 1;
+                if let Err(e) = write(&p) {
+                    refused.push(e);
+                }
+            }
+        }
+    }
+    // The writers that are not plain rows: the text size's two shapes, the columns set, the hints.
+    for p in [
+        serde_json::json!({ "display": { "textSize": { "mode": 16 } } }),
+        serde_json::json!({ "display": { "textSize": { "mode": "system" } } }),
+        serde_json::json!({ "columns": ["name", "size", "date", "kind"] }),
+        serde_json::json!({ "keyHints": true }),
+        serde_json::json!({ "shelf": { "enabled": true } }),
+        serde_json::json!({ "startFolder": "/home/u/Work" }),
+    ] {
+        tried += 1;
+        if let Err(e) = write(&p) {
+            refused.push(e);
+        }
+    }
+    let _ = std::fs::remove_dir_all(&state);
+    assert!(tried > 150, "only {tried} patches were tried");
+    assert!(refused.is_empty(), "{} of {tried} refused:\n{}", refused.len(), refused.join("\n"));
+}

@@ -193,6 +193,26 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      Default preset since the key cut and are opened from the listing's context menu, which is not
      ported; they arrive with it. Measured once: a sandboxed launch with `view: "dual"` drew both
      panes with the focus restored, and killing the window left no backend child behind.
-   - **6c, the settings panel and the theme catalog.**
+   - **6c-i, the settings panel and the theme catalog (done, the panel not yet seen on screen).**
+     `build.rs` generates the 95 Strata palettes with `tools/flea-themes-gen`'s eight tokens and its
+     refusals, checked identical to `ui/js/Themes.js` line for line; a chosen palette's keys go ahead
+     of the desktop's `colors.toml`, so they win and the rest, the selection fill among them, stays
+     the desktop's. `settings.rs` and `places_rows.rs` are `ui/js/Settings.js` and its section files:
+     every section's rows with their labels verbatim, `focusable`, and `changeSetting`'s one write
+     rule; the Menus masters carry the shelf beside the hidden set as `ViewState` does.
+     `settingspanel.rs` is the panel's keyboard and activation from `ui/SettingsPanel.qml`: `,` opens
+     it from anywhere not being typed in, every other key stops at it. `settingsapply.rs` reads the
+     merged document `flea --ui-state` prints with boot's own `Prefs` parse and applies what changed:
+     the order (dropping this session's), hidden files, the wrap, thumbnails, file type colours, the
+     theme and the rail, to both panes in the split. A live test puts every check, every value of
+     every choice and both menu writers, 311 patches, through the real binary against a sandboxed
+     state directory, and a misspelled key turns it red with the backend's own sentence.
+     **Written but not yet applied in this port:** density, columns, the address bar, the view mode,
+     the preview column and its loading, thumbnail size, text size (the crate's metrics are fixed at
+     13 px on a 37 px row, which is what a 14 px Omarchy base gives), Hyprland-aware icons, the menus
+     and key hints, the shelf. **Not ported:** favourite reordering and removal from the panel, the
+     keyboard sheet, and File types (6c-ii).
+   - **6c-ii, File types.** The open-rule table and its card, which ask `menu_actions` for the
+     installed applications.
 7. The picker for `tools/flea-portal`, then `flea --gui` switches to the iced binary, after a
    field-bench run says the switch does not lose a column Flea wins today.

@@ -11,6 +11,16 @@ impl Flea {
             return Task::none();
         }
         let keyboard::Event::KeyPressed { key, modifiers, repeat, text, .. } = event else { return Task::none() };
+        // An open settings panel takes every key, so none reaches the listing behind it.
+        if self.panel.open && self.dialog.is_none() {
+            return self.panel_key(&key);
+        }
+        // "," opens the panel from anywhere in the window that is not a field being typed in.
+        if text.as_deref() == Some(",") && !modifiers.control() && self.dialog.is_none() && !self.chrome.editing
+            && self.pane.renaming.is_none() && self.rail.renaming.is_none() && self.pane.search.mode != crate::search::Mode::Typing
+        {
+            return self.open_panel();
+        }
         // The dialog owns the keyboard while it is up: Escape closes it, Tab walks its fields, and
         // its fields take everything else, Enter included through their on_submit.
         if self.dialog.is_some() {

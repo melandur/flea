@@ -25,6 +25,7 @@ mod opreplies;
 mod ops;
 mod pane;
 mod pathbar;
+mod places_rows;
 mod pdf;
 mod prefs;
 mod preview;
@@ -38,9 +39,17 @@ mod railview;
 mod search;
 mod searchkeys;
 mod sentence;
+mod settings;
+mod settingsapply;
+mod settingspanel;
+mod settingsview;
 mod split;
 #[cfg(test)]
 mod testexec;
+// Every table build.rs generates: the mark paths and families, the filetype colours, the themes.
+mod tables {
+    include!(concat!(env!("OUT_DIR"), "/tables.rs"));
+}
 mod tasks;
 mod theme;
 mod thumbs;
@@ -129,6 +138,7 @@ struct Flea {
     pdf: Option<mediashell::PdfView>,
     playback: mediashell::Playback,
     chrome: chrome::Chrome,
+    panel: settingspanel::Panel,
 }
 
 #[derive(Debug, Clone)]
@@ -167,6 +177,12 @@ enum Message {
     SearchLive(u8, u64),
     SearchPaste(Option<String>),
     SortColumn(u8, &'static str),
+    PanelLoaded(Option<serde_json::Value>, Box<settings::Facts>),
+    PanelSaved(Option<serde_json::Value>),
+    PanelClose,
+    PanelSection(&'static str),
+    PanelActivate(usize),
+    PanelPick(usize, usize),
     CrumbPressed(usize),
     CrumbSettle(u64),
     PathInput(String),
@@ -269,6 +285,12 @@ impl Flea {
             }
             Message::FavouriteSaved(result) => self.favourite_saved(result),
             Message::Dialog(msg) => self.dialog_message(msg),
+            m @ (Message::PanelLoaded(..)
+            | Message::PanelSaved(_)
+            | Message::PanelClose
+            | Message::PanelSection(_)
+            | Message::PanelActivate(_)
+            | Message::PanelPick(..)) => self.panel_message(m),
             m @ (Message::SearchLive(..)
             | Message::SearchPaste(_)
             | Message::SortColumn(..)
@@ -307,23 +329,7 @@ impl Flea {
                 f.run(effects)
             }),
             Message::Decoded(path, handle) => {
-                match handle {
-                    Some(h) => {
-                        if self.decoded.insert(path.clone(), h).is_none() {
-                            self.decoded_order.push_back(path);
-                        }
-                        while self.decoded_order.len() > DECODED_CAP {
-                            if let Some(old) = self.decoded_order.pop_front() {
-                                self.decoded.remove(&old);
-                            }
-                        }
-                    }
-                    // An evicted or unreadable cache file: the row keeps its mark, as Row.qml's
-                    // thumbDrawn falls back on Image.Error.
-                    None => {
-                        self.decoded.remove(&path);
-                    }
-                }
+                self.decoded_thumb(path, handle);
                 Task::none()
             }
             Message::WatchFired(side) => self.with_side(side, |f| {

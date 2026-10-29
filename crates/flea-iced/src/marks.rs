@@ -7,9 +7,7 @@ use iced::Color;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-mod tables {
-    include!(concat!(env!("OUT_DIR"), "/tables.rs"));
-}
+use crate::tables;
 
 fn find(table: &'static [(&'static str, &'static str)], key: &str) -> Option<&'static str> {
     table.binary_search_by(|(k, _)| (*k).cmp(key)).ok().map(|i| table[i].1)

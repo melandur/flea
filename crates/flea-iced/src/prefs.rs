@@ -32,6 +32,7 @@ pub struct Prefs {
     pub view: String,
     pub dual_from: String,
     pub dual_focus: u8,
+    pub theme_id: String,
 }
 
 impl Default for Prefs {
@@ -60,6 +61,7 @@ impl Default for Prefs {
             view: "list".into(),
             dual_from: "list".into(),
             dual_focus: 0,
+            theme_id: "omarchy".into(),
         }
     }
 }
@@ -100,6 +102,7 @@ impl Prefs {
                 .collect(),
             view: Some(s("view")).filter(|x| !x.is_empty()).unwrap_or_else(|| "list".into()),
             dual_from: v.pointer("/dual/from").and_then(Value::as_str).unwrap_or("list").to_string(),
+            theme_id: v.pointer("/display/theme").and_then(Value::as_str).unwrap_or("omarchy").to_string(),
             dual_focus: u8::from(v.pointer("/dual/focus").and_then(Value::as_u64) == Some(1)),
         }
     }

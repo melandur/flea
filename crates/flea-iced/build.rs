@@ -2,6 +2,7 @@
 //   ui/js/Icons.js PATHS        the lucide marks, Omarchy cut (AGENTS.md "Lucide path data")
 //   ui/js/FileTypes.js          the mark families and exact names (AGENTS.md "The filetype tier")
 //   vendor/yazi-icons.toml      the colours, with tools/flea-filetypes-gen's own precedence
+//   vendor/strata-themes.toml   the theme catalog, with tools/flea-themes-gen's own eight tokens
 // While ui/ ships, those two JS files are the source; the port's last stage moves their tables into
 // data files beside vendor/ and points this at them.
 use std::collections::HashMap;
@@ -100,6 +101,54 @@ fn colours(toml: &str) -> [Vec<(String, String)>; 3] {
     })
 }
 
+// tools/flea-themes-gen MAPPING: the Strata token each colors.toml key is read from, in KEYS order.
+const THEME_MAPPING: [(&str, &str); 8] = [
+    ("background", "background"),
+    ("surface", "dark_background"),
+    ("text", "foreground"),
+    ("accent", "accent"),
+    ("danger", "red"),
+    ("dim_text", "muted"),
+    ("syntax_string", "green"),
+    ("syntax_preprocessor", "cyan"),
+];
+
+// One theme per [[themes]] block, in source order, with the generator's own refusals: an id that is
+// not [a-z0-9-]+, a name a packed line cannot hold, any of the eight colours missing, a repeated id.
+fn themes(toml: &str) -> String {
+    let mut out = String::from("pub static THEME_KEYS: [&str; 8] = [");
+    out += &THEME_MAPPING.iter().map(|(_, k)| format!("{k:?}")).collect::<Vec<_>>().join(", ");
+    out += "];\npub static THEMES: &[(&str, &str, [&str; 8])] = &[\n";
+    let mut seen = std::collections::HashSet::new();
+    for block in toml.split("[[themes]]").skip(1) {
+        let mut entry: HashMap<String, String> = HashMap::new();
+        for line in block.lines() {
+            let Some((k, v)) = line.split_once('=') else { continue };
+            let (k, v) = (k.trim(), v.trim());
+            if !k.chars().all(|c| c.is_ascii_lowercase() || c == '_') || !v.starts_with('"') {
+                continue;
+            }
+            entry.insert(k.to_string(), v.trim_matches('"').to_string());
+        }
+        let id = entry.get("id").cloned().unwrap_or_default();
+        assert!(!id.is_empty() && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'), "build.rs: theme id {id:?}");
+        let name = entry.get("name").cloned().unwrap_or_default();
+        assert!(!name.is_empty() && !name.contains('|'), "build.rs: theme {id} name {name:?}");
+        assert!(seen.insert(id.clone()), "build.rs: theme id {id} appears twice");
+        let colours: Vec<String> = THEME_MAPPING
+            .iter()
+            .map(|(token, _)| {
+                let v = entry.get(*token).cloned().unwrap_or_default().to_lowercase();
+                assert!(v.len() == 7 && v.starts_with('#') && v[1..].chars().all(|c| c.is_ascii_hexdigit()), "build.rs: theme {id} has no usable {token}");
+                format!("{v:?}")
+            })
+            .collect();
+        writeln!(out, "    ({id:?}, {name:?}, [{}]),", colours.join(", ")).unwrap();
+    }
+    assert!(!seen.is_empty(), "build.rs: no [[themes]] entries");
+    out + "];\n"
+}
+
 fn emit(out: &mut String, name: &str, rows: &[(String, String)]) {
     writeln!(out, "pub static {name}: &[(&str, &str)] = &[").unwrap();
     for (k, v) in rows {
@@ -113,6 +162,7 @@ fn main() {
     let icons = read(&root, "ui/js/Icons.js");
     let filetypes = read(&root, "ui/js/FileTypes.js");
     let toml = read(&root, "vendor/yazi-icons.toml");
+    let strata = read(&root, "vendor/strata-themes.toml");
 
     let mut paths = js_table(&icons, "PATHS");
     paths.sort();
@@ -134,6 +184,7 @@ fn main() {
     emit(&mut out, "EXT_COLOURS", &ext_colours);
     emit(&mut out, "NAME_COLOURS", &name_colours);
     emit(&mut out, "DIR_COLOURS", &dir_colours);
+    out += &themes(&strata);
     let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("tables.rs");
     std::fs::write(dest, out).unwrap();
 }
