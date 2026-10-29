@@ -299,7 +299,7 @@ fn every_settings_row_writes_a_patch_the_real_backend_accepts() {
         if out.status.success() { Ok(serde_json::from_slice(&out.stdout).unwrap()) } else { Err(format!("{patch}: {}", String::from_utf8_lossy(&out.stderr))) }
     };
     let doc = write(&serde_json::json!({})).unwrap();
-    let facts = settings::Facts { home: "/home/u".into(), base_size: 12, monitor_scale: 1.0, version: String::new(), handler: String::new(), save_status: String::new() };
+    let facts = settings::Facts { home: "/home/u".into(), base_size: 12, monitor_scale: 1.0, version: String::new(), handler: String::new(), save_status: String::new(), apps: vec![] };
     let mut tried = 0;
     let mut refused = vec![];
     for (section, _, _) in settings::SECTIONS.iter().chain([("columns", "", "")].iter()) {
@@ -337,4 +337,35 @@ fn every_settings_row_writes_a_patch_the_real_backend_accepts() {
     let _ = std::fs::remove_dir_all(&state);
     assert!(tried > 150, "only {tried} patches were tried");
     assert!(refused.is_empty(), "{} of {tried} refused:\n{}", refused.len(), refused.join("\n"));
+}
+
+#[test]
+fn the_installed_catalogue_answers_and_a_rule_from_it_is_written_and_read_back() {
+    let Some(bin) = std::env::var("FLEA_BIN").ok().filter(|b| !b.is_empty()) else {
+        eprintln!("live: FLEA_BIN is not set, so the File types round trip was skipped");
+        return;
+    };
+    let mut live = Live::start(&bin);
+    live.stdin.write_all(Request::MenuInstalled { id: 41 }.line().as_bytes()).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let apps = loop {
+        let line = live.lines.recv_timeout(deadline.saturating_duration_since(Instant::now())).expect("no catalogue answer");
+        if let Some(Reply::Installed { id, apps }) = wire::parse(&line) {
+            assert_eq!(id, 41, "an answer for another request");
+            break apps.expect("the catalogue was refused");
+        }
+    };
+    drop(live);
+    assert!(!apps.is_empty(), "a desktop box lists no launchable application");
+    assert!(apps.iter().all(|(id, _)| crate::openrules::is_app(id)), "an id the rule table would refuse");
+
+    // A rule built from the first entry, through the real validator, read back as a rule.
+    let state = std::env::temp_dir().join(format!("flea-iced-rules-{}", std::process::id()));
+    std::fs::create_dir_all(&state).unwrap();
+    let patch = crate::openrules::with_rule(&serde_json::json!({}), "NII.GZ", &apps[0].0).unwrap();
+    let out = Command::new(&bin).env("XDG_STATE_HOME", &state).arg("--ui-state").arg(patch.to_string()).output().unwrap();
+    let _ = std::fs::remove_dir_all(&state);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(crate::openrules::rules(&doc), vec![(".nii.gz".to_string(), apps[0].0.clone())]);
 }

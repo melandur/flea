@@ -21,6 +21,8 @@ mod nav;
 mod netopen;
 mod netshell;
 mod network;
+mod openrulecard;
+mod openrules;
 mod opreplies;
 mod ops;
 mod pane;
@@ -183,6 +185,8 @@ enum Message {
     PanelSection(&'static str),
     PanelActivate(usize),
     PanelPick(usize, usize),
+    PanelRemoveRule(usize),
+    Card(openrulecard::CardMsg),
     CrumbPressed(usize),
     CrumbSettle(u64),
     PathInput(String),
@@ -204,9 +208,6 @@ enum Message {
     QuitDeadline,
 }
 
-
-
-
 impl Flea {
     fn say(&mut self, text: String) -> Task<Message> {
         self.show(text, false)
@@ -218,10 +219,6 @@ impl Flea {
         self.message = Some((text, gen, alert));
         Task::perform(sleep(Duration::from_millis(pane::MESSAGE_MS)), move |_| Message::Expired(gen))
     }
-
-
-
-
 
     // Every input ends by asking whether the watched re-read it was holding can now be paid.
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -239,7 +236,6 @@ impl Flea {
         let effects = self.pane.viewport(first, visible, last);
         self.run(effects)
     }
-
 
     fn handle(&mut self, message: Message) -> Task<Message> {
         match message {
@@ -290,7 +286,9 @@ impl Flea {
             | Message::PanelClose
             | Message::PanelSection(_)
             | Message::PanelActivate(_)
-            | Message::PanelPick(..)) => self.panel_message(m),
+            | Message::PanelPick(..)
+            | Message::PanelRemoveRule(_)
+            | Message::Card(_)) => self.panel_message(m),
             m @ (Message::SearchLive(..)
             | Message::SearchPaste(_)
             | Message::SortColumn(..)
@@ -375,7 +373,6 @@ impl Flea {
         ])
     }
 }
-
 
 fn main() -> iced::Result {
     iced::application(boot::boot, Flea::update, Flea::view)

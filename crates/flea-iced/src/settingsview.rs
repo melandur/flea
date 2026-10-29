@@ -22,7 +22,8 @@ impl Flea {
             .max_width(900)
             .height(Length::Fill)
             .style(move |_| container::Style::default().background(p.background).border(Border { color: p.muted, width: 1.0, radius: 8.0.into() }));
-        stack![base, opaque(ground), container(opaque(card)).padding(48).center(Length::Fill)].into()
+        let panel: Element<'a, Message> = stack![base, opaque(ground), container(opaque(card)).padding(48).center(Length::Fill)].into();
+        self.card_layer(panel)
     }
 
     fn panel_rail(&self) -> Element<'_, Message> {
@@ -101,6 +102,16 @@ impl Flea {
                 row![space().width(MARK), stops].spacing(10).into()
             }
             Kind::Action | Kind::Favourite => row![mark(r.glyph), text(r.label.clone()).color(ink).width(Length::Fill), text(r.value.clone()).size(11.0).color(p.muted)].spacing(10).align_y(iced::Center).into(),
+            // A rule: its ending, its application's own name, and the mark that removes it.
+            Kind::OpenRule => row![
+                mark(r.glyph),
+                text(r.label.clone()).color(ink).width(Length::Fill),
+                text(r.value.clone()).color(p.muted),
+                mouse_area(text("×").color(p.muted)).on_press(Message::PanelRemoveRule(i)),
+            ]
+            .spacing(10)
+            .align_y(iced::Center)
+            .into(),
             Kind::Lock => row![mark(r.glyph), text(r.label.clone()).color(p.muted).width(Length::Fill), text("always").size(11.0).color(p.muted)].spacing(10).into(),
             Kind::Fact => row![
                 mark(r.glyph),

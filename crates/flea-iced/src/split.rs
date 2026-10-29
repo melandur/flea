@@ -188,6 +188,10 @@ impl Flea {
         use crate::wire::Reply;
         match event {
             Event::Reply(reply @ Reply::Peeked { .. }) if key == self.backend_key => self.peeked(reply),
+            Event::Reply(Reply::Installed { id, apps }) if key == self.backend_key => {
+                self.catalogue_answered(id, apps);
+                Task::none()
+            }
             Event::Reply(reply @ Reply::Meta { .. }) if key == self.backend_key => {
                 self.meta_answered(reply);
                 Task::none()

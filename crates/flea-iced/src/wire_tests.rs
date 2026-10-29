@@ -57,3 +57,11 @@ fn the_meta_sample_from_the_backend_parses_its_archive_half() {
     let line = r#"{"t":"meta","row":4,"w":0,"h":0,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true},{"n":"say \"hi\".txt","d":false}],"lines":0,"partial":false,"lfailed":false,"target":"","targetdir":false,"owner":"gm"}"#;
     assert_eq!(parse(line), Some(Reply::Meta { row: 4, entries: 214, names: vec![("ui".into(), true), ("say \"hi\".txt".into(), false)], archive_failed: false }));
 }
+
+#[test]
+fn the_installed_catalogue_parses_and_a_refusal_carries_its_reason() {
+    let ok = r#"{"t":"menuaction","id":7,"op":"installed","ok":true,"installed":[{"id":"gimp.desktop","label":"GIMP","icon":"gimp","default":false}]}"#;
+    assert_eq!(parse(ok), Some(Reply::Installed { id: 7, apps: Ok(vec![("gimp.desktop".into(), "GIMP".into())]) }));
+    let no = r#"{"t":"menuaction","id":7,"op":"installed","ok":false,"error":"no registry"}"#;
+    assert_eq!(parse(no), Some(Reply::Installed { id: 7, apps: Err("no registry".into()) }));
+}

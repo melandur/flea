@@ -1,7 +1,7 @@
 use super::*;
 
 fn facts() -> Facts {
-    Facts { home: "/home/u".into(), base_size: 14, monitor_scale: 1.25, version: "flea 0.3.8".into(), handler: "flea".into(), save_status: String::new() }
+    Facts { home: "/home/u".into(), base_size: 14, monitor_scale: 1.25, version: "flea 0.3.8".into(), handler: "flea".into(), save_status: String::new(), apps: vec![] }
 }
 
 #[test]

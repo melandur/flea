@@ -24,6 +24,11 @@ pub struct Panel {
     pub cursor: usize,
     pub doc: Value,
     pub facts: Option<Facts>,
+    // The File types card, and the catalogue request it is waiting on (0 while none is out).
+    pub card: Option<crate::openrulecard::Card>,
+    pub catalogue_asked: u64,
+    pub requests: u64,
+    pub catalogue_error: String,
 }
 
 fn output(argv: &[&str]) -> String {
@@ -53,6 +58,7 @@ fn gather(bin: &str) -> Facts {
         version: output(&[bin, "--version"]),
         handler: output(&["xdg-mime", "query", "default", "inode/directory"]),
         save_status: String::new(),
+        apps: vec![],
     }
 }
 
@@ -65,13 +71,15 @@ impl Flea {
             }
             Message::PanelSaved(doc) => self.panel_saved(doc),
             Message::PanelClose => {
-                self.panel.open = false;
+                self.close_panel();
                 Task::none()
             }
             Message::PanelSection(id) => {
                 self.show_section(id);
                 Task::none()
             }
+            Message::PanelRemoveRule(i) => self.remove_rule(i),
+            Message::Card(msg) => self.card_message(msg),
             Message::PanelActivate(i) => self.panel_activate(i),
             Message::PanelPick(i, value) => self.panel_pick(i, value),
             _ => Task::none(),
@@ -107,13 +115,27 @@ impl Flea {
         self.panel.cursor = settings::first_row(&rows);
     }
 
+    // The catalogue goes with the panel, so an application installed meanwhile is listed next time.
+    pub(crate) fn close_panel(&mut self) {
+        self.panel.open = false;
+        self.panel.card = None;
+        self.panel.catalogue_asked = 0;
+        if let Some(f) = self.panel.facts.as_mut() {
+            f.apps.clear();
+        }
+    }
+
     pub(crate) fn show_section(&mut self, id: &str) {
         self.panel.section = id.to_string();
+        // Every rule row draws its application's own Name=, so the catalogue is asked for here.
+        if id == "open" {
+            self.ask_catalogue();
+        }
         let rows = self.panel_rows();
         self.panel.cursor = settings::first_row(&rows);
     }
 
-    fn write(&mut self, patch: Value) -> Task<Message> {
+    pub(crate) fn panel_write(&mut self, patch: Value) -> Task<Message> {
         let bin = crate::backend::binary();
         Task::perform(blocking(move || {
             let out = std::process::Command::new(&bin).arg("--ui-state").arg(patch.to_string()).output().ok()?;
@@ -150,12 +172,14 @@ impl Flea {
                     self.run(effects)
                 };
             }
+            Kind::OpenRule => return self.open_card(&r.label, &r.caption),
             Kind::Group => {
                 return match (r.action, r.id.as_str()) {
                     (Some("addFavourite"), _) => self.add_this_folder(),
+                    (Some("addOpenRule"), _) => self.open_card("", ""),
                     (Some("pinFolder"), _) => self.say("The shelf is not in this build yet.".into()),
-                    (_, "shelf.enabled") => self.write(json!({ "shelf": { "enabled": r.state != "all" } })),
-                    _ => self.write(places_rows::menu_patch(&doc, &r.ids, true)),
+                    (_, "shelf.enabled") => self.panel_write(json!({ "shelf": { "enabled": r.state != "all" } })),
+                    _ => self.panel_write(places_rows::menu_patch(&doc, &r.ids, true)),
                 };
             }
             _ => {}
@@ -169,7 +193,7 @@ impl Flea {
                 self.show_section("view");
                 Task::none()
             }
-            "startFolder" => self.write(json!({ "startFolder": self.pane.path })),
+            "startFolder" => self.panel_write(json!({ "startFolder": self.pane.path })),
             "keyboardSheet" => self.say("The keyboard sheet is not in this build yet.".into()),
             "reportIssue" | "support" => {
                 let url = if r.id == "support" { "https://github.com/sponsors/thisisgm" } else { "https://github.com/thisisgm/flea/issues" };
@@ -185,14 +209,14 @@ impl Flea {
                     }
                     None => shown.push(key.to_string()),
                 }
-                self.write(json!({ "columns": shown }))
+                self.panel_write(json!({ "columns": shown }))
             }
-            "keyHints" => self.write(json!({ "keyHints": !r.on })),
+            "keyHints" => self.panel_write(json!({ "keyHints": !r.on })),
             _ if r.kind == Kind::Check && self.panel.section == "menus" => match menu_id(&r.id) {
                 "" => Task::none(),
-                id => self.write(places_rows::menu_patch(&doc, &[id], false)),
+                id => self.panel_write(places_rows::menu_patch(&doc, &[id], false)),
             },
-            _ if r.kind == Kind::Check => self.write(settings::patch(&r.id, json!(!r.on))),
+            _ if r.kind == Kind::Check => self.panel_write(settings::patch(&r.id, json!(!r.on))),
             _ => self.panel_step(index, 1),
         }
     }
@@ -205,17 +229,17 @@ impl Flea {
         let doc = &self.panel.doc;
         let effective = if following(doc) { base } else { nearest(doc.pointer("/display/textSize/mode").and_then(Value::as_f64).unwrap_or(0.0) as u32) };
         match r.id.as_str() {
-            "textMode" if following(doc) => self.write(json!({ "display": { "textSize": { "mode": nearest(effective) } } })),
-            "textMode" => self.write(json!({ "display": { "textSize": { "mode": "system" } } })),
+            "textMode" if following(doc) => self.panel_write(json!({ "display": { "textSize": { "mode": nearest(effective) } } })),
+            "textMode" => self.panel_write(json!({ "display": { "textSize": { "mode": "system" } } })),
             "textStop" => {
                 let at = places_rows::STOPS.iter().position(|s| *s == nearest(effective)).unwrap_or(0) as isize;
                 let to = (at + direction).clamp(0, places_rows::STOPS.len() as isize - 1) as usize;
-                self.write(json!({ "display": { "textSize": { "mode": places_rows::STOPS[to] } } }))
+                self.panel_write(json!({ "display": { "textSize": { "mode": places_rows::STOPS[to] } } }))
             }
             _ if r.kind == Kind::Choice && !r.values.is_empty() => {
                 let n = r.values.len() as isize;
                 let target = ((r.selected as isize + direction) % n + n) % n;
-                self.write(settings::patch(&r.id, r.values[target as usize].clone()))
+                self.panel_write(settings::patch(&r.id, r.values[target as usize].clone()))
             }
             _ => Task::none(),
         }
@@ -231,7 +255,7 @@ impl Flea {
             return if (value == 0) != follows { self.panel_step(index, 1) } else { Task::none() };
         }
         match r.values.get(value).cloned() {
-            Some(v) => self.write(settings::patch(&r.id, v)),
+            Some(v) => self.panel_write(settings::patch(&r.id, v)),
             None => Task::none(),
         }
     }
@@ -248,12 +272,18 @@ impl Flea {
     }
 
     pub(crate) fn panel_key(&mut self, key: &Key) -> Task<Message> {
+        if self.panel.card.is_some() {
+            return self.card_key(key);
+        }
         let rows = self.panel_rows();
+        let on_rule = !self.panel.on_rail && rows.get(self.panel.cursor).is_some_and(|r| r.kind == Kind::OpenRule);
         match key.as_ref() {
             Key::Named(Named::Escape) => {
-                self.panel.open = false;
+                self.close_panel();
                 Task::none()
             }
+            // SettingsRest rule 4: the row's own mark is x, so x on the cursor row is the same action.
+            Key::Character("x") | Key::Named(Named::Delete) if on_rule => self.remove_rule(self.panel.cursor),
             Key::Named(Named::Tab) => {
                 self.panel.on_rail = !self.panel.on_rail;
                 Task::none()

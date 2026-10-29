@@ -32,6 +32,8 @@ pub enum Kind {
     Favourite,
     Ruler,
     KeyPreview,
+    // A File types rule: its ending, and the application it opens in.
+    OpenRule,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -112,7 +114,7 @@ pub fn focusable(r: &Row) -> bool {
     match r.kind {
         Kind::Group => r.master || r.action.is_some(),
         Kind::Ruler => r.on,
-        Kind::Check | Kind::Choice | Kind::Action | Kind::Favourite => true,
+        Kind::Check | Kind::Choice | Kind::Action | Kind::Favourite | Kind::OpenRule => true,
         _ => false,
     }
 }
@@ -140,6 +142,8 @@ pub struct Facts {
     pub version: String,
     pub handler: String,
     pub save_status: String,
+    // The installed applications, asked for while the panel is open and dropped when it closes.
+    pub apps: Vec<crate::openrules::App>,
 }
 
 pub fn rows(section: &str, data: &Value, facts: &Facts) -> Vec<Row> {
@@ -149,8 +153,7 @@ pub fn rows(section: &str, data: &Value, facts: &Facts) -> Vec<Row> {
         "places" => places_rows::rows(data, facts),
         "shelf" => places_rows::shelf_rows(data),
         "preview" => preview_rows(data),
-        // Stage 6c-ii: the table needs the installed applications, through menu_actions' catalogue.
-        "open" => vec![group("File types"), hint("Choosing an application for a file ending is not in this build yet.")],
+        "open" => crate::openrules::rows(data, &facts.apps),
         "keys" => key_rows(),
         "display" => places_rows::display_rows(data, facts),
         "theme" => theme_rows(data),

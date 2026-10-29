@@ -212,7 +212,16 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      13 px on a 37 px row, which is what a 14 px Omarchy base gives), Hyprland-aware icons, the menus
      and key hints, the shelf. **Not ported:** favourite reordering and removal from the panel, the
      keyboard sheet, and File types (6c-ii).
-   - **6c-ii, File types.** The open-rule table and its card, which ask `menu_actions` for the
-     installed applications.
+   - **6c-ii, File types (done, the card not yet seen on screen).** `openrules.rs` is
+     `ui/js/SettingsOpen.js`: the ending's shape and normalisation, the stored table with every
+     ill-shaped rule left out, one rule per ending kept in ending order, and the whole table written
+     back, because `src/uistate.rs` refuses a list holding one bad rule. `openrulecard.rs` is
+     `ui/OpenRuleDialog.qml`: the ending, the search, the application list with its cursor, Save only
+     with a valid ending and an application under the cursor; `x`, Delete and the row's own mark
+     remove a rule. The catalogue is `menuaction` `installed` under a request id of the panel's own,
+     asked when File types is shown and dropped with the panel. A live test reads the real catalogue
+     and writes a rule built from it through the real validator. **A quirk carried over, not fixed:**
+     `OpenWith.matching` lower-cases each label and not the typed text, so a search with a capital
+     letter matches nothing, in QML and here alike.
 7. The picker for `tools/flea-portal`, then `flea --gui` switches to the iced binary, after a
    field-bench run says the switch does not lose a column Flea wins today.

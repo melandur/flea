@@ -50,6 +50,8 @@ pub enum Reply {
     Searching { n: usize, scanned: u64, ms: f64 },
     // A read-only look at a directory that is not the listing; `hidden` echoes the request's flag.
     Peeked { path: String, hidden: bool, rows: Vec<Row> },
+    // menuaction op installed: the whole catalogue of launchable desktop entries, or why not.
+    Installed { id: u64, apps: Result<Vec<(String, String)>, String> },
     Searched { n: usize, scanned: u64, ms: f64, cancelled: bool },
     Other,
 }
@@ -110,6 +112,16 @@ pub fn parse(line: &str) -> Option<Reply> {
         "made" => Reply::Made { path: field("path") },
         "undone" => Reply::Undone { op: field("op") },
         "thumbed" => Reply::Thumbed { row: uint("row")? as usize, file: field("file") },
+        "menuaction" if v.get("op").and_then(Value::as_str) == Some("installed") => Reply::Installed {
+            id: uint("id").unwrap_or(0),
+            apps: if flag("ok") {
+                Ok(v.get("installed").and_then(Value::as_array).into_iter().flatten()
+                    .filter_map(|a| Some((a.get("id")?.as_str()?.to_string(), a.get("label")?.as_str()?.to_string())))
+                    .collect())
+            } else {
+                Err(field("error"))
+            },
+        },
         "peeked" => Reply::Peeked {
             path: field("path"),
             hidden: flag("hidden"),
@@ -176,6 +188,7 @@ pub enum Request {
     Search { path: String, query: String, hidden: bool, shallow: bool },
     SearchCancel,
     Peek { path: String, first: usize, hidden: bool },
+    MenuInstalled { id: u64 },
     Sort { order: Order },
     Quit,
 }
@@ -203,6 +216,7 @@ impl Request {
             Request::ThumbCancel { rows } => json!({"c": "thumbcancel", "rows": rows}),
             Request::Search { path, query, hidden, shallow } => json!({"c": "search", "path": path, "query": query, "hidden": hidden, "shallow": shallow}),
             Request::SearchCancel => json!({"c": "searchcancel"}),
+            Request::MenuInstalled { id } => json!({"c": "menuaction", "op": "installed", "id": id}),
             Request::Peek { path, first, hidden } => json!({"c": "peek", "path": path, "first": first, "hidden": hidden}),
             Request::Sort { order } => json!({
                 "c": "sort", "by": order.by, "desc": order.desc, "foldersFirst": order.folders_first, "groupByKind": order.group_by_kind,
