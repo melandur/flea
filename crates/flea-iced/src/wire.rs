@@ -42,6 +42,8 @@ pub enum Reply {
     Renamed { path: String },
     Made { path: String },
     Undone { op: String },
+    // file is empty rather than absent on failure, so a row that was asked for always answers.
+    Thumbed { row: usize, file: String },
     Other,
 }
 
@@ -100,6 +102,7 @@ pub fn parse(line: &str) -> Option<Reply> {
         "renamed" => Reply::Renamed { path: field("path") },
         "made" => Reply::Made { path: field("path") },
         "undone" => Reply::Undone { op: field("op") },
+        "thumbed" => Reply::Thumbed { row: uint("row")? as usize, file: field("file") },
         "error" => Reply::Error { r#where: field("where"), path: field("path"), msg: field("msg") },
         _ => Reply::Other,
     })
@@ -134,6 +137,9 @@ pub enum Request {
     // No name: the backend answers with the first free "New Folder".
     Mkdir { path: String },
     Undo,
+    // Never sent with an empty rows: thumbcancel with none cancels everything queued.
+    Thumb { rows: Vec<usize> },
+    ThumbCancel { rows: Vec<usize> },
     Quit,
 }
 
@@ -156,6 +162,8 @@ impl Request {
             Request::Rename { path, to } => json!({"c": "rename", "path": path, "to": to}),
             Request::Mkdir { path } => json!({"c": "mkdir", "path": path}),
             Request::Undo => json!({"c": "undo"}),
+            Request::Thumb { rows } => json!({"c": "thumb", "rows": rows}),
+            Request::ThumbCancel { rows } => json!({"c": "thumbcancel", "rows": rows}),
             Request::Quit => json!({"c": "quit"}),
         };
         format!("{v}\n")
@@ -178,7 +186,8 @@ mod tests {
 
     #[test]
     fn an_unknown_line_is_other_and_junk_is_none() {
-        assert_eq!(parse(r#"{"t":"thumbed","row":2,"file":"/x.png","ms":1.0}"#), Some(Reply::Other));
+        assert_eq!(parse(r#"{"t":"dirsized","row":4,"bytes":1048576,"partial":false,"entries":12,"ms":12.500}"#), Some(Reply::Other));
+        assert_eq!(parse(r#"{"t":"thumbed","row":2,"file":"/x.png","ms":1.0}"#), Some(Reply::Thumbed { row: 2, file: "/x.png".into() }));
         assert_eq!(parse("not json"), None);
     }
 

@@ -1,9 +1,11 @@
 // Flea's window in iced: the listing pane and the write operations over the unchanged `flea --backend`.
 // Everything the QML tree does that is not here yet says so rather than doing nothing.
 mod backend;
+mod contrast;
 mod format;
 #[cfg(test)]
 mod live_tests;
+mod marks;
 mod ops;
 mod pane;
 mod prefs;
@@ -12,9 +14,10 @@ mod wire;
 
 use backend::Backend;
 use iced::keyboard::{self, key::Named, Key};
-use iced::widget::{column, container, mouse_area, operation, row, scrollable, space, text, text_input, Id};
+use iced::widget::{column, container, image, mouse_area, operation, row, scrollable, space, svg, text, text_input, Id};
 use iced::{window, Background, Border, Color, Element, Font, Length, Subscription, Task};
 use pane::{Effect, Pane};
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use theme::Palette;
@@ -25,6 +28,15 @@ use wire::{Order, Request};
 const TEXT_PX: f32 = 13.0;
 const ROW_H: f32 = 37.0;
 const PAD_X: f32 = 14.0;
+// Theme.iconSize, the row's own text line box: rowHeight less twice rowPaddingY, 23 px here.
+const ICON_SLOT: f32 = 23.0;
+// Theme.markSize, bodySmall * 1.45; Glyph.qml draws the mark at the smaller of this and the slot.
+const MARK: f32 = 12.0 * 1.45;
+// Decoded at twice the slot so a 1.25 or 2x output scale is not drawn soft; still about 9 kB a row
+// where the 256 px cache PNG would be 256 kB, the saving Image.sourceSize bought in QML.
+const THUMB_PX: u32 = 46;
+// Decoded thumbnails kept beyond the pane's own 240-row map, oldest out first.
+const DECODED_CAP: usize = 480;
 const SIZE_W: f32 = 90.0;
 const DATE_W: f32 = 140.0;
 const LIST_ID: &str = "listing";
@@ -47,6 +59,10 @@ struct Flea {
     quitting: bool,
     viewport_h: f32,
     scroll_y: f32,
+    // Keyed by the cache path alone: every thumbed answer decodes again and replaces the entry, so a
+    // regenerated thumbnail at the same path cannot show its old frame (AGENTS.md "Icons in the row").
+    decoded: HashMap<String, image::Handle>,
+    decoded_order: VecDeque<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +75,11 @@ enum Message {
     RenameSubmit,
     Opened(Option<i32>, String),
     WatchFired,
+    Settled(u64),
+    // The scrollable reports only on a scroll, so the window's own size is what tells the pane how
+    // many rows it shows before the first one.
+    Resized(iced::Size),
+    Decoded(String, Option<image::Handle>),
     Expired(u64),
     Saved(bool),
     CloseRequested,
@@ -98,7 +119,9 @@ fn boot() -> (Flea, Task<Message>) {
         group_by_kind: prefs.group_by_kind,
     };
     // 36 rows is the tiled height measured on this box; the first viewport report corrects it.
-    let pane = Pane::new(prefs.hidden, 36).with_order(order, prefs.wrap_at_ends);
+    let pane = Pane::new(prefs.hidden, 36)
+        .with_order(order, prefs.wrap_at_ends)
+        .with_view(&prefs.thumbnails, prefs.file_type_colours);
     let mut flea = Flea {
         pane,
         backend: None,
@@ -111,6 +134,8 @@ fn boot() -> (Flea, Task<Message>) {
         quitting: false,
         viewport_h: 36.0 * ROW_H,
         scroll_y: 0.0,
+        decoded: HashMap::new(),
+        decoded_order: VecDeque::new(),
     };
     let task = match Backend::spawn() {
         Ok(b) => {
@@ -160,6 +185,13 @@ impl Flea {
                 Effect::Message(text) => tasks.push(self.show(text, false)),
                 Effect::Alert(text) => tasks.push(self.show(text, true)),
                 Effect::FocusRename => tasks.push(operation::focus(RENAME_ID)),
+                Effect::Settle(generation, ms) => {
+                    tasks.push(Task::perform(sleep(Duration::from_millis(ms)), move |_| Message::Settled(generation)));
+                }
+                Effect::DecodeThumb(path) => {
+                    let key = path.clone();
+                    tasks.push(Task::perform(blocking(move || decode(&path)), move |h| Message::Decoded(key.clone(), h)));
+                }
                 Effect::SaveHidden(hidden) => {
                     let bin = backend::binary();
                     tasks.push(Task::perform(blocking(move || prefs::save_hidden(&bin, hidden)), Message::Saved));
@@ -250,6 +282,16 @@ impl Flea {
         Task::batch([task, self.run(owed)])
     }
 
+    fn report_viewport(&mut self) -> Task<Message> {
+        let first = (self.scroll_y / ROW_H).floor().max(0.0) as usize;
+        // Fully visible rows, which is what the cursor clamp wants; the view draws one more.
+        let visible = (self.viewport_h / ROW_H).floor().max(1.0) as usize;
+        // Thumbs.viewport: measured in pixels, so a row straddling the bottom edge is asked for.
+        let last = ((self.scroll_y + self.viewport_h) / ROW_H).ceil().max(1.0) as usize - 1;
+        let effects = self.pane.viewport(first, visible, last);
+        self.run(effects)
+    }
+
     // ui/js/Tap.js reads a tap count, and iced's press arrives on both clicks of a double, so the
     // count is taken here: a second press on the same row inside the interval is the second tap.
     fn tap(&mut self, index: usize) -> Task<Message> {
@@ -281,14 +323,15 @@ impl Flea {
                 self.say(format!("The backend exited with code {code}."))
             }
             Message::Key(event) => self.key(event),
+            Message::Resized(size) => {
+                // The header and the status bar are a row each.
+                self.viewport_h = (size.height - 2.0 * ROW_H).max(ROW_H);
+                self.report_viewport()
+            }
             Message::Scrolled(viewport) => {
                 self.scroll_y = viewport.absolute_offset().y;
                 self.viewport_h = viewport.bounds().height;
-                let first = (self.scroll_y / ROW_H).floor().max(0.0) as usize;
-                // Fully visible rows, which is what the cursor clamp wants; the view draws one more.
-                let visible = (self.viewport_h / ROW_H).floor().max(1.0) as usize;
-                let effects = self.pane.viewport(first, visible);
-                self.run(effects)
+                self.report_viewport()
             }
             Message::RowPressed(i) => self.tap(i),
             Message::RenameInput(draft) => {
@@ -310,6 +353,30 @@ impl Flea {
                     }
                     _ => self.say("That file could not be opened.".into()),
                 }
+            }
+            Message::Settled(generation) => {
+                let effects = self.pane.settled(generation);
+                self.run(effects)
+            }
+            Message::Decoded(path, handle) => {
+                match handle {
+                    Some(h) => {
+                        if self.decoded.insert(path.clone(), h).is_none() {
+                            self.decoded_order.push_back(path);
+                        }
+                        while self.decoded_order.len() > DECODED_CAP {
+                            if let Some(old) = self.decoded_order.pop_front() {
+                                self.decoded.remove(&old);
+                            }
+                        }
+                    }
+                    // An evicted or unreadable cache file: the row keeps its mark, as Row.qml's
+                    // thumbDrawn falls back on Image.Error.
+                    None => {
+                        self.decoded.remove(&path);
+                    }
+                }
+                Task::none()
             }
             Message::WatchFired => {
                 let effects = self.pane.watch_fired();
@@ -435,6 +502,7 @@ impl Flea {
                 let size = if r.d { String::new() } else if link { "link".into() } else if r.p == 0 { "--".into() } else { format::size(r.s) };
                 let date = if r.p == 0 { "--".into() } else { format::date(r.m) };
                 row![
+                    self.icon(i, r),
                     text(name).color(ink).width(Length::Fill).wrapping(text::Wrapping::None),
                     text(size).color(p.muted).width(SIZE_W),
                     text(date).color(p.muted).width(DATE_W),
@@ -465,13 +533,44 @@ impl Flea {
         mouse_area(band).on_press(Message::RowPressed(i)).into()
     }
 
+    // The icon slot: the thumbnail when the pane holds a decoded one, the row's mark otherwise. One
+    // slot either way, so the row's geometry never depends on which of the two it draws.
+    fn icon(&self, i: usize, r: &wire::Row) -> Element<'_, Message> {
+        let slot = container(match self.pane.thumb_file(i).and_then(|f| self.decoded.get(f)) {
+            Some(h) => Element::from(image(h.clone()).width(ICON_SLOT).height(ICON_SLOT)),
+            None => {
+                let p = self.palette;
+                let tier = self.pane.file_type_colours;
+                let mark = marks::glyph_for_row(&r.i, r.p, &r.n, r.d, tier);
+                // Theme.markInk: a vendored colour lifted to 3:1 on the background, else the dim ink.
+                let ink = tier
+                    .then(|| marks::row_colour(&r.n, r.p, r.d))
+                    .flatten()
+                    .map(|c| contrast::ensure_ratio(c, p.background, 3.0))
+                    .unwrap_or(p.dim);
+                let size = MARK.min(ICON_SLOT);
+                Element::from(svg(marks::handle(mark, ink)).width(size).height(size))
+            }
+        });
+        slot.width(ICON_SLOT).height(ICON_SLOT).center_x(ICON_SLOT).center_y(ICON_SLOT).into()
+    }
+
     fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
             Subscription::run(backend::events).map(Message::Backend),
             keyboard::listen().map(Message::Key),
             window::close_requests().map(|_| Message::CloseRequested),
+            window::resize_events().map(|(_, size)| Message::Resized(size)),
         ])
     }
+}
+
+// One cache PNG to an icon-slot image. The path is always the backend's own thumbed answer, never a
+// filename, and the decode is a PNG decoder alone; AGENTS.md "Deliberate corners" names the residual.
+fn decode(path: &str) -> Option<image::Handle> {
+    let img = ::image::open(path).ok()?.thumbnail(THUMB_PX, THUMB_PX).to_rgba8();
+    let (w, h) = img.dimensions();
+    Some(image::Handle::from_rgba(w, h, img.into_raw()))
 }
 
 fn main() -> iced::Result {

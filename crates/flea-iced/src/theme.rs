@@ -1,5 +1,7 @@
-// The Omarchy palette, read from the same colors.toml ui/Theme.qml reads. Only the roles the
-// listing pane draws are taken; an absent or unreadable file falls back to the shipped dark set.
+// The Omarchy palette, read from the same colors.toml ui/Theme.qml reads, with ui/js/Palette.js
+// roles: muted, symlink, executable and error each lifted to a WCAG ratio against the background.
+// An absent or unreadable file falls back to the shipped dark set.
+use crate::contrast::{darker, ensure_ratio};
 use iced::Color;
 use std::path::PathBuf;
 
@@ -9,6 +11,8 @@ pub struct Palette {
     pub surface: Color,
     pub foreground: Color,
     pub muted: Color,
+    // Row.qml's dim: the row mark's ink, Qt.darker(foreground, 1.4) and not lifted.
+    pub dim: Color,
     pub accent: Color,
     pub selection: Color,
     pub symlink: Color,
@@ -42,16 +46,20 @@ impl Palette {
             .or_else(|| lookup(body, "background"))
             .or_else(|| lookup(body, "selection"))
             .unwrap_or(d.surface);
+        let foreground = get("foreground", d.foreground);
+        // Palette.js: muted is the file's own key, else Qt.darker(foreground, 1.4), lifted to 3:1.
+        let muted = lookup(body, "muted").unwrap_or_else(|| darker(foreground, 1.4));
         Palette {
             background,
             surface,
-            foreground: get("foreground", d.foreground),
-            muted: get("dark_foreground", get("muted", d.muted)),
+            foreground,
+            muted: ensure_ratio(muted, background, 3.0),
+            dim: darker(foreground, 1.4),
             accent: get("accent", d.accent),
             selection: get("selection", d.selection),
-            symlink: get("cyan", get("color6", d.symlink)),
-            executable: get("green", get("color2", d.executable)),
-            error: get("red", get("color1", d.error)),
+            symlink: ensure_ratio(get("cyan", get("color6", d.symlink)), background, 4.5),
+            executable: ensure_ratio(get("green", get("color2", d.executable)), background, 4.5),
+            error: ensure_ratio(get("red", get("color1", d.error)), background, 4.5),
         }
     }
 
@@ -62,6 +70,7 @@ impl Palette {
             surface: c("#13141c"),
             foreground: c("#a9b1d6"),
             muted: c("#565f89"),
+            dim: darker(c("#a9b1d6"), 1.4),
             accent: c("#7aa2f7"),
             selection: c("#292e42"),
             symlink: c("#449dab"),

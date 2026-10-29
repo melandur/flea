@@ -12,7 +12,9 @@ name = "flea-iced"
 path = "src/main.rs"
 
 [dependencies]
-iced = { version = "0.14", features = ["tokio"] }
+iced = { version = "0.14", features = ["tokio", "image", "svg"] }
+# Decodes a cache PNG to the icon slot off the UI thread, the job QML gave Image.sourceSize.
+image = { version = "0.25", default-features = false, features = ["png"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

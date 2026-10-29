@@ -14,11 +14,23 @@ struct Live {
     stdin: ChildStdin,
     lines: Receiver<String>,
     pane: Pane,
+    sent: Vec<Request>,
+    settles: Vec<u64>,
+    decodes: Vec<String>,
 }
 
 impl Live {
     fn start(bin: &str) -> Live {
-        let mut child = Command::new(bin).arg("--backend").stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
+        Live::start_with(bin, &[])
+    }
+
+    fn start_with(bin: &str, env: &[(&str, &std::path::Path)]) -> Live {
+        let mut cmd = Command::new(bin);
+        cmd.arg("--backend").stdin(Stdio::piped()).stdout(Stdio::piped());
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        let mut child = cmd.spawn().unwrap();
         let stdout = child.stdout.take().unwrap();
         let stdin = child.stdin.take().unwrap();
         let (tx, lines) = mpsc::channel();
@@ -29,14 +41,25 @@ impl Live {
                 }
             }
         });
-        Live { child, stdin, lines, pane: Pane::new(false, 20) }
+        Live { child, stdin, lines, pane: Pane::new(false, 20), sent: vec![], settles: vec![], decodes: vec![] }
     }
 
     fn run(&mut self, effects: Vec<Effect>) {
         for e in effects {
-            if let Effect::Send(r) = e {
-                self.stdin.write_all(r.line().as_bytes()).unwrap();
+            match e {
+                Effect::Send(r) => {
+                    self.sent.push(r.clone());
+                    self.stdin.write_all(r.line().as_bytes()).unwrap();
+                }
+                // No timer here: the settle fires at once, which is what the timer would do idle.
+                Effect::Settle(generation, _) => self.settles.push(generation),
+                Effect::DecodeThumb(path) => self.decodes.push(path),
+                _ => {}
             }
+        }
+        while let Some(generation) = self.settles.pop() {
+            let out = self.pane.settled(generation);
+            self.run(out);
         }
     }
 
@@ -126,6 +149,48 @@ fn the_write_operations_round_trip_through_the_real_backend() {
     live.run(out);
     live.until("the pasted copy listed", |p| p.ops.transfer.is_none() && !p.list_in_flight() && p.rows.iter().any(|r| r.n == "a.txt"));
     assert_eq!(std::fs::read(dst.join("a.txt")).unwrap(), b"alpha");
+    drop(live);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_visible_image_is_thumbnailed_decoded_and_nothing_else_is_asked() {
+    let Some(bin) = std::env::var("FLEA_BIN").ok().filter(|b| !b.is_empty()) else {
+        eprintln!("live: FLEA_BIN is not set, so the thumbnail round trip was skipped");
+        return;
+    };
+    let root = std::env::temp_dir().join(format!("flea-iced-thumbs-{}", std::process::id()));
+    let (dir, cache) = (root.join("pics"), root.join("cache"));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::create_dir_all(&cache).unwrap();
+    // 30 rows: a red image on row 0, then text files, then a second image far below the viewport.
+    let png = ::image::RgbImage::from_pixel(320, 200, ::image::Rgb([220, 20, 20]));
+    png.save(dir.join("a.png")).unwrap();
+    for i in 0..28 {
+        std::fs::write(dir.join(format!("b{i:02}.txt")), b"x").unwrap();
+    }
+    png.save(dir.join("z.png")).unwrap();
+    let dir_s = dir.to_str().unwrap().to_string();
+
+    // The cache root follows XDG_CACHE_HOME, so the operator's own cache is never written.
+    let mut live = Live::start_with(&bin, &[("XDG_CACHE_HOME", &cache)]);
+    live.pane = Pane::new(false, 5).with_view("media", false);
+    let out = live.pane.open(dir_s.clone(), None);
+    live.run(out);
+    live.until("the listing", |p| p.listed_once && !p.list_in_flight());
+    let out = live.pane.viewport(0, 5, 5);
+    live.run(out);
+    live.until("row 0's answer", |p| p.thumb_file(0).is_some() || p.thumbs.get(&0) == Some(&crate::pane::Thumb::None));
+
+    let asked: Vec<usize> = live.sent.iter().filter_map(|r| if let Request::Thumb { rows } = r { Some(rows.clone()) } else { None }).flatten().collect();
+    assert_eq!(asked, vec![0], "only the visible thumbnailable row is ever named");
+    let file = live.pane.thumb_file(0).unwrap_or_else(|| panic!("no thumbnailer answered for a.png; is glycin and bwrap installed?")).to_string();
+    assert!(file.starts_with(cache.to_str().unwrap()), "the thumbnail landed outside the sandbox cache: {file}");
+    assert_eq!(live.decodes, vec![file.clone()]);
+    let decoded = ::image::open(&file).unwrap().thumbnail(46, 46).to_rgba8();
+    let px = decoded.get_pixel(decoded.width() / 2, decoded.height() / 2);
+    assert!(px[0] > 180 && px[1] < 60 && px[2] < 60, "the decoded thumbnail is not the red image: {px:?}");
+    assert!(crate::decode(&file).is_some());
     drop(live);
     let _ = std::fs::remove_dir_all(&root);
 }

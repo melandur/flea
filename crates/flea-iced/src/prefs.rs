@@ -15,6 +15,8 @@ pub struct Prefs {
     pub start_in: String,
     pub start_folder: String,
     pub last_path: String,
+    pub thumbnails: String,
+    pub file_type_colours: bool,
 }
 
 impl Default for Prefs {
@@ -29,6 +31,8 @@ impl Default for Prefs {
             start_in: "home".into(),
             start_folder: String::new(),
             last_path: String::new(),
+            thumbnails: "media".into(),
+            file_type_colours: false,
         }
     }
 }
@@ -52,6 +56,9 @@ impl Prefs {
             start_in: Some(s("startIn")).filter(|x| !x.is_empty()).unwrap_or(d.start_in),
             start_folder: s("startFolder"),
             last_path: s("lastPath"),
+            // ViewState.qml: preview.thumbnails, "media" when absent; display.fileTypeColors, off.
+            thumbnails: v.pointer("/preview/thumbnails").and_then(Value::as_str).unwrap_or("media").to_string(),
+            file_type_colours: v.pointer("/display/fileTypeColors").and_then(Value::as_bool) == Some(true),
         }
     }
 

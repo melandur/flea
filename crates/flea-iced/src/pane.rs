@@ -7,13 +7,18 @@
 // answers `listed` and its first screenful as a pair, and the pair is accepted together.
 use crate::ops::Ops;
 use crate::wire::{Order, Reply, Request, Row};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap, VecDeque};
 
 pub const BUFFER: usize = 150;
 pub const REFETCH_MARGIN: usize = 25;
 pub const MESSAGE_MS: u64 = 4000;
 // One burst is one re-read, absorbed rather than restarted; see AGENTS.md "The open directory is watched".
 pub const WATCH_MS: u64 = 400;
+// AGENTS.md "Thumbnail requests in the GUI": the first screen's settle outlasts the compositor's
+// resize, every later one is the fling debounce, and the map is capped at seven screens of rows.
+pub const FIRST_SETTLE_MS: u64 = 70;
+pub const SETTLE_MS: u64 = 120;
+pub const THUMB_CAP: usize = 240;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Effect {
@@ -26,6 +31,18 @@ pub enum Effect {
     Alert(String),
     SaveHidden(bool),
     FocusRename,
+    // Restart the settle timer: a Settle message carrying this generation after that many ms.
+    Settle(u64, u64),
+    // Decode this cache PNG for the icon slot; a fresh answer always replaces an older picture.
+    DecodeThumb(String),
+}
+
+// ui/js/Thumbs.js: absent is unknown, Asked is waiting, and the two answers are terminal.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Thumb {
+    Asked,
+    File(String),
+    None,
 }
 
 #[derive(Debug)]
@@ -77,6 +94,15 @@ pub struct Pane {
     // The status bar's sticky line, what a running transfer says while it runs.
     pub sticky: String,
     pub(crate) ops: Ops,
+    // preview.thumbnails: "media" asks for every row carrying t, "images" for images, "off" none.
+    pub thumb_mode: String,
+    pub file_type_colours: bool,
+    pub thumbs: HashMap<usize, Thumb>,
+    thumb_order: VecDeque<usize>,
+    // The last row with any pixel on screen, which is what a thumbnail request names.
+    last_partial: usize,
+    settle_gen: u64,
+    settle_ms: u64,
     in_flight: Option<InFlight>,
     window_pending: Option<(usize, usize)>,
     pub(crate) anchor: Option<Anchor>,
@@ -104,7 +130,16 @@ pub(crate) fn parent(path: &str) -> Option<(String, String)> {
 
 impl Pane {
     pub fn new(hidden: bool, visible_rows: usize) -> Self {
-        Pane { hidden, visible_rows: visible_rows.max(1), ..Default::default() }
+        // last_partial starts at the guess too: a settle before the first viewport report must
+        // still name the first screen, which a 0 here shrank to row 0 alone, measured live.
+        let visible_rows = visible_rows.max(1);
+        Pane { hidden, visible_rows, last_partial: visible_rows - 1, ..Default::default() }
+    }
+
+    pub fn with_view(mut self, thumb_mode: &str, file_type_colours: bool) -> Self {
+        self.thumb_mode = thumb_mode.to_string();
+        self.file_type_colours = file_type_colours;
+        self
     }
 
     pub fn with_order(mut self, order: Order, wrap_at_ends: bool) -> Self {
@@ -175,6 +210,7 @@ impl Pane {
             Reply::Error { r#where, path, msg } => self.on_error(&r#where, &path, &msg),
             Reply::Changed { path } => self.on_changed(&path),
             Reply::Located { directory, path, index } => self.on_located(&directory, &path, index),
+            Reply::Thumbed { row, file } => self.on_thumbed(row, file),
             Reply::Other => vec![],
             other => self.receive_op(other),
         }
@@ -198,6 +234,11 @@ impl Pane {
                 self.selection.clear();
                 self.select_anchor = 0;
                 self.renaming = None;
+                // An index names a different file after a new listing, so the whole map goes.
+                self.thumbs.clear();
+                self.thumb_order.clear();
+                self.settle_ms = FIRST_SETTLE_MS;
+                out.push(self.restart_settle());
                 out.push(Effect::ScrollTo(0));
                 out.extend(self.apply_anchor());
                 out.extend(self.pay_debt());
@@ -211,6 +252,7 @@ impl Pane {
                 self.held = start;
                 self.rows = rows;
                 self.kinds = kinds;
+                out.push(self.restart_settle());
                 out.extend(self.request_if_drifted());
             }
         }
@@ -301,11 +343,92 @@ impl Pane {
         self.reread()
     }
 
-    // The scrollable reports which rows are on screen; the held window follows only on drift.
-    pub fn viewport(&mut self, first: usize, visible: usize) -> Vec<Effect> {
+    // The scrollable reports which rows are on screen: `visible` fully, `last_partial` the last with
+    // any pixel showing. The held window follows only on drift; every report restarts the settle.
+    pub fn viewport(&mut self, first: usize, visible: usize, last_partial: usize) -> Vec<Effect> {
         self.first_visible = first;
         self.visible_rows = visible.max(1);
-        self.request_if_drifted()
+        self.last_partial = last_partial;
+        let mut out = vec![self.restart_settle()];
+        out.extend(self.request_if_drifted());
+        out
+    }
+
+    fn restart_settle(&mut self) -> Effect {
+        self.settle_gen += 1;
+        if self.settle_ms == 0 {
+            self.settle_ms = FIRST_SETTLE_MS;
+        }
+        Effect::Settle(self.settle_gen, self.settle_ms)
+    }
+
+    fn allowed(&self, row: Option<&Row>) -> bool {
+        match row {
+            Some(r) if r.t && self.thumb_mode != "off" => self.thumb_mode != "images" || r.i == "image-x-generic",
+            _ => false,
+        }
+    }
+
+    // Thumbs.js plan and applied: ask for visible rows not yet in the map, cancel rows still waiting
+    // that left the viewport. Nothing outside the viewport is ever named (rule 1).
+    pub fn settled(&mut self, generation: u64) -> Vec<Effect> {
+        if generation != self.settle_gen || self.total == 0 || self.in_flight.is_some() {
+            return vec![];
+        }
+        let first = self.first_visible.min(self.total - 1);
+        let last = self.last_partial.max(first).min(self.total - 1);
+        let ask: Vec<usize> = (first..=last)
+            .filter(|i| !self.thumbs.contains_key(i) && self.allowed(self.row_at(*i)))
+            .collect();
+        let mut drop: Vec<usize> = self
+            .thumbs
+            .iter()
+            .filter(|(i, t)| **t == Thumb::Asked && (**i < first || **i > last))
+            .map(|(i, _)| *i)
+            .collect();
+        drop.sort_unstable();
+        for i in &drop {
+            self.thumbs.remove(i);
+            self.thumb_order.retain(|r| r != i);
+        }
+        for i in &ask {
+            self.thumbs.insert(*i, Thumb::Asked);
+            self.thumb_order.push_back(*i);
+        }
+        let mut out = vec![];
+        if !drop.is_empty() {
+            out.push(Effect::Send(Request::ThumbCancel { rows: drop }));
+        }
+        if !ask.is_empty() {
+            out.push(Effect::Send(Request::Thumb { rows: ask }));
+            self.settle_ms = SETTLE_MS;
+        }
+        out
+    }
+
+    fn on_thumbed(&mut self, row: usize, file: String) -> Vec<Effect> {
+        // Every thumbed for a superseded listing precedes the new listed line, so drop them here.
+        if self.in_flight.is_some() {
+            return vec![];
+        }
+        if !self.thumbs.contains_key(&row) {
+            self.thumb_order.push_back(row);
+        }
+        let out = if file.is_empty() { vec![] } else { vec![Effect::DecodeThumb(file.clone())] };
+        self.thumbs.insert(row, if file.is_empty() { Thumb::None } else { Thumb::File(file) });
+        while self.thumb_order.len() > THUMB_CAP {
+            if let Some(old) = self.thumb_order.pop_front() {
+                self.thumbs.remove(&old);
+            }
+        }
+        out
+    }
+
+    pub fn thumb_file(&self, row: usize) -> Option<&str> {
+        match self.thumbs.get(&row) {
+            Some(Thumb::File(f)) => Some(f),
+            _ => None,
+        }
     }
 
     fn request_if_drifted(&mut self) -> Vec<Effect> {
@@ -488,14 +611,14 @@ pub(crate) mod tests {
         let mut p = Pane::new(false, 10);
         p.open("/a".into(), None);
         listed(&mut p, "/a", 100_000);
-        assert!(p.viewport(100, 10).is_empty());
-        let drift = sends(&p.viewport(5000, 10));
+        assert!(sends(&p.viewport(100, 10, 10)).is_empty());
+        let drift = sends(&p.viewport(5000, 10, 5010));
         assert_eq!(drift, vec![Request::Window { start: 5000 - BUFFER, count: 10 + 2 * BUFFER }]);
         // The same position again while that window is out costs no second request.
-        assert!(p.viewport(5000, 10).is_empty());
+        assert!(sends(&p.viewport(5000, 10, 5010)).is_empty());
         p.receive(Reply::Rows { start: 5000 - BUFFER, rows: rows(5000 - BUFFER, 310), kinds: vec![] });
         assert_eq!(p.row_at(5000).unwrap().n, "f005000");
-        assert!(p.viewport(5000, 10).is_empty());
+        assert!(sends(&p.viewport(5000, 10, 5010)).is_empty());
     }
 
     #[test]
@@ -614,5 +737,100 @@ pub(crate) mod tests {
         assert_eq!(parent("/"), None);
         assert_eq!(parent("/a"), Some(("/".into(), "a".into())));
         assert_eq!(parent("/a/b/"), Some(("/a".into(), "b".into())));
+    }
+
+    fn trow(n: &str, t: bool, icon: &str) -> Row {
+        Row { t, i: icon.into(), ..row(n, false) }
+    }
+
+    fn settle(p: &mut Pane) -> Vec<Effect> {
+        let generation = p.settle_gen;
+        p.settled(generation)
+    }
+
+    #[test]
+    fn a_settle_asks_only_visible_thumbnailable_rows_and_never_asks_twice() {
+        let mut p = Pane::new(false, 3).with_view("media", false);
+        p.open("/m".into(), None);
+        p.receive(Reply::Listed { n: 6 });
+        let rows = vec![trow("a.jpg", true, "image-x-generic"), trow("b.txt", false, "text-x-generic"),
+                        trow("c.mp4", true, "video-x-generic"), trow("d.jpg", true, "image-x-generic"),
+                        trow("e.jpg", true, "image-x-generic"), trow("f.jpg", true, "image-x-generic")];
+        let out = p.receive(Reply::Rows { start: 0, rows, kinds: vec![] });
+        assert!(out.contains(&Effect::Settle(p.settle_gen, FIRST_SETTLE_MS)));
+        p.viewport(0, 3, 3);
+        assert_eq!(sends(&settle(&mut p)), vec![Request::Thumb { rows: vec![0, 2, 3] }]);
+        // The next settle is the fling debounce, and a row already asked is not asked again.
+        assert_eq!(p.restart_settle(), Effect::Settle(p.settle_gen, SETTLE_MS));
+        assert!(settle(&mut p).is_empty());
+    }
+
+    #[test]
+    fn a_settle_before_any_viewport_report_names_the_first_screen() {
+        let mut p = Pane::new(false, 3).with_view("media", false);
+        p.open("/m".into(), None);
+        p.receive(Reply::Listed { n: 5 });
+        let rows = (0..5).map(|i| trow(&format!("{i}.jpg"), true, "image-x-generic")).collect();
+        p.receive(Reply::Rows { start: 0, rows, kinds: vec![] });
+        assert_eq!(sends(&settle(&mut p)), vec![Request::Thumb { rows: vec![0, 1, 2] }]);
+    }
+
+    #[test]
+    fn a_stale_settle_does_nothing_and_a_row_left_waiting_is_cancelled_then_asked_again() {
+        let mut p = Pane::new(false, 2).with_view("media", false);
+        p.open("/m".into(), None);
+        p.receive(Reply::Listed { n: 4 });
+        let rows = (0..4).map(|i| trow(&format!("{i}.jpg"), true, "image-x-generic")).collect();
+        p.receive(Reply::Rows { start: 0, rows, kinds: vec![] });
+        p.viewport(0, 2, 1);
+        let stale = p.settle_gen;
+        p.viewport(0, 2, 1);
+        assert!(p.settled(stale).is_empty());
+        assert_eq!(sends(&settle(&mut p)), vec![Request::Thumb { rows: vec![0, 1] }]);
+        p.receive(Reply::Thumbed { row: 0, file: "/c/0.png".into() });
+        p.viewport(2, 2, 3);
+        assert_eq!(sends(&settle(&mut p)), vec![Request::ThumbCancel { rows: vec![1] }, Request::Thumb { rows: vec![2, 3] }]);
+        p.viewport(0, 2, 1);
+        // 0 is answered and terminal; 1 was cancelled back to absent, so it is asked again.
+        let out = sends(&settle(&mut p));
+        assert_eq!(out, vec![Request::ThumbCancel { rows: vec![2, 3] }, Request::Thumb { rows: vec![1] }]);
+    }
+
+    #[test]
+    fn images_mode_skips_video_and_off_asks_nothing() {
+        let mut p = Pane::new(false, 2).with_view("images", false);
+        p.open("/m".into(), None);
+        p.receive(Reply::Listed { n: 2 });
+        p.receive(Reply::Rows { start: 0, rows: vec![trow("a.mp4", true, "video-x-generic"), trow("b.png", true, "image-x-generic")], kinds: vec![] });
+        p.viewport(0, 2, 1);
+        assert_eq!(sends(&settle(&mut p)), vec![Request::Thumb { rows: vec![1] }]);
+        p.thumb_mode = "off".into();
+        p.thumbs.clear();
+        assert!(settle(&mut p).is_empty());
+    }
+
+    #[test]
+    fn an_answer_decodes_and_a_late_one_for_a_superseded_listing_is_dropped() {
+        let mut p = Pane::new(false, 2).with_view("media", false);
+        p.open("/m".into(), None);
+        listed(&mut p, "/m", 3);
+        assert_eq!(p.receive(Reply::Thumbed { row: 1, file: "/c/x.png".into() }), vec![Effect::DecodeThumb("/c/x.png".into())]);
+        assert_eq!(p.thumb_file(1), Some("/c/x.png"));
+        p.open("/n".into(), None);
+        assert!(p.receive(Reply::Thumbed { row: 2, file: "/c/y.png".into() }).is_empty());
+        listed(&mut p, "/n", 3);
+        assert_eq!(p.thumb_file(1), None);
+    }
+
+    #[test]
+    fn the_map_is_capped_in_answer_order() {
+        let mut p = Pane::new(false, 2).with_view("media", false);
+        p.open("/m".into(), None);
+        listed(&mut p, "/m", 400);
+        for i in 0..THUMB_CAP + 5 {
+            p.receive(Reply::Thumbed { row: i, file: String::new() });
+        }
+        assert_eq!(p.thumbs.len(), THUMB_CAP);
+        assert!(!p.thumbs.contains_key(&4) && p.thumbs.contains_key(&5));
     }
 }

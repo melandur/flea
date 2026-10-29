@@ -45,7 +45,26 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
    still names `z` and `p`, bare letters the key cut removed. Not ported yet: duplicate (menu only),
    the held-Space paint, the transfer card, retry selection, trash undriven live (`gio trash`
    refuses /tmp).
-3. Icons, the filetype tier and thumbnails, with the settle timer and the no-sweep tests.
+3. **Marks, the filetype tier and thumbnails (done, unmeasured).** `build.rs` generates the mark
+   paths from `ui/js/Icons.js`, the families from `ui/js/FileTypes.js` and the colours from
+   `vendor/yazi-icons.toml` with the generator's own precedence, so nothing is copied by hand, and
+   it fails the build when a family names a mark with no path. `marks.rs` draws them as SVG at
+   stroke 2 with square caps and mitered joins, one cached handle per mark and colour.
+   `contrast.rs` ports `ui/js/Contrast.js` and Qt 6's own integer `QColor::darker`, pinned to two
+   values measured with Qt on this box, because float HSV is off by one in the last bit. The pane
+   ports `ui/js/Thumbs.js`: the 70 ms first settle and 120 ms after, restarted by every viewport
+   report and every arriving window, ask only visible rows carrying `t` in the map's absent state,
+   cancel waiting rows that left, drop answers while a listing is in flight, cap at 240. A cache PNG
+   is decoded off the UI thread at twice the 23 px slot, keyed by path and decoded again on every
+   answer so a regenerated thumbnail cannot show its old frame. The live test thumbnails a real
+   image through the real backend with `XDG_CACHE_HOME` sandboxed, asserts only the visible row was
+   named, and goes red when the settle is mutated into a sweep.
+   **Found while porting:** Stage 1 took muted from `dark_foreground`; `ui/js/Palette.js` takes the
+   file's `muted` or `Qt.darker(foreground, 1.4)` and lifts it to 3:1, and symlink, executable and
+   error are lifted to 4.5:1. Fixed. And the first live run drew no thumbnails: iced's scrollable
+   reports only on a scroll, so the first settle named row 0 alone; the window's resize events now
+   size the viewport and the pane starts from its row guess. Not ported: `display.hyprlandIcons`'s
+   round caps, and the per-view variants (dual-pane and lifted inks).
 4. Rail: places, devices, network, the share browser.
 5. Preview: text, image (through `--preview-image`), archive, table, PDF, media.
 6. Settings panel, theme catalog, tabs, split, search, filter, path bar.
