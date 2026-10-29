@@ -24,6 +24,28 @@ pub struct Row {
     pub l: Option<String>,
 }
 
+// docs/protocol.md "meta": w and h from the file's header, ms and rate from the probe, entries and
+// unpacked exact whenever non-zero, lines a floor when partial, and lines_failed when no count exists.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Meta {
+    pub row: usize,
+    pub token: u64,
+    pub w: u64,
+    pub h: u64,
+    pub ms: u64,
+    pub rate: u64,
+    pub entries: u64,
+    pub unpacked: u64,
+    pub archive_failed: bool,
+    pub names: Vec<(String, bool)>,
+    pub lines: u64,
+    pub partial: bool,
+    pub lines_failed: bool,
+    pub target: String,
+    pub target_dir: bool,
+    pub owner: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reply {
     Listed { n: usize },
@@ -46,9 +68,8 @@ pub enum Reply {
     Undone { op: String },
     // file is empty rather than absent on failure, so a row that was asked for always answers.
     Thumbed { row: usize, file: String },
-    // The archive half of a meta answer: the exact entry count, the first names, and whether the
-    // index read failed, in which case the counts are zero and say nothing.
-    Meta { row: usize, entries: u64, names: Vec<(String, bool)>, archive_failed: bool },
+    // One row's extras, docs/protocol.md "meta": every field the row did not ask for is zero.
+    Meta(Meta),
     Searching { n: usize, scanned: u64, ms: f64 },
     // A read-only look at a directory that is not the listing; `hidden` echoes the request's flag.
     // failed: the folder could not be read, which answers zero rows the way an empty one does.
@@ -168,14 +189,26 @@ pub fn parse(line: &str) -> Option<Reply> {
             ms: v.get("ms").and_then(Value::as_f64).unwrap_or(0.0),
             cancelled: flag("cancelled"),
         },
-        "meta" => Reply::Meta {
+        "meta" => Reply::Meta(Meta {
             row: uint("row")? as usize,
+            token: uint("token").unwrap_or(0),
+            w: uint("w").unwrap_or(0),
+            h: uint("h").unwrap_or(0),
+            ms: uint("ms").unwrap_or(0),
+            rate: uint("rate").unwrap_or(0),
             entries: uint("entries").unwrap_or(0),
+            unpacked: uint("unpacked").unwrap_or(0),
+            archive_failed: flag("afailed"),
             names: v.get("names").and_then(Value::as_array).into_iter().flatten()
                 .filter_map(|e| Some((e.get("n")?.as_str()?.to_string(), e.get("d").and_then(Value::as_bool).unwrap_or(false))))
                 .collect(),
-            archive_failed: flag("afailed"),
-        },
+            lines: uint("lines").unwrap_or(0),
+            partial: flag("partial"),
+            lines_failed: flag("lfailed"),
+            target: field("target"),
+            target_dir: flag("targetdir"),
+            owner: field("owner"),
+        }),
         "picker" => Reply::Picker(PickerReply {
             id: uint("id")?,
             op: field("op"),
@@ -230,6 +263,9 @@ pub enum Request {
     ThumbCancel { rows: Vec<usize> },
     // One row's archive index, asked only while that archive is the thing open: never a sweep.
     MetaArchive { row: usize },
+    // The preview column's one row, with the three hints its classification names; the token tells
+    // its answer from the overlay's, which sends none and so is answered with 0.
+    Meta { row: usize, text: bool, media: bool, archive: bool, token: u64 },
     Search { path: String, query: String, hidden: bool, shallow: bool },
     SearchCancel,
     Peek { path: String, first: usize, hidden: bool },
@@ -278,6 +314,7 @@ impl Request {
                 "c": "sort", "by": order.by, "desc": order.desc, "foldersFirst": order.folders_first, "groupByKind": order.group_by_kind,
             }),
             Request::MetaArchive { row } => json!({"c": "meta", "row": row, "text": false, "media": false, "archive": true}),
+            Request::Meta { row, text, media, archive, token } => json!({"c": "meta", "row": row, "text": text, "media": media, "archive": archive, "token": token}),
             // The picker window's listRequest sends the same ordering fields the window's does, at
             // their defaults, since a chooser stores no sort of its own.
             Request::PickerList { path, first, hidden, filter } => json!({

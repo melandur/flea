@@ -13,6 +13,8 @@ mod jobkeys;
 mod jobshell;
 mod jobview;
 mod chrome;
+mod colpreview;
+mod columnpreview;
 mod columns;
 mod columnsview;
 mod contrast;
@@ -20,6 +22,7 @@ mod devices;
 mod delimited;
 mod dialog;
 mod dialogview;
+mod facts;
 mod effects;
 mod form;
 mod filter;
@@ -156,6 +159,7 @@ struct Flea {
     columns: columns::Columns,
     // menuOnNeighbour: the folder and row a neighbour's right click is waiting to raise the menu on.
     pending_menu: Option<(String, String)>,
+    colprev: columnpreview::ColumnShell,
 }
 
 #[derive(Debug, Clone)]

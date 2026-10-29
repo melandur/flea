@@ -431,11 +431,31 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      has no menu, while ColumnPane routes it to menuOnNeighbour, which lists that folder and raises
      the menu on the row once it lands, and that is what this does. A folder the peek could not read
      draws nothing, because StateMessage there carries no message and the empty tile stands down
-     for a locked folder. The menu opens under its row in the middle third. **Not yet: the preview
-     column** (PreviewColumn.qml and ui/js/Facts.js, 8d-ii-b-2); a file under the cursor leaves the
-     third column empty, which is the QML's own answer with `preview.column` off. Peeks are driven
+     for a locked folder. The menu opens under its row in the middle third. Peeks are driven
      headless from a window launched with `view: "columns"`, 48 checks.
-   - **8d-ii-b-2**, the columns view's preview column.
+   - **8d-ii-b-2, the preview column (done; PDF and media in it are 8d-ii-b-3).** `facts.rs` is
+     ui/js/Facts.js with the half of ui/js/Kinds.js it reads: the twelve states in Facts.state's
+     order, each state's rows with the canvas's labels verbatim and a label with no value left out,
+     and the selection's summary, whose numbers become floors when the selection is wider than the
+     held window. `colpreview.rs` is ui/SelectionPreview.qml: the cursor row loads 120 ms after the
+     cursor settles, with a `meta` carrying the column's own token and the three hints its state
+     names (no line count for a sheet), and its thumbnail when the pane has not asked; the directory,
+     the cursor, the selection or the row's identity moving clears it, and only the newest token's
+     answer lands, while the overlay's archive index keeps token 0. `columnpreview.rs` is
+     ui/PreviewColumn.qml: the 16 by 10 frame holds the thumbnail decoded at its own 256 px, the first
+     fourteen lines of a text file under a mebibyte (a muted gutter for code), the first records of a
+     table or sheet, an archive's names and its "+ N more", a stack of up to three marks for a
+     selection, or the kind's mark with the one line saying why it stands in; Error and Unsupported
+     draw their own mark and sentence. The wire's `meta` reply is typed whole for it. `preview.column`
+     and `preview.loadOn` are read and applied live. **Deviations:** the loading state is the word
+     "reading" after the 150 ms hold-off with no animated mark, and code has its gutter but not
+     ui/js/Syntax.js's colours. **Manual loading** waits for `loadPreview`, which no key in the
+     Default preset binds, so with `loadOn: manual` the column says "no preview", in QML and here
+     alike. A selection's Newest and Oldest skip rows with no mtime, where Facts.js let a zero reset
+     the oldest. Driven headless: a settled text row asks for its meta with a line count and draws
+     its first line and four facts, 49 checks.
+   - **8d-ii-b-3**, the preview column's PDF page with its toolbar and its media transport, the
+     syntax colours, and the keyboard's way into the column (focusPreview, unbound today).
    - **8d-iii**, the trash view.
    - **8d-iv**, tabs with the Places menu, and the stored display settings (density, columns, text
      size).

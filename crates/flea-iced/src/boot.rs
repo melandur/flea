@@ -81,6 +81,7 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         sheet_open: false,
         columns: Default::default(),
         pending_menu: None,
+        colprev: Default::default(),
         backend_key: 0,
         side: 0,
         other: None,

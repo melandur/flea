@@ -55,9 +55,16 @@ fn a_request_is_one_line_with_its_newline() {
 }
 
 #[test]
-fn the_meta_sample_from_the_backend_parses_its_archive_half() {
+fn the_meta_sample_from_the_backend_parses_every_field() {
     let line = r#"{"t":"meta","row":4,"w":0,"h":0,"ms":0,"rate":0,"entries":214,"unpacked":3400,"afailed":false,"names":[{"n":"ui","d":true},{"n":"say \"hi\".txt","d":false}],"lines":0,"partial":false,"lfailed":false,"target":"","targetdir":false,"owner":"gm"}"#;
-    assert_eq!(parse(line), Some(Reply::Meta { row: 4, entries: 214, names: vec![("ui".into(), true), ("say \"hi\".txt".into(), false)], archive_failed: false }));
+    let want = Meta { row: 4, entries: 214, unpacked: 3400, names: vec![("ui".into(), true), ("say \"hi\".txt".into(), false)], owner: "gm".into(), ..Default::default() };
+    assert_eq!(parse(line), Some(Reply::Meta(want)));
+    // The column's own request carries its token, and the answer echoes it.
+    let media = r#"{"t":"meta","row":2,"w":1920,"h":1080,"ms":61000,"rate":48000,"entries":0,"unpacked":0,"afailed":false,"names":[],"lines":7,"partial":true,"lfailed":false,"target":"/x","targetdir":true,"owner":"","token":9}"#;
+    let Some(Reply::Meta(m)) = parse(media) else { panic!() };
+    assert_eq!((m.token, m.w, m.h, m.ms, m.rate, m.lines, m.partial, m.target.as_str(), m.target_dir), (9, 1920, 1080, 61000, 48000, 7, true, "/x", true));
+    let ask = Request::Meta { row: 3, text: true, media: false, archive: false, token: 5 }.line();
+    assert!(ask.contains("\"token\":5") && ask.contains("\"text\":true") && ask.contains("\"c\":\"meta\""), "{ask}");
 }
 
 #[test]

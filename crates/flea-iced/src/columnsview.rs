@@ -15,6 +15,11 @@ pub enum Msg {
     // A tap on a neighbour's row: 0 the parent, 2 the child; the row's index in that column.
     Tap(u8, usize),
     Menu(u8, usize),
+    // The preview column's own: its settle, its frame's reader and decode, and the loading hold-off.
+    Settled(u64),
+    Read(String, crate::columnpreview::Surface),
+    Frame(String, Option<iced::widget::image::Handle>),
+    Armed(u64),
 }
 
 impl Flea {
@@ -37,12 +42,14 @@ impl Flea {
             self.pending_menu = None;
             tasks.push(self.open_cursor_menu());
         }
+        tasks.push(self.column_preview_follow());
         Task::batch(tasks)
     }
 
     pub(crate) fn column_message(&mut self, msg: Msg) -> Task<Message> {
         let (which, index) = match msg {
             Msg::Tap(w, i) | Msg::Menu(w, i) => (w, i),
+            _ => return self.column_preview_message(msg),
         };
         let base = if which == 0 { parent_path(&self.pane.path) } else { child_path(&self.pane) };
         let Some(r) = self.columns.rows(&base).get(index).cloned() else { return Task::none() };
@@ -72,7 +79,14 @@ impl Flea {
         let child = child_path(v.pane);
         let trail = v.pane.path.trim_end_matches('/').rsplit('/').next().unwrap_or("").to_string();
         let left = self.peek_column(0, &parent, Some(trail), third);
-        let right: Element<'a, Message> = if child.is_empty() { space().width(Length::Fill).into() } else { self.peek_column(2, &child, None, width - 2.0 * third) };
+        let cursor_file = v.pane.row_at(v.pane.cursor).is_some_and(|r| !r.d);
+        let right: Element<'a, Message> = if !child.is_empty() {
+            self.peek_column(2, &child, None, width - 2.0 * third)
+        } else if cursor_file && self.prefs.preview_column {
+            self.preview_column(width - 2.0 * third)
+        } else {
+            space().width(Length::Fill).into()
+        };
         row![left, container(self.middle_column(v)).width(third), right].height(Length::Fill).into()
     }
 

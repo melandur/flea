@@ -200,8 +200,8 @@ impl Flea {
             Event::Reply(Reply::MenuAction(v)) if key == self.backend_key => self.menuaction_reply(&v),
             Event::Reply(Reply::Job(v)) => self.with_key(key, |f| f.job_reply(&v)),
             Event::Reply(Reply::Permissions(v)) if key == self.backend_key => self.action_reply(&v, true),
-            Event::Reply(reply @ Reply::Meta { .. }) if key == self.backend_key => {
-                self.meta_answered(reply);
+            Event::Reply(Reply::Meta(meta)) if key == self.backend_key => {
+                self.meta_answered(meta);
                 Task::none()
             }
             Event::Reply(reply) => self.with_key(key, |f| {

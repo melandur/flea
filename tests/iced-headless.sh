@@ -250,6 +250,12 @@ launch "$T"; shot columns
 check "the columns view peeks the parent and the cursor's folder" "1 1" "$(grep -c "\"c\":\"peek\".*\"path\":\"$D\"" "$D/trace.log") $(grep -c "\"c\":\"peek\".*\"path\":\"$T/alpha\"" "$D/trace.log")"
 n=$(mark); k -k Down; sleep 0.5
 check "and a move onto another folder peeks that one" 1 "$(since "$n" | grep -c "\"c\":\"peek\".*\"path\":\"$T/beta\"")"
+# A file under the cursor is the preview column's: once the cursor settles, one meta for it under
+# the column's own token, asking for a line count because the row is text.
+# Folders list first and earlier steps leave some behind, so the first file is counted, not assumed.
+n=$(mark); for _ in $(seq 2 "$(find "$T" -mindepth 1 -maxdepth 1 -type d ! -name '.*' | wc -l)"); do k -k Down; done
+sleep 1; shot columns-preview
+check "a settled file row asks for its meta with a line count" 1 "$(since "$n" | grep -c "\"c\":\"meta\".*\"text\":true.*\"token\":[1-9]")"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 APP=""
 

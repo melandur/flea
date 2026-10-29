@@ -6,7 +6,7 @@
 use crate::delimited;
 use crate::kinds::{self, Kind};
 use crate::preview::{self, Action, Archive};
-use crate::wire::{Reply, Request};
+use crate::wire::{Meta, Request};
 use crate::{backend, blocking, sleep, Flea, Message};
 use iced::keyboard::{key::Named, Key};
 use iced::widget::{image, text_editor};
@@ -56,7 +56,7 @@ fn read_text(path: &str) -> Result<String, ()> {
     std::fs::read(path).map(|b| String::from_utf8_lossy(&b).into_owned()).map_err(|_| ())
 }
 
-fn run_sheet(path: &str) -> Result<String, ()> {
+pub(crate) fn run_sheet(path: &str) -> Result<String, ()> {
     let out = std::process::Command::new(backend::binary())
         .args(["--sheet", path, &(preview::TABLE_MAX_RECORDS + 1).to_string()])
         .output()
@@ -216,10 +216,12 @@ impl Flea {
         Task::none()
     }
 
-    // The archive half of a meta line goes to the preview; the pane has no use for it.
-    pub(crate) fn meta_answered(&mut self, reply: Reply) {
-        if let Reply::Meta { row, entries, names, archive_failed } = reply {
-            self.preview.archive_answered(row, Archive { entries, names, failed: archive_failed });
+    // A meta line with no token is the overlay's archive index; one with a token is the column's.
+    pub(crate) fn meta_answered(&mut self, meta: Meta) {
+        if meta.token == 0 {
+            self.preview.archive_answered(meta.row, Archive { entries: meta.entries, names: meta.names, failed: meta.archive_failed });
+        } else {
+            self.column_meta(meta);
         }
     }
 

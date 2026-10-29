@@ -39,6 +39,10 @@ pub struct Prefs {
     pub shelf_enabled: bool,
     // preview.thumbSize, the grid's tile mark and thumbnail size.
     pub thumb_size: String,
+    // ViewState.previewColumn and previewAutomatic: the columns view's file pane, and whether the
+    // cursor row loads into it on its own once the cursor settles.
+    pub preview_column: bool,
+    pub preview_automatic: bool,
 }
 
 impl Default for Prefs {
@@ -74,6 +78,8 @@ impl Default for Prefs {
                 .to_vec(),
             shelf_enabled: false,
             thumb_size: "medium".into(),
+            preview_column: true,
+            preview_automatic: true,
         }
     }
 }
@@ -122,6 +128,8 @@ impl Prefs {
             },
             shelf_enabled: v.pointer("/shelf/enabled").and_then(Value::as_bool) == Some(true),
             thumb_size: v.pointer("/preview/thumbSize").and_then(Value::as_str).unwrap_or("medium").to_string(),
+            preview_column: v.pointer("/preview/column").and_then(Value::as_bool) != Some(false),
+            preview_automatic: v.pointer("/preview/loadOn").and_then(Value::as_str) != Some("manual"),
         }
     }
 

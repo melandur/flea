@@ -222,8 +222,8 @@ fn the_preview_reads_an_archive_index_and_renders_an_image_through_the_real_back
     let deadline = Instant::now() + Duration::from_secs(10);
     let meta = loop {
         let line = live.lines.recv_timeout(deadline.saturating_duration_since(Instant::now())).expect("no meta answer");
-        if let Some(Reply::Meta { row: r, entries, names, archive_failed }) = wire::parse(&line) {
-            break (r, entries, names, archive_failed);
+        if let Some(Reply::Meta(m)) = wire::parse(&line) {
+            break (m.row, m.entries, m.names, m.archive_failed);
         }
     };
     assert_eq!(meta.0, row);
