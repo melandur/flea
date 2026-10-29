@@ -65,7 +65,29 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
    reports only on a scroll, so the first settle named row 0 alone; the window's resize events now
    size the viewport and the pane starts from its row guess. Not ported: `display.hyprlandIcons`'s
    round caps, and the per-view variants (dual-pane and lifted inks).
-4. Rail: places, devices, network, the share browser.
+4. **Rail, split in two.**
+   - **4a, places and devices (done, keyboard and menu undriven live).** `rail.rs` ports
+     `ui/js/Places.js`: Home and the XDG user folders, Trash, the stored favourites with
+     `recordError`'s reasons, the sidebar marks and the width stops. `devices.rs` ports
+     `ui/js/Devices.js`, `ui/js/Eject.js` and the `ui/DeviceMounts.qml` service as a pure state
+     machine: the five-second lsblk poll with its 10 s bound (a listing that fails keeps the rows),
+     mount then open once listed, `gio mount -u`, and `gio mount -e` whose verdict is read off the
+     next listing and never off gio's exit status, each one-shot timer stale-proof by generation.
+     `railshell.rs` and `railview.rs` are the shell's half: Tab moves the keyboard, Ctrl+G shows or
+     hides the rail and saves `places.rail` as a one-leaf patch (measured: a nested patch merges leaf
+     by leaf), Up, Down, Enter that stays, Right that hands the keyboard to what it opened, Escape,
+     `m` and right click for the release menu, drawn over its row with a backdrop that takes the
+     closing press. iced draws no ellipsis, so a label is cut to an estimated budget and the row
+     clips besides; the first live run showed a 37-character drive name painting over the listing.
+     Not ported: Trash view (says so), the trash count, phones, drive size, rail scrolling,
+     favourite editing and the rail cursor's identity-preserving move across a poll (it clamps).
+   - **4b, network (next).** `gio mount -l`, the connect dialog, credentials through
+     `tools/flea-gio-auth`, the share browser, the bookmarks file and its edits.
+
+   **The file budget is held here too.** `tools/flea-file-budget` does not scan `crates/`, but four
+   files had passed its 400-line hard cap, `pane.rs` at 836. Tests moved to `*_tests.rs` beside each
+   module, the way `src/shelf_tests.rs` sits beside `src/shelf.rs`, and `thumbs.rs`, `watch.rs`,
+   `sentence.rs`, `opreplies.rs`, `view.rs`, `keys.rs` and `boot.rs` came out at their seams.
 5. Preview: text, image (through `--preview-image`), archive, table, PDF, media.
 6. Settings panel, theme catalog, tabs, split, search, filter, path bar.
 7. The picker for `tools/flea-portal`, then `flea --gui` switches to the iced binary, after a

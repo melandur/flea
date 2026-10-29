@@ -1,27 +1,38 @@
 // Flea's window in iced: the listing pane and the write operations over the unchanged `flea --backend`.
 // Everything the QML tree does that is not here yet says so rather than doing nothing.
 mod backend;
+mod boot;
 mod contrast;
+mod devices;
 mod format;
 #[cfg(test)]
 mod live_tests;
 mod marks;
+mod opreplies;
 mod ops;
 mod pane;
 mod prefs;
+mod rail;
+mod railshell;
+mod railview;
+mod sentence;
 mod theme;
+mod thumbs;
+mod watch;
+mod keys;
+mod view;
 mod wire;
 
 use backend::Backend;
-use iced::keyboard::{self, key::Named, Key};
-use iced::widget::{column, container, image, mouse_area, operation, row, scrollable, space, svg, text, text_input, Id};
-use iced::{window, Background, Border, Color, Element, Font, Length, Subscription, Task};
+use iced::keyboard;
+use iced::widget::{image, operation, scrollable};
+use iced::{window, Font, Subscription, Task};
 use pane::{Effect, Pane};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use theme::Palette;
-use wire::{Order, Request};
+use wire::Request;
 
 // ui/Theme.qml's measured box metrics at Omarchy's default text size: a 37 px row, read off the IPC
 // seam as Theme.rowHeight, around a bodySmall of 12 px drawn at a 1.8 line box.
@@ -63,6 +74,8 @@ struct Flea {
     // regenerated thumbnail at the same path cannot show its old frame (AGENTS.md "Icons in the row").
     decoded: HashMap<String, image::Handle>,
     decoded_order: VecDeque<String>,
+    rail: railshell::Rail,
+    devices: devices::Devices,
 }
 
 #[derive(Debug, Clone)]
@@ -79,6 +92,13 @@ enum Message {
     // The scrollable reports only on a scroll, so the window's own size is what tells the pane how
     // many rows it shows before the first one.
     Resized(iced::Size),
+    DeviceListed(Option<String>),
+    DeviceRan(devices::Job, Option<i32>),
+    DeviceTimer(devices::Timer, u64),
+    RailPressed(usize),
+    RailMenu(usize),
+    RailChose(rail::Action),
+    RailMenuClosed,
     Decoded(String, Option<image::Handle>),
     Expired(u64),
     Saved(bool),
@@ -106,50 +126,6 @@ fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> impl s
     async move { rx.await.expect("the worker thread answers before it ends") }
 }
 
-fn boot() -> (Flea, Task<Message>) {
-    let bin = backend::binary();
-    let prefs = prefs::Prefs::load(&bin);
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/".into());
-    let argv = std::env::args().nth(1);
-    let start = prefs.start_path(&home, argv.as_deref());
-    let order = Order {
-        by: prefs.sort_by.clone(),
-        desc: prefs.sort_desc,
-        folders_first: prefs.folders_first,
-        group_by_kind: prefs.group_by_kind,
-    };
-    // 36 rows is the tiled height measured on this box; the first viewport report corrects it.
-    let pane = Pane::new(prefs.hidden, 36)
-        .with_order(order, prefs.wrap_at_ends)
-        .with_view(&prefs.thumbnails, prefs.file_type_colours);
-    let mut flea = Flea {
-        pane,
-        backend: None,
-        palette: Palette::load(),
-        message: None,
-        message_gen: 0,
-        modifiers: keyboard::Modifiers::default(),
-        last_tap: None,
-        opening: false,
-        quitting: false,
-        viewport_h: 36.0 * ROW_H,
-        scroll_y: 0.0,
-        decoded: HashMap::new(),
-        decoded_order: VecDeque::new(),
-    };
-    let task = match Backend::spawn() {
-        Ok(b) => {
-            flea.backend = Some(b);
-            let effects = flea.pane.open(start, None);
-            flea.run(effects)
-        }
-        Err(e) => {
-            flea.pane.error = Some(pane::sentence("backend", &e, ""));
-            Task::none()
-        }
-    };
-    (flea, task)
-}
 
 impl Flea {
     fn say(&mut self, text: String) -> Task<Message> {
@@ -229,51 +205,6 @@ impl Flea {
         }
     }
 
-    fn key(&mut self, event: keyboard::Event) -> Task<Message> {
-        if let keyboard::Event::ModifiersChanged(m) = event {
-            self.modifiers = m;
-            return Task::none();
-        }
-        let keyboard::Event::KeyPressed { key, modifiers, repeat, .. } = event else { return Task::none() };
-        if key == Key::Named(Named::Escape) {
-            // An error is dismissed before anything else Escape unwinds.
-            if self.message.as_ref().is_some_and(|m| m.2) {
-                self.message = None;
-                return Task::none();
-            }
-            let effects = self.pane.escape();
-            return self.run(effects);
-        }
-        // The editor owns every other key while it is open; Enter reaches it through on_submit.
-        if self.pane.renaming.is_some() {
-            return Task::none();
-        }
-        let effects = match (key.as_ref(), modifiers.control()) {
-            (Key::Named(Named::ArrowDown), false) => self.pane.step(1),
-            (Key::Named(Named::ArrowUp), false) => self.pane.step(-1),
-            (Key::Named(Named::ArrowLeft), false) => self.pane.up(),
-            (Key::Named(Named::ArrowRight), false) => self.pane.forward(),
-            (Key::Named(Named::Enter), false) => self.pane.activate(),
-            (Key::Named(Named::F5), false) => self.pane.reread(),
-            (Key::Character("h"), true) => self.pane.toggle_hidden(),
-            (Key::Character("c"), true) => self.pane.copy(false),
-            (Key::Character("x"), true) => self.pane.copy(true),
-            (Key::Character("v"), true) => self.pane.paste(),
-            (Key::Character("z"), true) => self.pane.undo(),
-            (Key::Character("a"), true) => self.pane.select_all(),
-            (Key::Character("n"), true) => self.pane.new_folder(),
-            (Key::Named(Named::Delete), false) => self.pane.trash(),
-            (Key::Named(Named::F2), false) => self.pane.start_rename(),
-            // A held Space toggles once; the paint gesture of ui/js/Marks.js is not ported yet.
-            (Key::Named(Named::Space), false) if !repeat => self.pane.toggle_select(),
-            (Key::Character(c), true) if "fbgtmjkl".contains(c) => {
-                return self.say(format!("Ctrl+{} is not in this build yet.", c.to_uppercase()));
-            }
-            (Key::Named(Named::Tab), false) => return self.say("That key is not in this build yet.".into()),
-            _ => return Task::none(),
-        };
-        self.run(effects)
-    }
 
     // Every input ends by asking whether the watched re-read it was holding can now be paid.
     fn update(&mut self, message: Message) -> Task<Message> {
@@ -292,18 +223,6 @@ impl Flea {
         self.run(effects)
     }
 
-    // ui/js/Tap.js reads a tap count, and iced's press arrives on both clicks of a double, so the
-    // count is taken here: a second press on the same row inside the interval is the second tap.
-    fn tap(&mut self, index: usize) -> Task<Message> {
-        let now = Instant::now();
-        let taps = match self.last_tap {
-            Some((i, at)) if i == index && now.duration_since(at) < DOUBLE_TAP => 2,
-            _ => 1,
-        };
-        self.last_tap = if taps == 1 { Some((index, now)) } else { None };
-        let effects = self.pane.tap(index, taps, self.modifiers.control(), self.modifiers.shift());
-        self.run(effects)
-    }
 
     fn handle(&mut self, message: Message) -> Task<Message> {
         match message {
@@ -354,6 +273,16 @@ impl Flea {
                     _ => self.say("That file could not be opened.".into()),
                 }
             }
+            Message::DeviceListed(stdout) => self.device_listed(stdout),
+            Message::DeviceRan(job, code) => self.device_ran(job, code),
+            Message::DeviceTimer(which, generation) => self.device_timer(which, generation),
+            Message::RailPressed(i) => self.rail_activate(i, false),
+            Message::RailMenu(i) => self.rail_open_menu(i),
+            Message::RailChose(action) => self.rail_choose(action),
+            Message::RailMenuClosed => {
+                self.rail.menu = None;
+                Task::none()
+            }
             Message::Settled(generation) => {
                 let effects = self.pane.settled(generation);
                 self.run(effects)
@@ -400,161 +329,6 @@ impl Flea {
         }
     }
 
-    fn view(&self) -> Element<'_, Message> {
-        let p = self.palette;
-        let header = row![
-            text("Name").width(Length::Fill),
-            text("Size").width(SIZE_W),
-            text("Date Modified").width(DATE_W),
-        ]
-        .padding([0.0, PAD_X])
-        .height(ROW_H)
-        .align_y(iced::Center);
-        let header = container(header.spacing(8))
-            .style(move |_| container::Style::default().color(p.muted))
-            .width(Length::Fill);
-
-        let body: Element<'_, Message> = if let Some(err) = &self.pane.error {
-            container(text(err.clone()).color(p.muted)).center(Length::Fill).into()
-        } else if self.pane.listed_once && self.pane.total == 0 {
-            container(text("This folder is empty.").color(p.muted)).center(Length::Fill).into()
-        } else {
-            self.listing()
-        };
-
-        let mut count = if self.pane.total == 1 { "1 item".to_string() } else { format!("{} items", format::count(self.pane.total)) };
-        if !self.pane.selection.is_empty() {
-            count += &format!(" · {} selected", format::count(self.pane.selection.len()));
-        }
-        // A transient message wins the slot; the running transfer's sticky line is under it.
-        let (note, ink) = match &self.message {
-            Some((t, _, alert)) => (t.clone(), if *alert { p.error } else { p.foreground }),
-            None => (self.pane.sticky.clone(), p.foreground),
-        };
-        let status = row![
-            text(self.pane.path.clone()).width(Length::Fill).wrapping(text::Wrapping::None),
-            text(note).color(ink),
-            text(count),
-        ]
-        .spacing(16)
-        .padding([0.0, PAD_X])
-        .height(ROW_H)
-        .align_y(iced::Center);
-        let status = container(status).style(move |_| container::Style::default().color(p.muted).background(p.surface));
-
-        container(column![header, body, status])
-            .style(move |_| container::Style::default().background(p.background).color(p.foreground))
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
-    }
-
-    // Rule 2: a spacer above, the rows on screen, a spacer below. Nothing else is ever built.
-    fn listing(&self) -> Element<'_, Message> {
-        let total = self.pane.total;
-        let first = ((self.scroll_y / ROW_H).floor().max(0.0) as usize).min(total);
-        let shown = ((self.viewport_h / ROW_H).ceil() as usize + 1).min(total - first);
-        let mut rows = column![space().height(first as f32 * ROW_H)];
-        for i in first..first + shown {
-            rows = rows.push(self.row(i));
-        }
-        rows = rows.push(space().height((total - first - shown) as f32 * ROW_H));
-        scrollable(rows.width(Length::Fill))
-            .id(Id::new(LIST_ID))
-            .on_scroll(Message::Scrolled)
-            .height(Length::Fill)
-            .width(Length::Fill)
-            .into()
-    }
-
-    fn row(&self, i: usize) -> Element<'_, Message> {
-        let p = self.palette;
-        let cursor = i == self.pane.cursor;
-        let selected = self.pane.selection.contains(&i);
-        let editing = self.pane.renaming.as_ref().filter(|r| r.index == i);
-        let cells: Element<'_, Message> = match self.pane.row_at(i) {
-            Some(_) if editing.is_some() => {
-                let r = editing.unwrap();
-                let field = text_input("Name", &r.draft)
-                    .id(Id::new(RENAME_ID))
-                    .on_input_maybe(r.pending.is_none().then_some(Message::RenameInput))
-                    .on_submit(Message::RenameSubmit)
-                    .size(TEXT_PX)
-                    .width(Length::Fill);
-                row![field, text(r.error.clone()).color(p.error)].spacing(12).align_y(iced::Center).into()
-            }
-            Some(r) => {
-                let link = format::is_symlink(r.p);
-                let ink = if link {
-                    p.symlink
-                } else if r.d {
-                    p.foreground
-                } else if format::is_executable(r.p) {
-                    p.executable
-                } else {
-                    p.foreground
-                };
-                let name = match &r.l {
-                    Some(target) => format!("{} -> {}", r.n, target),
-                    None => r.n.clone(),
-                };
-                // p 0 is a failed stat, and it condemns s and m with it; see docs/protocol.md "rows".
-                let size = if r.d { String::new() } else if link { "link".into() } else if r.p == 0 { "--".into() } else { format::size(r.s) };
-                let date = if r.p == 0 { "--".into() } else { format::date(r.m) };
-                row![
-                    self.icon(i, r),
-                    text(name).color(ink).width(Length::Fill).wrapping(text::Wrapping::None),
-                    text(size).color(p.muted).width(SIZE_W),
-                    text(date).color(p.muted).width(DATE_W),
-                ]
-                .spacing(8)
-                .into()
-            }
-            // Outside the held window: the row's slot stands until its window arrives.
-            None => row![text("").width(Length::Fill)].into(),
-        };
-        let band = container(cells)
-            .padding([0.0, PAD_X])
-            .height(ROW_H)
-            .width(Length::Fill)
-            .align_y(iced::Center)
-            .style(move |_| {
-                // The cursor draws the accent fill, a marked row that is not the cursor the plain one.
-                if cursor {
-                    container::Style::default()
-                        .background(Background::Color(Color { a: 0.18, ..p.accent }))
-                        .border(Border { color: p.accent, width: 0.0, radius: 0.0.into() })
-                } else if selected {
-                    container::Style::default().background(p.selection)
-                } else {
-                    container::Style::default()
-                }
-            });
-        mouse_area(band).on_press(Message::RowPressed(i)).into()
-    }
-
-    // The icon slot: the thumbnail when the pane holds a decoded one, the row's mark otherwise. One
-    // slot either way, so the row's geometry never depends on which of the two it draws.
-    fn icon(&self, i: usize, r: &wire::Row) -> Element<'_, Message> {
-        let slot = container(match self.pane.thumb_file(i).and_then(|f| self.decoded.get(f)) {
-            Some(h) => Element::from(image(h.clone()).width(ICON_SLOT).height(ICON_SLOT)),
-            None => {
-                let p = self.palette;
-                let tier = self.pane.file_type_colours;
-                let mark = marks::glyph_for_row(&r.i, r.p, &r.n, r.d, tier);
-                // Theme.markInk: a vendored colour lifted to 3:1 on the background, else the dim ink.
-                let ink = tier
-                    .then(|| marks::row_colour(&r.n, r.p, r.d))
-                    .flatten()
-                    .map(|c| contrast::ensure_ratio(c, p.background, 3.0))
-                    .unwrap_or(p.dim);
-                let size = MARK.min(ICON_SLOT);
-                Element::from(svg(marks::handle(mark, ink)).width(size).height(size))
-            }
-        });
-        slot.width(ICON_SLOT).height(ICON_SLOT).center_x(ICON_SLOT).center_y(ICON_SLOT).into()
-    }
-
     fn subscription(&self) -> Subscription<Message> {
         Subscription::batch([
             Subscription::run(backend::events).map(Message::Backend),
@@ -574,7 +348,7 @@ fn decode(path: &str) -> Option<image::Handle> {
 }
 
 fn main() -> iced::Result {
-    iced::application(boot, Flea::update, Flea::view)
+    iced::application(boot::boot, Flea::update, Flea::view)
         .title("Flea")
         .subscription(Flea::subscription)
         .exit_on_close_request(false)

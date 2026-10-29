@@ -17,6 +17,13 @@ pub struct Prefs {
     pub last_path: String,
     pub thumbnails: String,
     pub file_type_colours: bool,
+    // The places group, Settings > Places.
+    pub favourites: Vec<Value>,
+    pub show_trash: bool,
+    pub show_devices: bool,
+    pub show_unmounted: bool,
+    pub rail_shown: bool,
+    pub sidebar_width: Option<f64>,
 }
 
 impl Default for Prefs {
@@ -33,6 +40,12 @@ impl Default for Prefs {
             last_path: String::new(),
             thumbnails: "media".into(),
             file_type_colours: false,
+            favourites: vec![],
+            show_trash: true,
+            show_devices: true,
+            show_unmounted: false,
+            rail_shown: true,
+            sidebar_width: None,
         }
     }
 }
@@ -59,6 +72,13 @@ impl Prefs {
             // ViewState.qml: preview.thumbnails, "media" when absent; display.fileTypeColors, off.
             thumbnails: v.pointer("/preview/thumbnails").and_then(Value::as_str).unwrap_or("media").to_string(),
             file_type_colours: v.pointer("/display/fileTypeColors").and_then(Value::as_bool) == Some(true),
+            favourites: v.pointer("/places/favourites").and_then(Value::as_array).cloned().unwrap_or_default(),
+            // Sidebar.qml reads each switch as `!== false`, so only an explicit false hides a group.
+            show_trash: v.pointer("/places/showTrash").and_then(Value::as_bool) != Some(false),
+            show_devices: v.pointer("/places/showDevices").and_then(Value::as_bool) != Some(false),
+            show_unmounted: v.pointer("/places/showUnmounted").and_then(Value::as_bool) == Some(true),
+            rail_shown: v.pointer("/places/rail").and_then(Value::as_str) != Some("hidden"),
+            sidebar_width: v.pointer("/places/sidebarWidth").and_then(Value::as_f64),
         }
     }
 
@@ -81,6 +101,11 @@ impl Prefs {
             _ => home.to_string(),
         }
     }
+}
+
+pub fn save_rail(bin: &str, shown: bool) -> bool {
+    let patch = serde_json::json!({ "places": { "rail": if shown { "shown" } else { "hidden" } } }).to_string();
+    Command::new(bin).arg("--ui-state").arg(patch).output().map(|o| o.status.success()).unwrap_or(false)
 }
 
 // Exit 0 is the only proof a save landed; see AGENTS.md "A refused write reaches the operator".
