@@ -18,13 +18,24 @@ pub enum Ran {
 pub const GIO_ENV: [(&str, &str); 1] = [("LC_ALL", "C")];
 
 pub fn run_within(argv: &[String], env: &[(&str, &str)], deadline: Duration) -> Ran {
+    run_with_input(argv, env, None, deadline)
+}
+
+// The same, with one line written to stdin and the pipe closed: how a password reaches
+// tools/flea-gio-auth without ever being an argument another process could read.
+pub fn run_with_input(argv: &[String], env: &[(&str, &str)], input: Option<String>, deadline: Duration) -> Ran {
     let Some((program, args)) = argv.split_first() else { return Ran::NotStarted };
     let mut cmd = Command::new(program);
-    cmd.args(args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+    let stdin = if input.is_some() { Stdio::piped() } else { Stdio::null() };
+    cmd.args(args).stdin(stdin).stdout(Stdio::piped()).stderr(Stdio::null());
     for (k, v) in env {
         cmd.env(k, v);
     }
     let Ok(mut child) = cmd.spawn() else { return Ran::NotStarted };
+    if let (Some(text), Some(mut pipe)) = (input, child.stdin.take()) {
+        // A helper that exits before reading is its own answer, so a failed write is not an error.
+        let _ = std::io::Write::write_all(&mut pipe, text.as_bytes());
+    }
     let Some(mut stdout) = child.stdout.take() else { return Ran::NotStarted };
     let reader = std::thread::spawn(move || {
         let mut s = String::new();

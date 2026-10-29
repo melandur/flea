@@ -4,8 +4,9 @@
 // then `gio info` for the FUSE path, then for a bare server root `gio list` for its shares. The mount
 // leg's exit code is never the verdict: gvfsd's "already mounted" refusal is translated and exits 2
 // on a share that is perfectly openable, so `gio info` decides every time (AGENTS.md "Issue #36").
-// Signing in is Stage 4b-ii; a place that needs a password says so rather than failing silently.
+// The open itself, signing in included, is netopen.rs; this file is the listing and the rows.
 use crate::mounts::{self, Bookmark};
+use std::collections::{HashMap, HashSet};
 use crate::process::Ran;
 
 pub const POLL_MS: u64 = 5000;
@@ -31,18 +32,30 @@ pub enum Leg {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Effect {
     List,
-    Leg(Leg, Vec<String>),
+    // Every leg carries the open's generation, so a result that outlived a cancel answers nothing.
+    Leg(u64, Leg, Vec<String>),
+    // tools/flea-gio-auth with the password on stdin, never in its argv.
+    Auth(u64, Vec<String>, String),
     Unmount(Vec<String>),
     Message(String, bool),
     Opened(String),
     SharesListed { base: String, label: String, names: Vec<String> },
+    // The dialog's own request finished; it reads success, or the reason, and decides what to show.
+    Completed { id: String, uri: String, success: bool, reason: String },
+    // retryRequested: open the dialog on this place with the reason in its status line.
+    AskPassword { uri: String, label: String, password: String, reason: String, failed: bool },
 }
 
 #[derive(Debug)]
-struct Opening {
-    uri: String,
-    label: String,
-    mount_failed: bool,
+pub(crate) struct Opening {
+    pub(crate) uri: String,
+    pub(crate) label: String,
+    pub(crate) mount_failed: bool,
+    // The dialog request this open answers, and the password it came with.
+    pub(crate) request: Option<(String, String)>,
+    // A helper refusal held until gio info has had its say: the sentence, and whether the
+    // password itself was refused and should be forgotten.
+    pub(crate) auth_failure: Option<(String, bool)>,
 }
 
 #[derive(Debug, Default)]
@@ -53,12 +66,20 @@ pub struct Network {
     bookmarks_text: String,
     listing: bool,
     poll_again: bool,
-    opening: Option<Opening>,
-    leg_running: bool,
+    pub(crate) opening: Option<Opening>,
+    pub(crate) leg_running: bool,
+    pub(crate) generation: u64,
+    // The place the last open was for, kept after it ends: the share browser's children carry its
+    // password, the way NetworkMounts' _pendingUri outlives the open it named.
+    pub(crate) opening_uri: Option<String>,
+    // Per window and never written anywhere: what stops one place asking twice in a session.
+    pub(crate) passwords: HashMap<String, String>,
+    // The operator's yes to a host key, spent by the attempt it was given for.
+    pub(crate) trusted: HashSet<String>,
     unmount_label: Option<String>,
 }
 
-fn argv(parts: &[&str]) -> Vec<String> {
+pub(crate) fn argv(parts: &[&str]) -> Vec<String> {
     parts.iter().map(|s| s.to_string()).collect()
 }
 
@@ -125,93 +146,6 @@ impl Network {
             }
         }
         self.entries = out;
-    }
-
-    #[cfg(test)]
-    pub fn busy(&self) -> bool {
-        self.leg_running
-    }
-
-    // The single-flight guard says so rather than returning in silence.
-    pub fn open(&mut self, uri: &str, mounted: bool, label: &str) -> Vec<Effect> {
-        if self.leg_running {
-            return vec![Effect::Message("Another network location is still opening; give it a moment.".into(), false)];
-        }
-        let normal = mounts::normalize(uri);
-        self.opening = Some(Opening { uri: normal.clone(), label: label.to_string(), mount_failed: false });
-        if mounted {
-            return self.leg(Leg::Info, argv(&["gio", "info", &normal]));
-        }
-        if mounts::credentialed(uri) && !self.remember_passwords {
-            // NetworkMounts asks for the password here; that dialog is Stage 4b-ii.
-            self.opening = None;
-            return vec![Effect::Message("Signing in to a network location is not in this build yet.".into(), false)];
-        }
-        // With remembered passwords on, a plain mount is what reads the login keyring.
-        let mount = if uri.to_ascii_lowercase().starts_with("smb://") && !mounts::credentialed(uri) {
-            argv(&["gio", "mount", "--anonymous", uri])
-        } else {
-            argv(&["gio", "mount", uri])
-        };
-        self.leg(Leg::Mount, mount)
-    }
-
-    fn leg(&mut self, which: Leg, argv: Vec<String>) -> Vec<Effect> {
-        self.leg_running = true;
-        vec![Effect::Leg(which, argv)]
-    }
-
-    fn fail(&mut self, reason: &str) -> Vec<Effect> {
-        self.opening = None;
-        vec![Effect::Message(reason.to_string(), true)]
-    }
-
-    pub fn leg_done(&mut self, which: Leg, ran: Ran) -> Vec<Effect> {
-        self.leg_running = false;
-        let Some(open) = self.opening.as_mut() else { return vec![] };
-        if ran == Ran::TimedOut {
-            return self.fail("Connect failed: host did not respond");
-        }
-        match which {
-            Leg::Mount => {
-                // The code is recorded and never decides: gio info is asked whatever it was.
-                open.mount_failed = !matches!(ran, Ran::Exited(Some(0), _));
-                let uri = open.uri.clone();
-                self.leg(Leg::Info, argv(&["gio", "info", &uri]))
-            }
-            Leg::Info => {
-                let mut out = self.poll();
-                let path = match &ran {
-                    Ran::Exited(Some(0), text) => mounts::local_path(text),
-                    _ => String::new(),
-                };
-                let open = self.opening.as_ref().unwrap();
-                if !path.is_empty() {
-                    self.opening = None;
-                    out.push(Effect::Opened(path));
-                } else if mounts::is_bare_root(&open.uri) {
-                    // No exit code gate here either: some reachable roots refuse `gio info`.
-                    let uri = open.uri.clone();
-                    out.extend(self.leg(Leg::List, argv(&["gio", "list", &uri])));
-                } else if open.mount_failed {
-                    out.extend(self.fail("Connect failed: network location was refused"));
-                } else {
-                    out.extend(self.fail("Connect failed: location has no browsable folder"));
-                }
-                out
-            }
-            Leg::List => {
-                let names: Vec<String> = match &ran {
-                    Ran::Exited(Some(0), text) => text.lines().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect(),
-                    _ => vec![],
-                };
-                if names.is_empty() {
-                    return self.fail("Connect failed: location has no browsable folder");
-                }
-                let open = self.opening.take().unwrap();
-                vec![Effect::SharesListed { base: open.uri, label: open.label, names }]
-            }
-        }
     }
 
     pub fn unmount(&mut self, index: usize) -> Vec<Effect> {

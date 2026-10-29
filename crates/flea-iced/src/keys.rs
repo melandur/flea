@@ -11,6 +11,16 @@ impl Flea {
             return Task::none();
         }
         let keyboard::Event::KeyPressed { key, modifiers, repeat, .. } = event else { return Task::none() };
+        // The dialog owns the keyboard while it is up: Escape closes it, Tab walks its fields, and
+        // its fields take everything else, Enter included through their on_submit.
+        if self.dialog.is_some() {
+            return match key.as_ref() {
+                Key::Named(Named::Escape) => self.dialog_close(),
+                Key::Named(Named::Tab) if modifiers.shift() => iced::widget::operation::focus_previous(),
+                Key::Named(Named::Tab) => iced::widget::operation::focus_next(),
+                _ => Task::none(),
+            };
+        }
         // The rail's rename field owns the keys while it is open; Escape is the one it hands back.
         if self.rail.renaming.is_some() {
             if key == Key::Named(Named::Escape) {

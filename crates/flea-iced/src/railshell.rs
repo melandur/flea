@@ -142,6 +142,7 @@ impl Flea {
                 self.run_devices(effects)
             }
             Activation::Share(i) => self.open_share(i),
+            Activation::Remote(uri, label) => self.open_remote(&uri, &label),
             Activation::Say(text, alert) => {
                 // Nothing opened, so nothing is handed the keyboard.
                 return self.show(text, alert);
@@ -179,6 +180,7 @@ impl Flea {
                     let effects = self.network.unmount(i);
                     self.run_network(effects)
                 }
+                Action::Edit => self.edit_share(i),
                 Action::Rename => self.start_rail_rename(menu.entry),
                 Action::Remove => self.forget_share(i),
                 _ => Task::none(),
@@ -189,7 +191,7 @@ impl Flea {
             Action::Eject => self.devices.eject(i),
             Action::UnmountVolume => self.devices.unmount(i),
             Action::MountVolume | Action::OpenVolume => self.devices.activate(i),
-            Action::Unmount | Action::Rename | Action::Remove => vec![],
+            Action::Unmount | Action::Edit | Action::Rename | Action::Remove => vec![],
         };
         self.run_devices(effects)
     }
@@ -242,6 +244,8 @@ impl Flea {
                 Task::none()
             }
             Key::Character("m") => self.rail_open_menu(self.rail.cursor),
+            // addNetwork: the dialog is reached from the rail, by its "+" or by this key.
+            Key::Character("a") if self.rail.show_network => self.dialog_open(),
             _ => Task::none(),
         })
     }

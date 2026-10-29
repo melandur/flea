@@ -157,6 +157,38 @@ pub fn relabel(body: &str, uri: &str, name: &str) -> String {
     format!("{out}{target} {name}\n")
 }
 
+// Places.replace, which Edit writes with: every line naming the old place becomes the new URI and
+// label, and a place no line names is appended.
+pub fn replace(body: &str, old_uri: &str, new_uri: &str, label: &str) -> String {
+    let next = normalize(new_uri);
+    if next.is_empty() {
+        return body.to_string();
+    }
+    let name: String = label.chars().filter(|c| *c != '\r' && *c != '\n').collect();
+    let name = if name.trim().is_empty() { leaf(&next) } else { name.trim().to_string() };
+    let target = normalize(old_uri);
+    let mut found = false;
+    let lines: Vec<String> = body
+        .split('\n')
+        .map(|l| {
+            if !l.trim().is_empty() && !target.is_empty() && normalize(first_token(l)) == target {
+                found = true;
+                format!("{next} {name}")
+            } else {
+                l.to_string()
+            }
+        })
+        .collect();
+    if found {
+        return lines.join("\n");
+    }
+    let mut out = body.to_string();
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    format!("{out}{next} {name}\n")
+}
+
 #[cfg(test)]
 #[path = "mounts_tests.rs"]
 mod tests;

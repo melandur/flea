@@ -98,9 +98,24 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      red when the pin is removed. **Deviation:** the unmount is bounded too, which QML's is not.
      **Gap:** a place that needs a password says signing in is not here yet, unless
      `places.rememberPasswords` is on, in which case a plain mount reads the keyring as QML does.
-   - **4b-ii, signing in (next).** The connect dialog and its form, the password prompt and its
-     per-window memory, `tools/flea-gio-auth` with its exit codes 3 to 6, the host key question
-     and its one-shot trust, the menu's Edit row, and Dropbox.
+   - **4b-ii, signing in (done, the dialog not yet seen on screen).** `form.rs` ports the form
+     half of `ui/js/Protocols.js` and `NetworkDialog.valuesFor`: the five protocols and the fields
+     each shows, `encodeURIComponent`'s exact set, no default port ever written, the TLS box moving
+     the scheme and its port together (advloop round 2's `dav://host:443` is a test), and a saved URI
+     reopening the form with its own port. `netopen.rs` is `openShare`, `failMount` and
+     `finishRequest`: a credentialed place runs `tools/flea-gio-auth` with the password on stdin and
+     never in its argv (a stub helper records both), exit 3 and 5 become the host key question with
+     its fingerprint, a refused password is forgotten while an unavailable helper keeps it, and gio
+     info still decides after any helper refusal, so "already mounted" opens. The trust is spent by
+     the one attempt it was given for. Every leg carries a generation, so a cancelled attempt's late
+     answer cannot complete a newer one. A deadline answers a dialog's request and never reopens the
+     dialog for a password, which the first port got wrong and its test caught. `dialog.rs` and
+     `dialogview.rs` are the dialog: "Connect and save", "Retry", "Connect anyway", "Connecting...",
+     "Saving...", the failure kept across a close and shown once on reopening the same place, and a
+     connected place saved as a favourite through `flea --favourites`. Edit reopens the form on a
+     saved place and rewrites its line once the new address connects. A network favourite opens
+     through the same service. **Not ported:** Dropbox (its row, its status check and the dialog's
+     install section), and the form's own focus ring beyond iced's Tab order.
 
    **The file budget is held here too.** `tools/flea-file-budget` does not scan `crates/`, but four
    files had passed its 400-line hard cap, `pane.rs` at 836. Tests moved to `*_tests.rs` beside each

@@ -5,8 +5,8 @@
 // for any reason but absence: a failed read used to empty the text and the write that followed
 // replaced the operator's saved places with one line (AGENTS.md "A failed FileView read").
 use crate::mounts;
-use crate::network::{self, Leg};
-use crate::process::{run_within, GIO_ENV};
+use crate::network;
+use crate::process::{run_with_input, run_within, GIO_ENV};
 use crate::{blocking, sleep, Flea, Message};
 use iced::Task;
 use std::io::Write;
@@ -65,10 +65,15 @@ impl Flea {
                     blocking(|| run_within(&["gio".into(), "mount".into(), "-li".into()], &GIO_ENV, Duration::from_millis(network::LIST_TIMEOUT_MS))),
                     Message::NetListed,
                 ),
-                network::Effect::Leg(leg, argv) => Task::perform(
+                network::Effect::Leg(generation, leg, argv) => Task::perform(
                     blocking(move || run_within(&argv, &GIO_ENV, Duration::from_millis(network::LEG_TIMEOUT_MS))),
-                    move |ran| Message::NetLeg(leg, ran),
+                    move |ran| Message::NetLeg(generation, leg, ran),
                 ),
+                network::Effect::Auth(generation, argv, input) => Task::perform(
+                    blocking(move || run_with_input(&argv, &GIO_ENV, Some(input), Duration::from_millis(crate::netopen::AUTH_TIMEOUT_MS))),
+                    move |ran| Message::NetAuth(generation, ran),
+                ),
+                e @ (network::Effect::Completed { .. } | network::Effect::AskPassword { .. }) => self.dialog_effect(e),
                 // An unmount is bounded too, which QML's was not; a hang reads as the failure it is.
                 network::Effect::Unmount(argv) => Task::perform(
                     blocking(move || run_within(&argv, &GIO_ENV, Duration::from_millis(network::LEG_TIMEOUT_MS))),
@@ -105,11 +110,6 @@ impl Flea {
     pub(crate) fn net_listed(&mut self, ran: crate::process::Ran) -> Task<Message> {
         let effects = self.network.listed(ran);
         self.rebuild_rail();
-        self.run_network(effects)
-    }
-
-    pub(crate) fn net_leg(&mut self, leg: Leg, ran: crate::process::Ran) -> Task<Message> {
-        let effects = self.network.leg_done(leg, ran);
         self.run_network(effects)
     }
 
@@ -200,8 +200,40 @@ impl Flea {
         b.cursor = index;
         let Some(name) = b.names.get(index).cloned() else { return Task::none() };
         let base = if b.base.ends_with('/') { b.base.clone() } else { format!("{}/", b.base) };
-        let effects = self.network.open(&format!("{base}{name}/"), false, &name);
+        let effects = self.network.open_child(&format!("{base}{name}/"), &name);
         self.run_network(effects)
+    }
+
+    // A network favourite opens the way a share browser's child does.
+    pub(crate) fn open_remote(&mut self, uri: &str, label: &str) -> Task<Message> {
+        let effects = self.network.open_child(uri, label);
+        self.run_network(effects)
+    }
+
+    // RailMenu.editPlace: the form reopened on the place, and the line rewritten once it connects.
+    pub(crate) fn edit_share(&mut self, index: usize) -> Task<Message> {
+        let Some(s) = self.network.entries.get(index).cloned() else { return Task::none() };
+        let task = self.dialog_open_on(&s.uri, &s.label, "", "Edit this address, then connect and save.", false);
+        if let Some(d) = self.dialog.as_mut() {
+            d.editing = Some(mounts::normalize(&s.uri));
+        }
+        task
+    }
+
+    pub(crate) fn replace_share(&mut self, was: &str, new: &str, label: &str) {
+        let Ok(current) = read_bookmarks() else {
+            self.message = None;
+            let _ = self.show("Saved places could not be read, so the new address was not saved.".into(), true);
+            return;
+        };
+        if write_bookmarks(&mounts::replace(&current, was, new, label)) {
+            if let Ok(text) = read_bookmarks() {
+                self.network.set_bookmarks(text);
+                self.rebuild_rail();
+            }
+        } else {
+            let _ = self.show("Saved places could not be written.".into(), true);
+        }
     }
 }
 

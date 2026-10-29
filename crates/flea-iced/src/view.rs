@@ -51,11 +51,11 @@ impl Flea {
 
         let listing = column![header, body].width(Length::Fill);
         let main: Element<'_, Message> = if self.rail.shown { row![self.rail_view(), listing].into() } else { listing.into() };
-        container(column![main, status])
+        let window = container(column![main, status])
             .style(move |_| container::Style::default().background(p.background).color(p.foreground))
             .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+            .height(Length::Fill);
+        self.dialog_layer(window.into())
     }
 
     // Rule 2: a spacer above, the rows on screen, a spacer below. Nothing else is ever built.

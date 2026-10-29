@@ -61,6 +61,8 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         ),
         network: crate::network::Network::new(prefs.remember_passwords),
         share_browser: None,
+        dialog: None,
+        dialog_memory: None,
     };
     flea.rebuild_rail();
     // The device poll starts at once and re-arms itself, the Timer's triggeredOnStart in QML.

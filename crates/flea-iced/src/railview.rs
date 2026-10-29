@@ -87,7 +87,16 @@ impl Flea {
     }
 
     fn heading(&self, title: &'static str) -> Element<'_, Message> {
-        container(text(title).size(11.0).color(self.palette.muted)).padding([0.0, PAD_X]).height(ROW_H).align_y(iced::Bottom).into()
+        let p = self.palette;
+        let label = text(title).size(11.0).color(p.muted);
+        // NETWORK's "+" is the door into the connect dialog, on the indicators' right-hand line.
+        let line: Element<'_, Message> = if title == "NETWORK" {
+            let plus = mouse_area(svg(marks::handle("plus", p.muted)).width(11.0).height(11.0)).on_press(Message::Dialog(crate::dialog::Msg::Open));
+            row![label, space().width(Length::Fill), plus].align_y(iced::Center).into()
+        } else {
+            label.into()
+        };
+        container(line).padding([0.0, PAD_X]).height(ROW_H).width(Length::Fill).align_y(iced::Bottom).into()
     }
 
     fn rail_row(&self, i: usize, e: &Entry) -> Element<'_, Message> {

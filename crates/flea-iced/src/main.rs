@@ -4,11 +4,16 @@ mod backend;
 mod boot;
 mod contrast;
 mod devices;
+mod dialog;
+mod dialogview;
+mod effects;
+mod form;
 mod format;
 #[cfg(test)]
 mod live_tests;
 mod marks;
 mod mounts;
+mod netopen;
 mod netshell;
 mod network;
 mod opreplies;
@@ -30,9 +35,9 @@ mod wire;
 
 use backend::Backend;
 use iced::keyboard;
-use iced::widget::{image, operation, scrollable};
+use iced::widget::{image, scrollable};
 use iced::{window, Font, Subscription, Task};
-use pane::{Effect, Pane};
+use pane::Pane;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -83,6 +88,9 @@ struct Flea {
     devices: devices::Devices,
     network: network::Network,
     share_browser: Option<netshell::ShareBrowser>,
+    dialog: Option<dialog::Dialog>,
+    // NetworkDialog's unacknowledged failure: the place and the reason, kept across a close.
+    dialog_memory: Option<(String, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -108,7 +116,10 @@ enum Message {
     RailMenuClosed,
     NetTick,
     NetListed(process::Ran),
-    NetLeg(network::Leg, process::Ran),
+    NetLeg(u64, network::Leg, process::Ran),
+    NetAuth(u64, process::Ran),
+    FavouriteSaved(Result<Vec<serde_json::Value>, String>),
+    Dialog(dialog::Msg),
     NetUnmounted(process::Ran),
     RailRenameInput(String),
     RailRenameSubmit,
@@ -153,59 +164,7 @@ impl Flea {
         Task::perform(sleep(Duration::from_millis(pane::MESSAGE_MS)), move |_| Message::Expired(gen))
     }
 
-    fn run(&mut self, effects: Vec<Effect>) -> Task<Message> {
-        let mut tasks = vec![];
-        for effect in effects {
-            match effect {
-                Effect::Send(request) => {
-                    let sent = self.backend.as_ref().map(|b| b.send(&request));
-                    if let Some(Err(e)) = sent {
-                        tasks.push(self.say(pane::sentence("backend", &e, "")));
-                    }
-                }
-                Effect::ScrollTo(index) => {
-                    let y = index as f32 * ROW_H;
-                    tasks.push(operation::scroll_to(LIST_ID, scrollable::AbsoluteOffset { x: 0.0, y }));
-                }
-                Effect::OpenFile(path) => tasks.push(self.open_file(path)),
-                Effect::WatchTimer => tasks.push(Task::perform(
-                    sleep(Duration::from_millis(pane::WATCH_MS)),
-                    |_| Message::WatchFired,
-                )),
-                Effect::Message(text) => tasks.push(self.show(text, false)),
-                Effect::Alert(text) => tasks.push(self.show(text, true)),
-                Effect::FocusRename => tasks.push(operation::focus(RENAME_ID)),
-                Effect::Settle(generation, ms) => {
-                    tasks.push(Task::perform(sleep(Duration::from_millis(ms)), move |_| Message::Settled(generation)));
-                }
-                Effect::DecodeThumb(path) => {
-                    let key = path.clone();
-                    tasks.push(Task::perform(blocking(move || decode(&path)), move |h| Message::Decoded(key.clone(), h)));
-                }
-                Effect::SaveHidden(hidden) => {
-                    let bin = backend::binary();
-                    tasks.push(Task::perform(blocking(move || prefs::save_hidden(&bin, hidden)), Message::Saved));
-                }
-            }
-        }
-        Task::batch(tasks)
-    }
 
-    // ui/Opener.qml: one `flea --open` at a time, and a second press while it runs says so.
-    fn open_file(&mut self, path: String) -> Task<Message> {
-        if self.opening {
-            return self.say("Still opening the last file; try again in a moment.".into());
-        }
-        self.opening = true;
-        let bin = backend::binary();
-        Task::perform(
-            blocking(move || {
-                let code = std::process::Command::new(&bin).arg("--open").arg(&path).status().ok().and_then(|s| s.code());
-                (code, path)
-            }),
-            |(code, path)| Message::Opened(code, path),
-        )
-    }
 
     fn quit(&mut self) -> Task<Message> {
         if self.quitting {
@@ -295,7 +254,16 @@ impl Flea {
             Message::RailChose(action) => self.rail_choose(action),
             Message::NetTick => self.net_tick(),
             Message::NetListed(ran) => self.net_listed(ran),
-            Message::NetLeg(leg, ran) => self.net_leg(leg, ran),
+            Message::NetLeg(generation, leg, ran) => {
+                let effects = self.network.leg_done(generation, leg, ran);
+                self.run_network(effects)
+            }
+            Message::NetAuth(generation, ran) => {
+                let effects = self.network.auth_done(generation, ran);
+                self.run_network(effects)
+            }
+            Message::FavouriteSaved(result) => self.favourite_saved(result),
+            Message::Dialog(msg) => self.dialog_message(msg),
             Message::NetUnmounted(ran) => self.net_unmounted(ran),
             Message::RailRenameInput(draft) => {
                 if let Some(r) = self.rail.renaming.as_mut() {

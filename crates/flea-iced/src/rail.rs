@@ -157,12 +157,14 @@ pub enum Activation {
     Open(String),
     Device(usize),
     Share(usize),
+    // A favourite that names a network place: opened through the network service.
+    Remote(String, String),
     Say(String, bool),
 }
 
 // Mounts.decodePath is decodeURIComponent, which throws on a malformed escape and so hands back the
 // raw text. Each escape is checked as two hex digits, because from_str_radix takes a leading "+".
-fn decode_path(raw: &str) -> String {
+pub(crate) fn decode_path(raw: &str) -> String {
     let b = raw.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
@@ -191,9 +193,7 @@ pub fn activate(entry: &Entry) -> Activation {
             Activation::Say(format!("Could not open {} · {error}", entry.label), true)
         }
         Kind::Favourite { .. } if entry.path.starts_with("file://") => Activation::Open(decode_path(&entry.path[7..])),
-        Kind::Favourite { .. } if entry.path.contains("://") => {
-            Activation::Say("Network places are not in this build yet.".into(), false)
-        }
+        Kind::Favourite { .. } if entry.path.contains("://") => Activation::Remote(entry.path.clone(), entry.label.clone()),
         Kind::Favourite { .. } => Activation::Open(entry.path.clone()),
         Kind::Device(i) => Activation::Device(*i),
         Kind::Share(i) => Activation::Share(*i),
@@ -208,6 +208,7 @@ pub enum Action {
     UnmountVolume,
     // A network share's own rows: the release, then the two a saved place owns.
     Unmount,
+    Edit,
     Rename,
     Remove,
 }
@@ -219,6 +220,7 @@ impl Action {
             Action::MountVolume => "Mount",
             Action::OpenVolume => "Open",
             Action::UnmountVolume | Action::Unmount => "Unmount",
+            Action::Edit => "Edit",
             Action::Rename => "Rename",
             Action::Remove => "Remove",
         }
@@ -226,6 +228,7 @@ impl Action {
     pub fn glyph(self) -> &'static str {
         match self {
             Action::Eject | Action::UnmountVolume | Action::Unmount => "eject",
+            Action::Edit => "sliders",
             Action::Rename => "rename",
             Action::Remove => "minus",
             Action::MountVolume => "drive",
@@ -252,11 +255,10 @@ pub fn menu(d: &Device) -> Vec<Action> {
     vec![]
 }
 
-// Mounts.rowMenu for a share: Unmount while mounted, then Rename and Remove for any share. Edit,
-// which reopens the connect form on the place, arrives with the form in Stage 4b-ii.
+// Mounts.rowMenu for a share: Unmount while mounted, then Edit, Rename and Remove for any share.
 pub fn share_menu(s: &Share) -> Vec<Action> {
     let mut rows = if s.mounted { vec![Action::Unmount] } else { vec![] };
-    rows.extend([Action::Rename, Action::Remove]);
+    rows.extend([Action::Edit, Action::Rename, Action::Remove]);
     rows
 }
 

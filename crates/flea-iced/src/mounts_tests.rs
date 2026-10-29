@@ -64,3 +64,10 @@ fn relabel_rewrites_every_duplicate_strips_newlines_and_appends_when_absent() {
     assert_eq!(relabel("file:///a A", "smb://n/x", "X"), "file:///a A\nsmb://n/x X\n");
     assert_eq!(relabel(body, "smb://h/s", "   "), body);
 }
+
+#[test]
+fn replace_moves_a_place_to_its_new_address_and_keeps_its_other_lines() {
+    let body = "file:///a A\nsmb://old/s Old\n";
+    assert_eq!(replace(body, "smb://old/s/", "smb://new:445/s", "New"), "file:///a A\nsmb://new/s New\n");
+    assert_eq!(replace("", "smb://gone/", "sftp://h/x", ""), "sftp://h/x x\n");
+}
