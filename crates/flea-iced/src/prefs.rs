@@ -54,6 +54,8 @@ pub struct Prefs {
     pub columns: Vec<String>,
     // folderSizes: whether a folder's Size cell draws its walked total.
     pub folder_sizes: bool,
+    // display.textSize: None follows Omarchy, a number is the stop the window draws at instead.
+    pub text_size: Option<u32>,
 }
 
 impl Default for Prefs {
@@ -98,6 +100,7 @@ impl Default for Prefs {
             density: "normal".into(),
             columns: ["name", "size", "date"].map(String::from).to_vec(),
             folder_sizes: true,
+            text_size: None,
         }
     }
 }
@@ -158,6 +161,7 @@ impl Prefs {
                 None => d.columns,
             },
             folder_sizes: v.pointer("/folderSizes").and_then(Value::as_bool) != Some(false),
+            text_size: v.pointer("/display/textSize/mode").and_then(Value::as_f64).filter(|n| *n > 0.0).map(|n| n as u32),
         }
     }
 

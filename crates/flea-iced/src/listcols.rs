@@ -91,6 +91,18 @@ pub fn row_height(density: &str) -> f32 {
     ICON_SLOT + 2.0 * (7.0 * ratio as f32).round()
 }
 
+// The metrics in metrics.rs are the ones a 14 px Omarchy base draws (bodySmall 13 on a 37 px row).
+pub const BASE_PX: f32 = 14.0;
+
+// Theme.sizeRatio, applied to the whole window as iced's own scale: the stored stop, landed on the
+// nearest of Omarchy's seven, or Omarchy's own base while following it, over the base the metrics
+// were taken at. Type, spacing and marks all scale with it, which is what deriving every token from
+// the size in force does in Theme.qml; the monitor's scale stays the compositor's, applied on top.
+pub fn ui_scale(stored: Option<u32>, omarchy_base: u32) -> f32 {
+    let px = stored.map(crate::places_rows::nearest).unwrap_or(omarchy_base);
+    px.max(1) as f32 / BASE_PX
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,6 +127,15 @@ mod tests {
         assert_eq!(toggled(&shipped, "size"), ["name", "date"]);
         assert_eq!(toggled(&shipped, "kind"), ["name", "size", "date", "kind"]);
         assert_eq!(dual_set(2000.0, &["date"]), Cols { size: true, ..Default::default() });
+    }
+
+    #[test]
+    fn the_window_scales_by_the_size_in_force_over_the_metrics_base() {
+        assert_eq!(ui_scale(None, 14), 1.0);
+        assert_eq!(ui_scale(None, 12), 12.0 / 14.0);
+        assert_eq!(ui_scale(Some(20), 14), 20.0 / 14.0);
+        // A hand-written 13 lands on the nearest stop, the smaller one on a tie.
+        assert_eq!(ui_scale(Some(13), 14), 12.0 / 14.0);
     }
 
     #[test]

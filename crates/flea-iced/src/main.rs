@@ -179,6 +179,8 @@ struct Flea {
     pending_menu: Option<(String, String)>,
     colprev: columnpreview::ColumnShell,
     trash: trash::Trash,
+    // Omarchy's [font] base-size, read once at launch; the window follows it unless a stop is stored.
+    omarchy_base: u32,
 }
 
 
@@ -324,6 +326,7 @@ fn main() -> iced::Result {
     iced::application(boot::boot, Flea::update, Flea::view)
         .title("Flea")
         .subscription(Flea::subscription)
+        .scale_factor(|f: &Flea| listcols::ui_scale(f.prefs.text_size, f.omarchy_base))
         .default_font(Font::DEFAULT)
         .settings(iced::Settings { default_text_size: TEXT_PX.into(), ..Default::default() })
         // Its own app id while both front ends exist, so a compositor rule or a test can tell them apart.

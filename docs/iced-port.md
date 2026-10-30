@@ -573,4 +573,13 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      make room in `pane.rs`. **Not done:** a filter change does not cancel the walk's queue as
      List.qml's does; a waiting row answers later instead, which costs nothing it would not.
      Driven headless: the list asks the walk, and Show Items stores the column, 67 checks.
-   - **8d-iv-c**, text size, which makes the crate's fixed metrics follow a stored stop.
+   - **8d-iv-c, text size (done).** `display.textSize` is applied as iced's own window scale: the
+     stored stop, landed on the nearest of Omarchy's seven, or Omarchy's `[font] base-size` while
+     following it, over the 14 px base every metric in `metrics.rs` was taken at
+     (`listcols::ui_scale`). Type, spacing, rows and marks scale together, which is what deriving
+     every token from the size in force does in Theme.qml, and the monitor's scale stays the
+     compositor's, on top; on this box Omarchy's base is 14, so following it draws exactly as
+     before. **Deviations:** one ratio scales everything, where Theme.qml rounds each token on its
+     own ladder, so a size can sit a pixel off QML's; Omarchy's base is read once at launch where
+     Style.qml follows a theme change live; and the chooser window keeps its own fixed size. A
+     headless launch at 20 is looked at, 68 checks.

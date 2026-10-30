@@ -83,6 +83,7 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         pending_menu: None,
         colprev: Default::default(),
         trash: Default::default(),
+        omarchy_base: crate::settingspanel::base_size(),
         backend_key: 0,
         side: 0,
         other: None,

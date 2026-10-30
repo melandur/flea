@@ -374,6 +374,14 @@ WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 400 55 3; sleep 0.5; k -k Down -k Dow
 check "and Show Items adds the count beside it" '["name","size","date","mode","items"]' "$(jq -c '.columns' "$D/state/flea/ui.json")"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 jq '.density = "normal" | .columns = ["name","size","date"]' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+
+# Text size: a stored stop draws the whole window at that size over the 14 px the metrics were taken
+# at; it is looked at, not asserted, because nothing the trace carries measures it.
+jq '.display.textSize = {"mode": 20}' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+launch "$T"; shot text-size-20
+check "a window at text size 20 opens and lists" 1 "$(grep -c "\"c\":\"list\".*\"path\":\"$T\"" "$D/trace.log")"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+jq '.display.textSize = {"mode": "system"}' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
 APP=""
 
 # The chooser, the window tools/flea-portal opens through flea --pick.

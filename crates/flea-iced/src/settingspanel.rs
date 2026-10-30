@@ -36,7 +36,7 @@ fn output(argv: &[&str]) -> String {
 }
 
 // Omarchy's base size: the user's own shell.toml wins over the theme's, as Style.qml reads them.
-fn base_size() -> u32 {
+pub(crate) fn base_size() -> u32 {
     let home = std::env::var("HOME").unwrap_or_default();
     for file in [".config/omarchy/shell.toml", ".local/state/omarchy/current/theme/shell.toml"] {
         let body = std::fs::read_to_string(format!("{home}/{file}")).unwrap_or_default();
