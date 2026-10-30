@@ -643,9 +643,9 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      headless: a diagonal band from the ground marks rows 1 to 5, a second one cancelled by Escape
      mid-drag puts those five back (removing the cancel turns it red), and in the grid, scrolled to
      its end with the wheel, a band from the empty trailing cell held past the top for two seconds
-     reaches further up than the same drag released at once, 75 checks. **Seen in passing, not this
-     stage's:** the grid's scroll to a cursor below the screen counts in items rather than tile rows,
-     so the cursor's row can stay partly below the bottom edge (21 px of 130 here).
+     reaches further up than the same drag released at once, 75 checks. **Seen in passing, and fixed
+     since:** the grid's scroll to a cursor below the screen counted in items rather than tile rows,
+     so the cursor's row could stay partly below the bottom edge; see "the scroll into view" below.
    - **9d-i, dragging inside the window and moving it by its title bar (done; dragging to and from
      other applications is 9d-ii).** `dragdrop.rs` is ui/js/Drag.js's rules for a drag that stays in
      the window: the lift carries the selection only when the pressed row is in it, every carried
@@ -708,3 +708,15 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      says so for each), and with a second iced window tiled beside the first, a row dropped on the
      second one's floor is copied there and stays where it was, the second window's own `transfer`
      a copy, and that window then closes cleanly, 82 checks.
+   - **The scroll into view, fixed after stage 9.** Pane.showRow is
+     `positionViewAtIndex(view, ListView.Contain)`: the least scroll that shows the row, a row above
+     the screen to its top edge and a row below it to its bottom edge. The pane sent the second as an
+     item to put at the top, `view + 1 - visible`, which is exact in the list and wrong in the grid,
+     whose view turned that item into a tile row by rounding the division down: whenever the cursor
+     was not in a row's last column the scroll stopped a row short, and the cursor's row hung past
+     the bottom edge. The pane now says which half it means (`Effect::ScrollUnder`), and each view
+     measures it in its own pixels, the row's bottom on the viewport's bottom; in the list that also
+     puts a partly drawn row on the bottom edge rather than a whole one at the top, as Contain does.
+     A unit test pins the grid arithmetic, and the headless run ends thirty Downs on the first tile of
+     a 206-tile grid's last row and clicks just under where that row's top must now be, which takes
+     the row's second tile; the old arithmetic takes the tile in the row above, 83 checks.

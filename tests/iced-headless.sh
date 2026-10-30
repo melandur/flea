@@ -475,6 +475,18 @@ corner 2000; sleep 0.5; shot band-grid; n=$(mark); ctrl c; sleep 1
 held=$(since "$n" | grep '"c":"paths"' | tail -1 | sed 's/^flea-iced: sent //' | jq '.rows | min')
 check "a band held past the edge scrolls and marks further up" yes "$([ "${held:-999}" -lt "${still:-0}" ] 2> /dev/null && echo yes || echo "no: $still then $held")"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+# A tile below the screen comes in with its row on the bottom edge (positionViewAtIndex, Contain).
+# Thirty Downs end on tile 198, the first of the last row, which must then span the list's last
+# 130 px, 833 to 963; a click at 840 on that row's second tile takes tile 199. Rounding an item count
+# down used to leave the row hanging past the edge, its top further down, and the same click took
+# tile 190 in the row above.
+mkdir -p "$T/gridscroll"; for i in $(seq -w 0 205); do : > "$T/gridscroll/g-$i.txt"; done
+launch "$T/gridscroll"
+for _ in 1 2 3; do k -k Down -k Down -k Down -k Down -k Down -k Down -k Down -k Down -k Down -k Down; done
+WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 426 840; ctrl b; sleep 1; shot grid-bottom
+check "the cursor's tile row ends on the bottom edge" "$T/gridscroll/g-199.txt" "$(WAYLAND_DISPLAY=$SOCK timeout 3 wl-paste -n 2> /dev/null)"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+rm -rf "$T/gridscroll"
 jq '.view = "list"' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
 # The chooser below counts the tree's rows.
 rm -rf "$T/band"

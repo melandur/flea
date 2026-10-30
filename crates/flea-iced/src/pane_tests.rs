@@ -79,7 +79,7 @@ fn parent_lands_on_the_directory_it_left_even_past_the_first_screen() {
     assert_eq!(sends(&out), vec![Request::Locate { path: "/a/b".into() }]);
     let out = p.receive(Reply::Located { directory: "/a".into(), path: "/a/b".into(), index: 700 });
     assert_eq!(p.cursor, 700);
-    assert_eq!(out, vec![Effect::ScrollTo(691)]);
+    assert_eq!(out, vec![Effect::ScrollUnder(700)]);
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn steps_clamp_at_both_ends_and_scroll_the_cursor_into_view() {
     listed(&mut p, "/a", 30);
     assert!(p.step(-1).is_empty());
     assert_eq!(p.cursor, 0);
-    assert_eq!(p.step(12), vec![Effect::ScrollTo(3)]);
+    assert_eq!(p.step(12), vec![Effect::ScrollUnder(12)]);
     p.step(1000);
     assert_eq!(p.cursor, 29);
 }

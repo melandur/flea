@@ -23,7 +23,9 @@ pub const WATCH_MS: u64 = 400;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Effect {
     Send(Request),
+    // positionViewAtIndex(Contain): a row to the top, or in at the bottom edge, which the view measures.
     ScrollTo(usize),
+    ScrollUnder(usize),
     OpenFile(String),
     // A folder somewhere other than the cursor's row, entered: a neighbour column's tap.
     OpenDir(String),
@@ -42,7 +44,6 @@ pub enum Effect {
     // Restart the search's live timer: a SearchLive carrying this generation after 120 ms.
     SearchTimer(u64),
 }
-
 
 #[derive(Debug)]
 pub(crate) struct InFlight {
@@ -386,7 +387,7 @@ impl Pane {
         if view < self.first_visible {
             out.push(Effect::ScrollTo(view));
         } else if view >= self.first_visible + self.visible_rows {
-            out.push(Effect::ScrollTo(view + 1 - self.visible_rows));
+            out.push(Effect::ScrollUnder(view));
         }
         out
     }

@@ -49,6 +49,11 @@ impl Geometry {
     pub fn scroll_y(&self, item: usize) -> f32 {
         (item / self.columns) as f32 * self.cell_h
     }
+
+    // GridView.positionViewAtIndex(Contain) from above: the item's tile row ends on the bottom edge.
+    pub fn scroll_under(&self, item: usize, height: f32) -> f32 {
+        ((item / self.columns + 1) as f32 * self.cell_h - height).max(0.0)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -100,6 +105,17 @@ mod tests {
         assert_eq!(g.viewport(0.0, 900.0), (0, 54, 62));
         assert_eq!(g.viewport(140.0, 900.0), (9, 54, 71));
         assert_eq!(g.scroll_y(20), 260.0);
+    }
+
+    #[test]
+    fn a_tile_below_the_screen_comes_in_with_its_row_on_the_bottom_edge() {
+        let g = geometry(1408.0, "medium");
+        // Tile 197 sits in row 21, column 8, and tile 198 opens row 22: each ends on an 889 px edge.
+        assert_eq!(g.scroll_under(197, 889.0), 22.0 * 130.0 - 889.0);
+        assert_eq!(g.scroll_under(198, 889.0), 23.0 * 130.0 - 889.0);
+        // The item count rounded down, (198 + 1 - 54) / 9, put row 16 on top: row 22 ended past the edge.
+        assert!(g.scroll_y(198 + 1 - 54) + 889.0 < 23.0 * 130.0);
+        assert_eq!(g.scroll_under(3, 889.0), 0.0, "a row already on the first screen scrolls nowhere");
     }
 
     #[test]

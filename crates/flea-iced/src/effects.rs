@@ -21,6 +21,16 @@ impl Flea {
                     let y = if self.grid_mode() { self.grid_geometry().scroll_y(index) } else { index as f32 * self.file_h() };
                     tasks.push(operation::scroll_to(list_id(self.side), scrollable::AbsoluteOffset { x: 0.0, y }));
                 }
+                // The row's bottom on the viewport's bottom edge: in the grid that is the tile row's,
+                // which an item count rounded down used to leave partly below the edge.
+                Effect::ScrollUnder(index) => {
+                    let y = if self.grid_mode() {
+                        self.grid_geometry().scroll_under(index, self.viewport_h)
+                    } else {
+                        ((index + 1) as f32 * self.file_h() - self.viewport_h).max(0.0)
+                    };
+                    tasks.push(operation::scroll_to(list_id(self.side), scrollable::AbsoluteOffset { x: 0.0, y }));
+                }
                 // Nav.openCursor: an archive nobody claimed opens Flea's own view and launches nothing.
                 Effect::OpenFile(path) if self.archive_routes_here(&path) => tasks.push(self.open_preview()),
                 Effect::OpenFile(path) => tasks.push(self.open_file(path)),
