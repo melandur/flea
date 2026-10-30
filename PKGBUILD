@@ -2,7 +2,9 @@
 
 pkgname=flea
 pkgver=0.3.8
-pkgrel=1
+pkgrel=2
+# The 0.3.8 installs carried epoch 1, so dropping it would make this package a downgrade.
+epoch=1
 pkgdesc='Fast, keyboard-first file manager for Omarchy'
 arch=('x86_64' 'aarch64')
 license=('MIT')
@@ -22,11 +24,13 @@ license=('MIT')
 # python is the interpreter of two scripts this package installs and D-Bus activates at runtime, so
 # it is a runtime dependency rather than only the checkdepend the sandboxed child needs.
 # kimageformats with libheif is Qt's HEIC decoder: without it the Space preview of a phone photo is a sentence, not a picture.
+# poppler-glib and the three GStreamer packages are what flea-iced's PDF and media preview link
+# against, docs/iced-port.md stage 5b's packaging note.
 # gvfs-mtp, gvfs-gphoto2 and gvfs-afc are the three phone backends the rail reads, and usbmuxd is
 # what AFC talks to. Stock Omarchy installs gvfs-mtp, gvfs-nfs and gvfs-smb only, so on a clean box
 # an Android phone lists and nothing else does. Measured on an iPhone (iOS 26.6.2): its PTP leg mounts
 # and answers zero folders, and AFC is the one that lists DCIM, so the iPhone needs both.
-depends=('bubblewrap' 'expect' 'gcc-libs' 'glib2' 'glibc' 'gvfs' 'gvfs-afc' 'gvfs-dnssd' 'gvfs-gphoto2' 'gvfs-mtp' 'gvfs-nfs' 'gvfs-smb' 'hicolor-icon-theme' 'kimageformats' 'libheif' 'omarchy' 'python' 'python-gobject' 'qt6-multimedia' 'qt6-webengine' 'quickshell' 'shared-mime-info' 'usbmuxd' 'util-linux' 'wl-clipboard' 'xdg-terminal-exec' 'xdg-utils')
+depends=('bubblewrap' 'expect' 'gcc-libs' 'glib2' 'glibc' 'gvfs' 'gvfs-afc' 'gvfs-dnssd' 'gvfs-gphoto2' 'gvfs-mtp' 'gvfs-nfs' 'gvfs-smb' 'hicolor-icon-theme' 'kimageformats' 'libheif' 'omarchy' 'poppler-glib' 'gstreamer' 'gst-plugins-base' 'gst-plugins-good' 'python' 'python-gobject' 'qt6-multimedia' 'qt6-webengine' 'quickshell' 'shared-mime-info' 'usbmuxd' 'util-linux' 'wl-clipboard' 'xdg-terminal-exec' 'xdg-utils')
 makedepends=('cargo')
 # Both packages own /usr/bin/flea, so pacman refuses the pair rather than leaving one half-installed.
 conflicts=('flea-git')
@@ -34,7 +38,8 @@ optdepends=('libarchive: archive listing and extraction'
             'imagemagick: image conversion'
             'tailscale: Taildrop sharing'
             'ffmpeg: media metadata in the preview column'
-            'dropbox-cli: Dropbox share links')
+            'dropbox-cli: Dropbox share links'
+            'gst-libav: more media codecs in the iced preview')
 # The release profile strips, so a debug package would have nothing to hold.
 options=('!debug')
 # Empty on purpose: with no source array makepkg builds from $startdir, so a clone is the source.
@@ -45,6 +50,8 @@ build() {
   export CARGO_TARGET_DIR="$srcdir/target"
   cd "$startdir"
   cargo build --release --locked
+  # The iced window is its own workspace, so it builds with its own lock into its own target.
+  CARGO_TARGET_DIR="$srcdir/target-iced" cargo build --release --locked --manifest-path crates/flea-iced/Cargo.toml
 }
 
 check() {
@@ -61,6 +68,8 @@ check() {
 package() {
   cd "$startdir"
   install -Dm755 "$srcdir/target/release/flea" "$pkgdir/usr/bin/flea"
+  # src/gui.rs looks for flea-iced beside the binary when FLEA_FRONTEND=iced.
+  install -Dm755 "$srcdir/target-iced/release/flea-iced" "$pkgdir/usr/bin/flea-iced"
   install -Dm755 tools/flea-gio-auth "$pkgdir/usr/lib/flea/flea-gio-auth"
   # The portal backend, its registration and its D-Bus activation: xdg-desktop-portal 1.22 reads
   # portals/ out of every data dir, and this is Flea's own package writing Flea's own files.
