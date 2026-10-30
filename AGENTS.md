@@ -4849,6 +4849,20 @@ palette; that is a known limit and not an oversight.
 the catalog needed no new row kind on `ui/SettingsRow.qml` or `ui/SettingsPanel.qml`, both of which
 are over their own caps already. Choosing a row is choosing that theme; there is no off.
 
+### Colours over the palette
+
+Settings > Theme > Colours, the operator's request of 2026-10-30: `display.colors` holds seven roles
+(cursor and accent, marked rows, folders, files, programs, links, file marks) and
+`display.typeColors` one colour per file family, keyed by the family's own mark from
+`ui/js/FileTypes.js`, so a colour follows exactly the files that draw that mark. Each value is `""`,
+the palette's own, or exactly `#rrggbb`; `src/uicolours.rs` holds both rule tables and fills their
+defaults in `defaults()` rather than DEFAULTS spelling out three dozen empty strings. The iced window
+lays them over whichever palette is in force (`crates/flea-iced/src/theme.rs` `Palette::with`) and
+takes them as chosen, never lifted to a contrast floor, because the operator picked each against the
+background they were looking at. A family is read from the name first and the backend's icon after,
+so a family colour applies whether or not the filetype tier is on; a folder and a link never take
+one. **The QML window does not read either group.**
+
 ### The Network row marks: TailscaleMark and DropboxMark
 
 **Both third-party marks are reproduced from the official artwork, not recut**, and neither appears

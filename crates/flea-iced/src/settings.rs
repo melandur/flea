@@ -272,17 +272,26 @@ fn colour_rows(data: &Value) -> Vec<Row> {
     ];
     let mut out = vec![group("Colours")];
     for (id, label, glyph) in labels {
-        let stored = at(data, &format!("/display/colors/{id}")).as_str().unwrap_or("").to_lowercase();
-        let mut values: Vec<Value> = SWATCHES.iter().map(|(v, _)| json!(v)).collect();
-        let mut names: Vec<&str> = SWATCHES.iter().map(|(_, n)| *n).collect();
-        if !SWATCHES.iter().any(|(v, _)| *v == stored) {
-            values.push(json!(stored));
-            names.push(&stored);
-        }
-        out.push(Row { role: "colour", ..choice(&format!("color:{id}"), label, Some(glyph), values, &names, &json!(stored)) });
+        out.push(swatch_row(data, "color", "colors", id, label, glyph));
     }
     out.push(hint("Left and Right step a colour; Theme keeps the palette's own. Folders also colour the folder mark."));
+    out.push(group("File type colours"));
+    for (id, label) in crate::theme::TYPES {
+        out.push(swatch_row(data, "type", "typeColors", id, label, id));
+    }
+    out.push(hint("A file type's colour draws its name and its mark, in every view."));
     out
+}
+
+fn swatch_row(data: &Value, prefix: &str, key: &str, id: &str, label: &str, glyph: &'static str) -> Row {
+    let stored = at(data, &format!("/display/{key}/{id}")).as_str().unwrap_or("").to_lowercase();
+    let mut values: Vec<Value> = SWATCHES.iter().map(|(v, _)| json!(v)).collect();
+    let mut names: Vec<&str> = SWATCHES.iter().map(|(_, n)| *n).collect();
+    if !SWATCHES.iter().any(|(v, _)| *v == stored) {
+        values.push(json!(stored));
+        names.push(&stored);
+    }
+    Row { role: "colour", ..choice(&format!("{prefix}:{id}"), label, Some(glyph), values, &names, &json!(stored)) }
 }
 
 fn about_rows(f: &Facts) -> Vec<Row> {
@@ -314,6 +323,9 @@ pub fn patch(id: &str, value: Value) -> Value {
     }
     if let Some(role) = id.strip_prefix("color:") {
         return json!({ "display": { "colors": { role: value } } });
+    }
+    if let Some(family) = id.strip_prefix("type:") {
+        return json!({ "display": { "typeColors": { family: value } } });
     }
     if let Some(theme) = id.strip_prefix("theme:") {
         return json!({ "display": { "theme": theme } });

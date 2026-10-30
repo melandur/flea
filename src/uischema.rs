@@ -1,5 +1,6 @@
 // The shipped ui.json shape and the rule each key is measured against; src/uistate.rs applies them.
 use crate::jsondoc::{self, Json};
+use crate::uicolours;
 
 // The shape and every default, copied from docs/flea-0.1.4-build-handoff.md section 1.
 pub const DEFAULTS: &str = r#"{
@@ -39,9 +40,7 @@ pub const DEFAULTS: &str = r#"{
   },
   "keys": "default",
   "display": { "textSize": { "mode": "system" }, "hyprlandIcons": false,
-                "fileTypeColors": false, "theme": "omarchy",
-                "colors": { "cursor": "", "marked": "", "folder": "", "file": "",
-                            "executable": "", "symlink": "", "mark": "" } },
+                "fileTypeColors": false, "theme": "omarchy" },
   "menu": { "hidden": ["delete", "openTerminal", "placeMenu", "runScript",
             "moveto", "copyto", "properties", "permissions", "copypath"] },
   "open": { "rules": [] }
@@ -79,7 +78,6 @@ pub enum Rule {
     // "omarchy", or one catalog id: lowercase, digits and hyphens, which is every id
     // vendor/strata-themes.toml carries and the whole of what tools/flea-themes-gen emits.
     ThemeId,
-    // "" follows the palette, otherwise exactly "#rrggbb".
     Colour,
     Group(&'static [(&'static str, Rule)]),
 }
@@ -154,13 +152,8 @@ pub const DISPLAY: &[(&str, Rule)] = &[
     ("hyprlandIcons", Rule::Bool),
     ("fileTypeColors", Rule::Bool),
     ("theme", Rule::ThemeId),
-    ("colors", Rule::Group(COLORS)),
-];
-
-// Settings > Theme > Colours: one role each, "" for the palette's own and "#rrggbb" for the operator's.
-pub const COLORS: &[(&str, Rule)] = &[
-    ("cursor", Rule::Colour), ("marked", Rule::Colour), ("folder", Rule::Colour), ("file", Rule::Colour),
-    ("executable", Rule::Colour), ("symlink", Rule::Colour), ("mark", Rule::Colour),
+    ("colors", Rule::Group(uicolours::COLORS)),
+    ("typeColors", Rule::Group(uicolours::TYPE_COLORS)),
 ];
 
 // hidden is the whole of the Menus section's state: the master row SettingsMenus draws over the six
@@ -226,7 +219,7 @@ pub fn is_theme_id(text: &str) -> bool {
 }
 
 pub fn defaults() -> Json {
-    jsondoc::parse(DEFAULTS).expect("the shipped ui.json defaults are valid JSON")
+    uicolours::with_defaults(jsondoc::parse(DEFAULTS).expect("the shipped ui.json defaults are valid JSON"))
 }
 
 #[cfg(test)]
@@ -342,7 +335,7 @@ mod tests {
         let display: Vec<&str> = d.get("display").and_then(Json::as_object).expect("display").iter().map(|(k, _)| k.as_str()).collect();
         // Window opacity and shadows stay absent: the compositor owns those and Flea mirrors it.
         // The two 0.3.1 rows are Flea's own, because neither has a compositor counterpart at all.
-        assert_eq!(display, ["textSize", "hyprlandIcons", "fileTypeColors", "theme", "colors"],
+        assert_eq!(display, ["textSize", "hyprlandIcons", "fileTypeColors", "theme", "colors", "typeColors"],
                    "the compositor still owns opacity and shadows");
         let menu: Vec<&str> = d.get("menu").and_then(Json::as_object).expect("menu").iter().map(|(k, _)| k.as_str()).collect();
         assert_eq!(menu, ["hidden"], "the master row is derived from menu.hidden, not stored beside it");

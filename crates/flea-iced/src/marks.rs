@@ -62,6 +62,15 @@ pub fn glyph_for_row(icon: &str, mode: u32, name: &str, is_dir: bool, file_types
     glyph_for(icon)
 }
 
+// The family a file row belongs to, by its name first and its icon after, which is what
+// Settings > Theme > Colours keys a type colour on. A folder and a link have none.
+pub fn family(icon: &str, mode: u32, name: &str, is_dir: bool) -> Option<&'static str> {
+    if is_dir || is_symlink(mode) {
+        return None;
+    }
+    Some(mark_for(name, false).unwrap_or_else(|| glyph_for(icon))).filter(|m| *m != FALLBACK)
+}
+
 fn hex(s: &str) -> Option<Color> {
     let n = u32::from_str_radix(s.strip_prefix('#')?, 16).ok()?;
     Some(Color::from_rgb8((n >> 16) as u8, (n >> 8) as u8, n as u8))

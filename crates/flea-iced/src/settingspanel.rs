@@ -330,12 +330,12 @@ impl Flea {
             Key::Named(Named::ArrowDown) | Key::Character("j") => {
                 self.panel.cursor = settings::step_row(&rows, self.panel.cursor, 1);
                 self.preview_theme();
-                Task::none()
+                crate::settingsview::reveal_cursor()
             }
             Key::Named(Named::ArrowUp) | Key::Character("k") => {
                 self.panel.cursor = settings::step_row(&rows, self.panel.cursor, -1);
                 self.preview_theme();
-                Task::none()
+                crate::settingsview::reveal_cursor()
             }
             Key::Named(Named::ArrowRight) | Key::Character("l") if !self.panel.on_rail => self.panel_step(self.panel.cursor, 1),
             Key::Named(Named::ArrowLeft) | Key::Character("h") if !self.panel.on_rail => self.panel_step(self.panel.cursor, -1),

@@ -16,6 +16,7 @@ mod paths;
 mod terminal;
 mod tui;
 mod thp;
+mod uicolours;
 mod uischema;
 mod uistate;
 mod favourites;

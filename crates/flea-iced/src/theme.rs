@@ -23,6 +23,8 @@ pub struct Palette {
     pub file: Color,
     // A folder's mark when the operator chose one, which wins over the filetype tier's colour.
     pub folder_mark: Option<Color>,
+    // A file family's colour, for its name and its mark, in TYPES order.
+    pub types: [Option<Color>; TYPES.len()],
 }
 
 // display.colors: each role the operator chose, None where the palette's own stands.
@@ -35,7 +37,21 @@ pub struct Overrides {
     pub executable: Option<Color>,
     pub symlink: Option<Color>,
     pub mark: Option<Color>,
+    // display.typeColors, in TYPES order.
+    pub types: [Option<Color>; TYPES.len()],
 }
+
+// display.typeColors: each file family by its mark, with the name Settings draws for it. The keys are
+// src/uicolours.rs TYPE_COLORS in the same order.
+pub const TYPES: [(&str, &str); 26] = [
+    ("image", "Images"), ("film", "Video"), ("music", "Audio"), ("archive", "Archives"),
+    ("file-text", "Documents and text"), ("table", "Spreadsheets"), ("presentation", "Presentations"),
+    ("code", "Source code"), ("code-xml", "Markup"), ("braces", "Config and data"), ("terminal", "Scripts"),
+    ("binary", "Binaries"), ("database", "Databases"), ("disc", "Disc images"), ("type", "Fonts"),
+    ("key", "Keys and signatures"), ("hash", "Checksums"), ("book-open", "E-books"), ("palette", "Design files"),
+    ("box", "3D models and packages"), ("captions", "Subtitles"), ("mail", "Mail"), ("calendar", "Calendars"),
+    ("notebook", "Notebooks"), ("lock", "Lock files"), ("git-branch", "Git"),
+];
 
 impl Overrides {
     pub fn from_json(colors: Option<&serde_json::Value>) -> Self {
@@ -48,7 +64,16 @@ impl Overrides {
             executable: get("executable"),
             symlink: get("symlink"),
             mark: get("mark"),
+            types: Self::types(None),
         }
+    }
+
+    pub fn from_doc(v: &serde_json::Value) -> Self {
+        Overrides { types: Self::types(v.pointer("/display/typeColors")), ..Self::from_json(v.pointer("/display/colors")) }
+    }
+
+    fn types(map: Option<&serde_json::Value>) -> [Option<Color>; TYPES.len()] {
+        TYPES.map(|(k, _)| map.and_then(|m| m.get(k)).and_then(serde_json::Value::as_str).and_then(hex))
     }
 }
 
@@ -99,6 +124,7 @@ impl Palette {
             folder: foreground,
             file: foreground,
             folder_mark: None,
+            types: [None; TYPES.len()],
         }
     }
 
@@ -118,6 +144,7 @@ impl Palette {
             folder: c("#a9b1d6"),
             file: c("#a9b1d6"),
             folder_mark: None,
+            types: [None; TYPES.len()],
         }
     }
 
@@ -172,10 +199,27 @@ impl Palette {
         self.executable = o.executable.unwrap_or(self.executable);
         self.symlink = o.symlink.unwrap_or(self.symlink);
         self.dim = o.mark.unwrap_or(self.dim);
+        self.types = o.types;
         self
     }
 
-    // A row's name: a link, a folder, a program or a plain file, each in its own role.
+    // The colour the operator chose for this row's file family, if any.
+    pub fn type_ink(&self, r: &crate::wire::Row) -> Option<Color> {
+        let family = crate::marks::family(&r.i, r.p, &r.n, r.d)?;
+        TYPES.iter().position(|(k, _)| *k == family).and_then(|i| self.types[i])
+    }
+
+    // A row's name: a link, its family's chosen colour, a folder, a program or a plain file.
+    pub fn row_ink(&self, r: &crate::wire::Row) -> Color {
+        if crate::format::is_symlink(r.p) { self.symlink } else { self.type_ink(r).unwrap_or_else(|| self.name_ink(r.d, r.p)) }
+    }
+
+    // The operator's own colour for a row's mark: a folder's, else its family's.
+    pub fn row_mark(&self, r: &crate::wire::Row) -> Option<Color> {
+        self.chosen_mark(r.d, r.p).or_else(|| self.type_ink(r))
+    }
+
+    // A row's name by kind alone: a link, a folder, a program or a plain file, each in its own role.
     pub fn name_ink(&self, is_dir: bool, mode: u32) -> Color {
         if crate::format::is_symlink(mode) {
             self.symlink
@@ -230,5 +274,18 @@ mod tests {
         assert_eq!(p.file, base.file);
         assert_eq!(p.dim, base.dim);
         assert_eq!(p.selection, base.selection);
+    }
+
+    #[test]
+    fn a_family_colour_draws_its_files_and_never_a_folder_or_a_link() {
+        let o = Overrides::from_doc(&serde_json::json!({ "display": { "typeColors": { "image": "#00ff00" } } }));
+        let p = Palette::fallback().with(&o);
+        let row = |n: &str, d: bool, mode: u32| serde_json::from_value::<crate::wire::Row>(serde_json::json!({ "n": n, "d": d, "p": mode, "i": "image-x-generic" })).unwrap();
+        let green = Color::from_rgb8(0, 255, 0);
+        assert_eq!(p.row_ink(&row("a.png", false, 0o100644)), green);
+        assert_eq!(p.row_mark(&row("a.png", false, 0o100644)), Some(green));
+        assert_eq!(p.row_ink(&row("pngs", true, 0o040755)), p.folder);
+        assert_eq!(p.row_ink(&row("a.png", false, 0o120777)), p.symlink);
+        assert_eq!(p.row_mark(&row("a.txt", false, 0o100644)), None);
     }
 }

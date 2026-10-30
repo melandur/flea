@@ -4,7 +4,10 @@
 use crate::settings::{self, Kind, Row, SECTIONS};
 use crate::{marks, Flea, Message, MARK, PAD_X, ROW_H};
 use iced::widget::{button, column, container, mouse_area, opaque, row, scrollable, space, stack, svg, text, Column, Row as IcedRow};
-use iced::{Border, Color, Element, Length};
+use iced::advanced::widget::operation::scrollable::{scroll_to, AbsoluteOffset, Scrollable};
+use iced::advanced::widget::operation::{Operation, Outcome};
+use iced::advanced::widget::Id;
+use iced::{Border, Color, Element, Length, Rectangle, Task, Vector};
 
 impl Flea {
     pub(crate) fn panel_layer<'a>(&'a self, base: Element<'a, Message>) -> Element<'a, Message> {
@@ -49,7 +52,7 @@ impl Flea {
         for (i, r) in rows.into_iter().enumerate() {
             col = col.push(self.panel_row(i, r));
         }
-        scrollable(col).height(Length::Fill).into()
+        scrollable(col).id(PANE_ID).height(Length::Fill).into()
     }
 
     fn panel_row(&self, i: usize, r: Row) -> Element<'_, Message> {
@@ -141,9 +144,59 @@ impl Flea {
             }
         };
         let focused = i == self.panel.cursor && !self.panel.on_rail;
-        let band = container(body).padding([4.0, 10.0]).width(Length::Fill).style(move |_| {
+        let mut band = container(body).padding([4.0, 10.0]).width(Length::Fill);
+        if focused {
+            band = band.id(CURSOR_ID);
+        }
+        let band = band.style(move |_| {
             if focused { container::Style::default().background(Color { a: 0.18, ..p.accent }) } else { container::Style::default() }
         });
         if settings::focusable(&r) { mouse_area(band).on_press(Message::PanelActivate(i)).into() } else { band.into() }
+    }
+}
+
+const PANE_ID: &str = "settings-pane";
+const CURSOR_ID: &str = "settings-cursor";
+
+// The pane follows the keyboard: once the cursor row is drawn, the pane scrolls just far enough to
+// show it whole, measured off the drawn rows themselves since a row's height follows its content.
+pub(crate) fn reveal_cursor() -> Task<Message> {
+    iced::advanced::widget::operate(Reveal::default()).discard()
+}
+
+#[derive(Default)]
+struct Reveal {
+    pane: Option<(Rectangle, Rectangle, f32)>,
+    row: Option<Rectangle>,
+}
+
+impl Operation for Reveal {
+    fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn Operation)) {
+        operate(self);
+    }
+
+    fn scrollable(&mut self, id: Option<&Id>, bounds: Rectangle, content: Rectangle, translation: Vector, _: &mut dyn Scrollable) {
+        if id == Some(&Id::new(PANE_ID)) {
+            self.pane = Some((bounds, content, translation.y));
+        }
+    }
+
+    fn container(&mut self, id: Option<&Id>, bounds: Rectangle) {
+        if id == Some(&Id::new(CURSOR_ID)) {
+            self.row = Some(bounds);
+        }
+    }
+
+    fn finish(&self) -> Outcome<()> {
+        let (Some((view, content, offset)), Some(row)) = (self.pane, self.row) else { return Outcome::None };
+        let top = row.y - content.y;
+        let y = if top < offset {
+            top
+        } else if top + row.height > offset + view.height {
+            top + row.height - view.height
+        } else {
+            return Outcome::None;
+        };
+        Outcome::Chain(Box::new(scroll_to(Id::new(PANE_ID), AbsoluteOffset { x: None, y: Some(y) })))
     }
 }

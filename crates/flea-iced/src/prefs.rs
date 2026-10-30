@@ -154,7 +154,7 @@ impl Prefs {
             view: Some(s("view")).filter(|x| !x.is_empty()).unwrap_or_else(|| "list".into()),
             dual_from: v.pointer("/dual/from").and_then(Value::as_str).unwrap_or("list").to_string(),
             theme_id: v.pointer("/display/theme").and_then(Value::as_str).unwrap_or("omarchy").to_string(),
-            colors: crate::theme::Overrides::from_json(v.pointer("/display/colors")),
+            colors: crate::theme::Overrides::from_doc(&v),
             dual_focus: u8::from(v.pointer("/dual/focus").and_then(Value::as_u64) == Some(1)),
             menu_hidden: match v.pointer("/menu/hidden").and_then(Value::as_array) {
                 Some(a) => a.iter().filter_map(|x| x.as_str().map(String::from)).collect(),

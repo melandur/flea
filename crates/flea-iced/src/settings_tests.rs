@@ -60,3 +60,12 @@ fn a_colours_row_writes_one_leaf_of_display_colors_and_keeps_a_hand_written_colo
     assert_eq!(cursor.value, "Orange");
     assert_eq!(rows.iter().find(|r| r.id == "color:file").unwrap().value, "Theme");
 }
+
+#[test]
+fn a_file_type_row_writes_one_leaf_of_display_type_colors() {
+    assert_eq!(patch("type:image", json!("#9ece6a")), json!({ "display": { "typeColors": { "image": "#9ece6a" } } }));
+    let rows = theme_rows(&json!({ "display": { "typeColors": { "code": "#ff9e64" } } }));
+    let code = rows.iter().find(|r| r.id == "type:code").unwrap();
+    assert_eq!((code.value.as_str(), code.glyph), ("Orange", Some("code")));
+    assert_eq!(rows.iter().filter(|r| r.id.starts_with("type:")).count(), crate::theme::TYPES.len());
+}
