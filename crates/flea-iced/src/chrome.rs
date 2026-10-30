@@ -45,6 +45,24 @@ pub struct Chrome {
     cached: Option<((String, bool), Vec<String>)>,
 }
 
+// Format.tilde: home itself or home and a separator, never a sibling wearing home's name.
+fn tilde(path: &str, home: &str) -> String {
+    if !home.is_empty() && (path == home || path.starts_with(&format!("{home}/"))) {
+        return format!("~{}", &path[home.len()..]);
+    }
+    path.to_string()
+}
+
+// Text.ElideLeft by character count: the head goes, an ellipsis in its place.
+fn elide_head(s: &str, budget: usize) -> String {
+    let n = s.chars().count();
+    if n <= budget {
+        return s.to_string();
+    }
+    let tail: String = s.chars().skip(n - budget.saturating_sub(1)).collect();
+    format!("…{tail}")
+}
+
 fn home() -> String {
     std::env::var("HOME").unwrap_or_default()
 }
@@ -224,6 +242,15 @@ impl Flea {
                 .on_submit(Message::PathSubmit)
                 .size(TEXT_PX)
                 .into()
+        } else if self.prefs.address_bar == "path" {
+            // ChromeBar's Path: the folder as one line, home spelled ~, its head cut when it is too
+            // long because the tail is what names the folder; a double press opens the field, which
+            // is the last crumb's own rule, so it goes through the same press.
+            let last = self.crumbs().len().saturating_sub(1);
+            let budget = ((self.window_w - 330.0) / (TEXT_PX * 0.55)).max(8.0) as usize;
+            mouse_area(text(elide_head(&tilde(&self.pane.path, &home()), budget)).color(p.foreground).wrapping(text::Wrapping::None))
+                .on_press(Message::CrumbPressed(last))
+                .into()
         } else {
             let mut strip = Row::new();
             for (i, c) in self.crumbs().into_iter().enumerate() {
@@ -262,5 +289,19 @@ impl Flea {
             .align_y(iced::Center)
             .style(move |_| iced::widget::container::Style::default().background(p.surface))
             .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{elide_head, tilde};
+
+    #[test]
+    fn the_path_bar_spells_home_and_loses_its_head_first() {
+        assert_eq!(tilde("/home/u/docs", "/home/u"), "~/docs");
+        assert_eq!(tilde("/home/u", "/home/u"), "~");
+        assert_eq!(tilde("/home/ux", "/home/u"), "/home/ux", "issue 95: a sibling is not home");
+        assert_eq!(elide_head("~/a/b/c", 20), "~/a/b/c");
+        assert_eq!(elide_head("/very/long/path/name", 8), "…th/name");
     }
 }

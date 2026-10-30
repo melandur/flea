@@ -6,6 +6,7 @@ use iced::widget::svg;
 use iced::Color;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::tables;
 
@@ -85,27 +86,55 @@ pub fn path_for(mark: &str) -> &'static str {
     find(tables::PATHS, mark).or_else(|| find(tables::PATHS, FALLBACK)).unwrap_or("")
 }
 
+// Glyph.qml's Hyprland-aware icons: round caps and joins while the setting is on and Hyprland rounds
+// its windows (Style.cornerRadius, decoration:rounding, read once at launch), square otherwise.
+static WANT_ROUND: AtomicBool = AtomicBool::new(false);
+static WINDOWS_ROUNDED: AtomicBool = AtomicBool::new(false);
+
+pub fn set_round(want: bool) {
+    WANT_ROUND.store(want, Ordering::Relaxed);
+}
+
+// hyprctl -j getoption decoration:rounding answers {"int": N, ...}; no Hyprland reads as square.
+pub fn read_rounding() {
+    let out = std::process::Command::new("hyprctl").args(["-j", "getoption", "decoration:rounding"]).output().ok();
+    let n = out.and_then(|o| serde_json::from_slice::<serde_json::Value>(&o.stdout).ok()).and_then(|v| v.get("int")?.as_i64()).unwrap_or(0);
+    WINDOWS_ROUNDED.store(n > 0, Ordering::Relaxed);
+}
+
+fn round() -> bool {
+    WANT_ROUND.load(Ordering::Relaxed) && WINDOWS_ROUNDED.load(Ordering::Relaxed)
+}
+
 thread_local! {
     // One handle per mark and colour, so iced's raster cache keys on the same handle every frame:
     // a new handle each frame would rasterise the same mark again, row after row.
-    static HANDLES: RefCell<HashMap<(&'static str, [u8; 4]), svg::Handle>> = RefCell::new(HashMap::new());
+    static HANDLES: RefCell<HashMap<(&'static str, [u8; 4], bool), svg::Handle>> = RefCell::new(HashMap::new());
+}
+
+// One lucide mark as an SVG document: the Omarchy cut of square caps and mitered joins, or round
+// ones under Hyprland-aware icons.
+pub fn svg_doc(mark: &str, rgb: [u8; 3], round: bool) -> String {
+    let [r, g, b] = rgb;
+    let (cap, join) = if round { ("round", "round") } else { ("square", "miter") };
+    format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#{r:02x}{g:02x}{b:02x}" stroke-width="2" stroke-linecap="{cap}" stroke-linejoin="{join}"><path d="{}"/></svg>"##,
+        path_for(mark)
+    )
 }
 
 pub fn handle(mark: &'static str, colour: Color) -> svg::Handle {
     let rgba = colour.into_rgba8();
+    let round = round();
     HANDLES.with(|h| {
         h.borrow_mut()
-            .entry((mark, rgba))
+            .entry((mark, rgba, round))
             .or_insert_with(|| {
                 let [r, g, b, _] = rgba;
                 if let Some(doc) = crate::brands::svg(mark, &format!("#{r:02x}{g:02x}{b:02x}")) {
                     return svg::Handle::from_memory(doc.into_bytes());
                 }
-                let body = format!(
-                    r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#{r:02x}{g:02x}{b:02x}" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"><path d="{}"/></svg>"##,
-                    path_for(mark)
-                );
-                svg::Handle::from_memory(body.into_bytes())
+                svg::Handle::from_memory(svg_doc(mark, [r, g, b], round).into_bytes())
             })
             .clone()
     })

@@ -264,7 +264,32 @@ impl Flea {
     fn add_this_folder(&mut self) -> Task<Message> {
         let path = self.pane.path.clone();
         let label = path.rsplit('/').next().filter(|l| !l.is_empty()).unwrap_or("/").to_string();
-        let op = json!({ "op": "add", "record": { "label": label, "path": path } }).to_string();
+        self.favourites_op(json!({ "op": "add", "record": { "label": label, "path": path } }))
+    }
+
+    // SettingsRest rule 4 on the cursor's favourite row: x or Delete removes it, Shift and an arrow
+    // carry it one place, the cursor going with it. Each names the records it was read from, so the
+    // updater refuses rather than acting on a list another window has rewritten since.
+    fn favourite_key(&mut self, remove: bool, direction: isize) -> Task<Message> {
+        let rows = self.panel_rows();
+        let Some(index) = rows.get(self.panel.cursor).filter(|r| r.kind == Kind::Favourite).and_then(|r| r.id.trim_start_matches("favourite:").parse::<usize>().ok()) else {
+            return Task::none();
+        };
+        let expected = self.panel.doc.pointer("/places/favourites").cloned().unwrap_or(json!([]));
+        if remove {
+            return self.favourites_op(json!({ "op": "remove", "index": index, "expected": expected }));
+        }
+        let last = expected.as_array().map_or(0, |a| a.len().saturating_sub(1));
+        let to = (index as isize + direction).clamp(0, last as isize) as usize;
+        if to == index {
+            return Task::none();
+        }
+        self.panel.cursor = (self.panel.cursor as isize + to as isize - index as isize) as usize;
+        self.favourites_op(json!({ "op": "move", "index": index, "to": to, "expected": expected }))
+    }
+
+    fn favourites_op(&mut self, op: Value) -> Task<Message> {
+        let op = op.to_string();
         let bin = crate::backend::binary();
         Task::perform(blocking(move || {
             std::process::Command::new(&bin).arg("--favourites").arg(op).output().ok().filter(|o| o.status.success()).and_then(|o| serde_json::from_slice(&o.stdout).ok())
@@ -277,6 +302,8 @@ impl Flea {
         }
         let rows = self.panel_rows();
         let on_rule = !self.panel.on_rail && rows.get(self.panel.cursor).is_some_and(|r| r.kind == Kind::OpenRule);
+        let on_favourite = !self.panel.on_rail && rows.get(self.panel.cursor).is_some_and(|r| r.kind == Kind::Favourite);
+        let shift = self.modifiers.shift();
         match key.as_ref() {
             Key::Named(Named::Escape) => {
                 self.close_panel();
@@ -284,6 +311,9 @@ impl Flea {
             }
             // SettingsRest rule 4: the row's own mark is x, so x on the cursor row is the same action.
             Key::Character("x") | Key::Named(Named::Delete) if on_rule => self.remove_rule(self.panel.cursor),
+            Key::Character("x") | Key::Named(Named::Delete) if on_favourite => self.favourite_key(true, 0),
+            Key::Named(Named::ArrowDown) if on_favourite && shift => self.favourite_key(false, 1),
+            Key::Named(Named::ArrowUp) if on_favourite && shift => self.favourite_key(false, -1),
             Key::Named(Named::Tab) => {
                 self.panel.on_rail = !self.panel.on_rail;
                 Task::none()

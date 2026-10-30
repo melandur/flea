@@ -134,7 +134,15 @@ impl Flea {
         let body: Element<'a, Message> = match (&self.share_browser, v.focused) {
             (Some(b), true) => self.share_browser_view(b),
             _ if v.pane.error.is_some() => container(text(v.pane.error.clone().unwrap_or_default()).color(p.muted)).center(Length::Fill).into(),
-            _ if v.pane.listed_once && v.pane.total == 0 => self.background(v, container(text("This folder is empty.").color(p.muted)).center(Length::Fill).into()),
+            // PaneStates' tip under an empty folder while key hints are on. QML's own sentence names
+            // Ctrl+Shift+N, which nothing has bound since New Folder moved to Ctrl+N on 2026-09-18.
+            _ if v.pane.listed_once && v.pane.total == 0 => {
+                let mut tile = column![text("This folder is empty.").color(p.muted)].spacing(6).align_x(iced::Center);
+                if self.prefs.key_hints {
+                    tile = tile.push(text("Press Ctrl+N for a new folder.").size(11.0).color(p.muted));
+                }
+                self.background(v, container(tile).center(Length::Fill).into())
+            }
             // StateMessage's nothingMatched: the query named back, and how many rows it tested.
             _ if v.pane.filtering() && v.pane.view_total() == 0 => {
                 let tile = column![

@@ -10,6 +10,8 @@ use std::collections::{HashMap, VecDeque};
 pub(crate) fn boot() -> (Flea, Task<Message>) {
     let bin = backend::binary();
     let prefs = prefs::Prefs::load(&bin);
+    crate::marks::read_rounding();
+    crate::marks::set_round(prefs.hyprland_icons);
     let home = std::env::var("HOME").unwrap_or_else(|_| "/".into());
     let argv = std::env::args().nth(1);
     let start = prefs.start_path(&home, argv.as_deref());

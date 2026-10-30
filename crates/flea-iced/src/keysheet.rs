@@ -91,6 +91,22 @@ impl Flea {
     }
 }
 
+// Keymap.hintFor, the menu row's key: what setPreset("default") builds from keys.toml at load, a
+// plain key before a chord, read out of ui/js/Keymap.js under qml6 rather than retyped by eye.
+const HINTS: &[(&str, &str)] = &[
+    ("menu", "m"), ("searchDeep", "ctrl-shift-f"), ("copy", "ctrl-c"), ("paste", "ctrl-v"), ("cut", "ctrl-x"),
+    ("undo", "ctrl-z"), ("search", "ctrl-f"), ("copypath", "ctrl-b"), ("sidebar", "ctrl-g"), ("toggleDual", "ctrl-t"),
+    ("newFolder", "ctrl-n"), ("newFile", "ctrl-m"), ("selectAll", "ctrl-a"), ("toggleHidden", "ctrl-h"),
+    ("sortName", "ctrl-j"), ("sortSize", "ctrl-k"), ("sortDate", "ctrl-l"), ("cursorDown", "down"), ("cursorUp", "up"),
+    ("parent", "left"), ("pageForward", "right"), ("open", "enter"), ("trash", "delete"), ("escape", "escape"),
+    ("focusNext", "tab"), ("toggleSelect", "space"), ("rename", "f2"), ("refresh", "f5"), ("settings", ","),
+    ("keymapSheet", "?"),
+];
+
+pub fn hint_for(action: &str) -> &'static str {
+    HINTS.iter().find(|(a, _)| *a == action).map_or("", |(_, k)| k)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -120,5 +136,11 @@ mod tests {
             assert_eq!(ours.3, label, "{action}");
         }
         assert_eq!(row_for("focusNext", "tab", "scope / focus", true), ("tab", "focus other pane"));
+    }
+
+    #[test]
+    fn a_menu_hint_is_the_key_the_operator_presses_and_an_unbound_row_has_none() {
+        assert_eq!((hint_for("copy"), hint_for("trash"), hint_for("rename"), hint_for("newFolder")), ("ctrl-c", "delete", "f2", "ctrl-n"));
+        assert_eq!(hint_for("deletePermanently"), "");
     }
 }

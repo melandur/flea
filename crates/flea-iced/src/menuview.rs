@@ -76,8 +76,11 @@ impl Flea {
         let mut line = row![svg(marks::handle(e.glyph, ink)).width(MARK).height(MARK), text(label).color(ink).width(Length::Fill)]
             .spacing(10)
             .align_y(iced::Center);
-        if !e.hint.is_empty() {
-            line = line.push(text(e.hint).size(11.0).color(p.muted));
+        // MenuRow's hint slot: the row's own hint first, then its key while key hints are on; an
+        // unbound row draws nothing and takes no width.
+        let hint = if !e.hint.is_empty() { e.hint } else if self.prefs.key_hints { crate::keysheet::hint_for(e.action) } else { "" };
+        if !hint.is_empty() {
+            line = line.push(text(hint).size(11.0).color(p.muted));
         }
         if flyout {
             line = line.push(svg(marks::handle("chevron-right", p.muted)).width(MARK).height(MARK));

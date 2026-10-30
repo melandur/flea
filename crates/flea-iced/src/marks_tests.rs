@@ -34,3 +34,11 @@ fn colours_follow_the_vendored_table() {
     assert_eq!(row_colour("Downloads", 0o040755, true), hex("#00bcd4"));
     assert_eq!(row_colour("main.go", 0o120777, false), None);
 }
+
+#[test]
+fn hyprland_aware_icons_round_the_caps_and_joins_and_the_omarchy_cut_squares_them() {
+    let square = svg_doc("file", [1, 2, 3], false);
+    assert!(square.contains(r#"stroke-linecap="square""#) && square.contains(r#"stroke-linejoin="miter""#) && square.contains("#010203"));
+    let round = svg_doc("file", [1, 2, 3], true);
+    assert!(round.contains(r#"stroke-linecap="round""#) && round.contains(r#"stroke-linejoin="round""#));
+}

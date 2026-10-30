@@ -56,6 +56,12 @@ pub struct Prefs {
     pub folder_sizes: bool,
     // display.textSize: None follows Omarchy, a number is the stop the window draws at instead.
     pub text_size: Option<u32>,
+    // addressBar: the chrome draws the folder as crumbs, or as one path.
+    pub address_bar: String,
+    // keyHints: the menus' key column and the tip under an empty folder; off unless named true.
+    pub key_hints: bool,
+    // display.hyprlandIcons: the marks round their caps and joins when Hyprland rounds its windows.
+    pub hyprland_icons: bool,
 }
 
 impl Default for Prefs {
@@ -101,6 +107,9 @@ impl Default for Prefs {
             columns: ["name", "size", "date"].map(String::from).to_vec(),
             folder_sizes: true,
             text_size: None,
+            address_bar: "breadcrumb".into(),
+            key_hints: false,
+            hyprland_icons: false,
         }
     }
 }
@@ -162,6 +171,9 @@ impl Prefs {
             },
             folder_sizes: v.pointer("/folderSizes").and_then(Value::as_bool) != Some(false),
             text_size: v.pointer("/display/textSize/mode").and_then(Value::as_f64).filter(|n| *n > 0.0).map(|n| n as u32),
+            address_bar: v.pointer("/addressBar").and_then(Value::as_str).unwrap_or("breadcrumb").to_string(),
+            key_hints: v.pointer("/keyHints").and_then(Value::as_bool) == Some(true),
+            hyprland_icons: v.pointer("/display/hyprlandIcons").and_then(Value::as_bool) == Some(true),
         }
     }
 

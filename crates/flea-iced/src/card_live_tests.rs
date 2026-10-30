@@ -295,3 +295,37 @@ fn move_to_dropbox_captures_its_destination_and_moves_the_rows() {
     drop(live);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+// The writes this port's later stages added, put through the real binary against a state directory
+// of the test's own: the panel's favourite remove and move with the records they were read from,
+// the header menu's whole column set, and the sweep's day.
+#[test]
+fn the_favourite_column_and_sweep_writes_are_accepted_by_the_real_updaters() {
+    let Some(bin) = std::env::var("FLEA_BIN").ok().filter(|b| !b.is_empty()) else {
+        eprintln!("live: FLEA_BIN is not set, so the favourite and column writes were skipped");
+        return;
+    };
+    let state = std::env::temp_dir().join(format!("flea-iced-favs-{}", std::process::id()));
+    std::fs::create_dir_all(&state).unwrap();
+    let run = |flag: &str, arg: serde_json::Value| -> serde_json::Value {
+        let out = std::process::Command::new(&bin).env("XDG_STATE_HOME", &state).arg(flag).arg(arg.to_string()).output().unwrap();
+        assert!(out.status.success(), "{arg}: {}", String::from_utf8_lossy(&out.stderr));
+        serde_json::from_slice(&out.stdout).unwrap()
+    };
+    let favs = |doc: &serde_json::Value| doc["places"]["favourites"].clone();
+    run("--favourites", serde_json::json!({"op": "add", "record": {"label": "a", "path": "/tmp/a"}}));
+    let doc = run("--favourites", serde_json::json!({"op": "add", "record": {"label": "b", "path": "/tmp/b"}}));
+    let doc = run("--favourites", serde_json::json!({"op": "move", "index": 1, "to": 0, "expected": favs(&doc)}));
+    assert_eq!(favs(&doc)[0]["label"], "b");
+    let doc = run("--favourites", serde_json::json!({"op": "remove", "index": 0, "expected": favs(&doc)}));
+    assert_eq!(favs(&doc).as_array().map(|a| a.len()), Some(1));
+    // A remove naming records the list no longer holds is refused, which is what guards the panel.
+    let stale = std::process::Command::new(&bin).env("XDG_STATE_HOME", &state).arg("--favourites")
+        .arg(serde_json::json!({"op": "remove", "index": 0, "expected": []}).to_string()).output().unwrap();
+    assert!(!stale.status.success());
+    let doc = run("--ui-state", serde_json::json!({"columns": ["name", "size", "date", "mode", "items"]}));
+    assert_eq!(doc["columns"], serde_json::json!(["name", "size", "date", "mode", "items"]));
+    let doc = run("--ui-state", serde_json::json!({"trashSweptOn": crate::trashsweep::day_number(0).max(1)}));
+    assert!(doc["trashSweptOn"].as_i64().unwrap() > 0);
+    let _ = std::fs::remove_dir_all(&state);
+}

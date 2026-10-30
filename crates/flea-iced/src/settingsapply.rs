@@ -45,6 +45,7 @@ impl Flea {
         };
         // A new density moves every row, so the rows on screen are counted again from the scroll.
         let redrawn = if was.density != next.density { self.report_viewport() } else { Task::none() };
+        crate::marks::set_round(next.hyprland_icons);
         if was.theme_id != next.theme_id {
             self.palette = crate::theme::Palette::load(&next.theme_id);
         }

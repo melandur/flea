@@ -175,7 +175,7 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      **Not ported:** the filter, which the Default keymap no longer reaches and which arrives with
      the chrome's buttons; the search's location column as its own column (it is drawn muted beside
      the name).
-   - **6b, split (done, Ctrl+T and Tab undriven live); tabs (not ported).** `split.rs` gives each
+   - **6b, split (done, Ctrl+T and Tab undriven live); tabs (8d-iv-a).** `split.rs` gives each
      pane its own backend child, as QML does. The focused pane is the shell's own `pane`, the other
      waits in a `Slot`, and a message for the other is run by swapping it in, handling it exactly as
      the focused pane's would be, and swapping back, so neither pane has a lesser code path; every
@@ -206,11 +206,12 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      theme and the rail, to both panes in the split. A live test puts every check, every value of
      every choice and both menu writers, 311 patches, through the real binary against a sandboxed
      state directory, and a misspelled key turns it red with the backend's own sentence.
-     **Written but not yet applied in this port:** density, columns, the address bar, the view mode,
-     the preview column and its loading, thumbnail size, text size (the crate's metrics are fixed at
-     13 px on a 37 px row, which is what a 14 px Omarchy base gives), Hyprland-aware icons, the menus
-     and key hints, the shelf. **Not ported:** favourite reordering and removal from the panel, the
-     keyboard sheet, and File types (6c-ii).
+     **Applied since, in stage 8:** density, columns and folder sizes (8d-iv-b), the address bar and
+     key hints (8d-iv-d), the preview column and its loading (8d-ii-b-2), thumbnail size (8d-ii-a),
+     text size (8d-iv-c), the menus (8a), the Trash count and the sweep (8d-iii-b), new tabs
+     (8d-iv-a); favourites are removed and reordered from the panel (8d-iv-d), the key sheet is 8d-i
+     and File types 6c-ii, and Hyprland-aware icons are 8d-iv-d. **Still not here:** the shelf beyond
+     its menu row, which is the bar plugin's surface and not the window's.
    - **6c-ii, File types (done, the card not yet seen on screen).** `openrules.rs` is
      `ui/js/SettingsOpen.js`: the ending's shape and normalisation, the stored table with every
      ill-shaped rule left out, one rule per ending kept in ending order, and the whole table written
@@ -583,3 +584,18 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      own ladder, so a size can sit a pixel off QML's; Omarchy's base is read once at launch where
      Style.qml follows a theme change live; and the chooser window keeps its own fixed size. A
      headless launch at 20 is looked at, 68 checks.
+   - **8d-iv-d, the address bar, key hints, Hyprland-aware icons and favourites in the panel (done).** `addressBar` set to
+     Path draws ChromeBar's other form: the folder as one line, home spelled `~`, its head cut first
+     because the tail names the folder, and a double press opening the field through the last
+     crumb's own press. `keyHints` draws each menu row's key from `keysheet::hint_for`, which is
+     Keymap.js setPreset("default")'s table read out under qml6, and the tip under an empty folder.
+     **The tip says Ctrl+N where QML's says Ctrl+Shift+N**, which nothing has bound since New Folder
+     moved on 2026-09-18 (tests/js/keymap.js asserts the shifted chord answers nothing): the QML
+     sentence is stale, and this draws the chord that works. In the Settings panel a favourite row
+     takes `x` or Delete to remove it and Shift with an arrow to carry it one place, the cursor
+     going with it, each through `flea --favourites` naming the records it read so a list another
+     window rewrote is refused; the row's drag grip is pointer-only in QML and not ported. A live
+     test puts add, move, a refused stale remove, the column set and the sweep's day through the
+     real updaters. `display.hyprlandIcons` gives every mark round caps and joins, Glyph.qml's
+     rule, while Hyprland rounds its windows (`decoration:rounding` read once at launch through
+     `hyprctl`, where Style.qml follows it live); the mark cache keys on the choice.
