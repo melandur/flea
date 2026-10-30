@@ -7,6 +7,9 @@ set -u
 cd "$(dirname "$0")/.." || exit 1
 
 BIN=./target/debug/flea
+# The --gui cases below are main()'s settle before the qs window, driven to a qs that is missing, and
+# the iced window is the default now, so they name the qs window.
+export FLEA_FRONTEND=qs
 # A clean git archive export carries no target/, and without this every case below runs against a
 # missing binary and reports them as product failures.
 if [ ! -x "$BIN" ]; then

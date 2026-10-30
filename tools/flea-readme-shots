@@ -489,7 +489,7 @@ launch() {
   # 3>&- 4>&-, and they matter: flock holds the display lock through an open descriptor, and a
   # detached child inherits it. An orphaned qs then holds the lock after its own run is dead, which
   # is what wedged the box for eight lanes on 2026-09-02 (pid 2197778, ppid 1, fd 3 -> the lock).
-  FLEA_UI="$ui" FLEA_BIN="$bin" setsid nohup "$bin" --gui "$root" >"$flea_log" 2>&1 </dev/null 3>&- 4>&- &
+  FLEA_FRONTEND=qs FLEA_UI="$ui" FLEA_BIN="$bin" setsid nohup "$bin" --gui "$root" >"$flea_log" 2>&1 </dev/null 3>&- 4>&- &
   omarchy-drive wait window flea --timeout 15 >/dev/null || fail "no Flea window appeared in 15 s"
   omarchy-drive focus flea >/dev/null
   wait_path "$root"

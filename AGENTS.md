@@ -5673,11 +5673,13 @@ and acts on whatever is active, which may be a window you did not open.
 
 ## The iced port
 
-The window is being rewritten in Rust with iced, staged, operator's ruling of 2026-10-29.
-`docs/iced-port.md` holds the decisions and the stage list; read it before touching
-`crates/flea-iced`. Until its last stage lands, `ui/` is still the shipped front end and every rule
-above about it still applies. `FLEA_FRONTEND=iced` is the one opt-in: `src/gui.rs` then execs
-`flea-iced` for `--gui` and `--pick` instead of `qs`, and refuses rather than falls back when it is
-asked for and not found; nothing else chooses it. `tests/iced-headless.sh` drives the iced window's keyboard
+The window was rewritten in Rust with iced, staged, operator's ruling of 2026-10-29, and **the iced
+window is the default since 2026-10-30**. `docs/iced-port.md` holds the decisions and the stage list;
+read it before touching `crates/flea-iced`. `src/gui.rs` `front()` chooses for `--gui` and `--pick`:
+unset or empty is `flea-iced`, and a box with none installed opens the `qs` window and says so once;
+`FLEA_FRONTEND=iced` refuses rather than falls back; `FLEA_FRONTEND=qs` is the QML window, which is
+still in the tree and which every rule above about `ui/` still describes; any other value is refused.
+A script that drives the QML window through `flea --gui` has to name `FLEA_FRONTEND=qs`. The field
+numbers in this file and in the README are the QML window's: no field run was taken for the switch. `tests/iced-headless.sh` drives the iced window's keyboard
 in a private headless sway on its own socket, so it never takes the operator's screen or focus; run
 that and not a key driver aimed at the desktop.

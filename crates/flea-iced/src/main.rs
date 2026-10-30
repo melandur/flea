@@ -347,12 +347,13 @@ fn main() -> iced::Result {
         .scale_factor(|f: &Flea| listcols::ui_scale(f.prefs.text_size, f.omarchy_base))
         .default_font(Font::DEFAULT)
         .settings(iced::Settings { default_text_size: TEXT_PX.into(), ..Default::default() })
-        // Its own app id while both front ends exist, so a compositor rule or a test can tell them apart.
         .window(window::Settings {
             // Not on the builder: .window() replaces the settings whole, and a close then skips the drain.
             exit_on_close_request: false,
             platform_specific: window::settings::PlatformSpecific {
-                application_id: "com.thisisgm.flea.iced".into(),
+                // The product's own id now that this is the default window: the desktop entry's
+                // StartupWMClass names it, and the qs window it falls back to carries the same one.
+                application_id: "com.thisisgm.flea".into(),
                 ..Default::default()
             },
             ..Default::default()

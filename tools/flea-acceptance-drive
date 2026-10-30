@@ -568,7 +568,7 @@ drive_launch() {
   if omarchy-drive wait window flea --timeout 0 >/dev/null 2>&1; then
     die "a Flea window is already open, and only one lane may hold the display"
   fi
-  FLEA_UI="$REPO/ui" FLEA_BIN="$BIN" setsid nohup "$BIN" --gui "$DRIVE_FIXTURE" \
+  FLEA_FRONTEND=qs FLEA_UI="$REPO/ui" FLEA_BIN="$BIN" setsid nohup "$BIN" --gui "$DRIVE_FIXTURE" \
     >"$SB/flea-$DRIVE_PRESET.log" 2>&1 </dev/null &
   DRIVE_LAUNCHED=1
   omarchy-drive wait window flea --timeout 15 >/dev/null 2>&1 || die "no Flea window appeared in 15 s"

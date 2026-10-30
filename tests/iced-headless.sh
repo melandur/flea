@@ -98,7 +98,7 @@ children() { pgrep -P "$APP" -c -x flea; }
 # and that window's last listing is inside the fixture. The 300 ms wtype waits before typing is
 # what lets a client in a keyboard-less compositor take the new virtual keyboard's keymap first;
 # without it every key is dropped.
-WANT=com.thisisgm.flea.iced
+WANT=com.thisisgm.flea
 k() {
     local focused last
     focused=$(comp -t get_tree | jq -r '.. | objects | select(.focused == true) | .app_id // ""')
@@ -234,7 +234,7 @@ nth_row() {
         | jq -r --argjson n "$1" 'select(.t == "rows") | .rows[$n].n'
 }
 jq '.view = "grid"' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
-WANT=com.thisisgm.flea.iced
+WANT=com.thisisgm.flea
 launch "$T"; shot grid
 n=$(mark); k -k Right; k -k Return; sleep 1
 check "in the grid Right steps across to the next tile" 1 "$(since "$n" | grep -c "\"path\":\"$T/$(nth_row 1)\"")"
@@ -382,6 +382,27 @@ launch "$T"; shot text-size-20
 check "a window at text size 20 opens and lists" 1 "$(grep -c "\"c\":\"list\".*\"path\":\"$T\"" "$D/trace.log")"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 jq '.display.textSize = {"mode": "system"}' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+
+# Theme: the cursor's palette draws the window as it moves through the list, and only Enter stores it.
+# A pixel of the rail's ground, outside the panel, is the window's palette; ui.json is what was stored.
+# Tab to the rail, seven Downs to Theme, Enter into its list on Follow Omarchy, and one Down onto the
+# first bundled palette, 0x96f.
+px() { magick "$D/shots/$1.png" -format '%[pixel:p{60,900}]' info:; }
+# The panel reopens on the section it was left on, so the rail is walked from its top every time.
+to_palette() { k -k comma; sleep 1; k -k Tab; for _ in 1 2 3 4 5 6 7 8 9; do k -k Up; done; for _ in 1 2 3 4 5 6 7; do k -k Down; done; k -k Return; sleep 0.5; }
+# The open panel lays a scrim over the window, so the preview is measured panel open against panel
+# open, and the return closed against closed.
+launch "$T"; shot theme-closed
+to_palette; sleep 0.5; shot theme-before
+k -k Down; sleep 1; shot theme-preview
+check "the cursor's palette draws the window" yes "$([ "$(px theme-before)" != "$(px theme-preview)" ] && echo yes || echo "no: $(px theme-before)")"
+check "and stores nothing" omarchy "$(jq -r '.display.theme' "$D/state/flea/ui.json")"
+k -k Escape; sleep 1; shot theme-left
+check "leaving without Enter puts the stored palette back" "$(px theme-closed)" "$(px theme-left)"
+to_palette; k -k Down; k -k Return; sleep 1.5
+check "Enter stores the palette the cursor is on" 0x96f "$(jq -r '.display.theme' "$D/state/flea/ui.json")"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+jq '.display.theme = "omarchy"' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
 
 # flea --select, FLEA_SELECT across exec: the folder opens with the target under the cursor AND
 # marked. Ctrl+B reads the cursor; Ctrl+C after a step off it takes the selection, so the paste's

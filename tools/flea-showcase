@@ -431,7 +431,7 @@ spawn() {
     local dir="$1" pid id="" addr=""
     [[ -x "$bin" ]] || fail "no binary at $bin, build it first"
     mkdir -p "$work" "$evidence"
-    PATH="$shim_dir:$PATH" FLEA_UI="$ui" FLEA_BIN="$bin" setsid nohup "$bin" --gui "$dir" >>"$flea_log" 2>&1 </dev/null 3>&- 4>&- &
+    PATH="$shim_dir:$PATH" FLEA_FRONTEND=qs FLEA_UI="$ui" FLEA_BIN="$bin" setsid nohup "$bin" --gui "$dir" >>"$flea_log" 2>&1 </dev/null 3>&- 4>&- &
     pid=$!
     for _attempt in $(seq 1 300); do
         addr=$(hyprctl clients -j | jq -r --arg c "$flea_window_class" --argjson p "$pid" '.[] | select(.class == $c and .pid == $p) | .address')

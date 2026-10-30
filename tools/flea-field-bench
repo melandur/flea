@@ -799,9 +799,9 @@ declare -a ENTRANTS=(
   # walk-up lands on this checkout, so the bench has been measuring the right UI by fallback rather
   # than by instruction; the moment a package installs /usr/share/flea/ui that branch is checked
   # second and wins, and the run would launch this tree's binary against the installed shell.
-  "flea|gui|com.thisisgm.flea|qs|$FLEA_UI|flea|--backend|FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI setsid nohup $FLEA_BIN --gui $FIXTURE"
+  "flea|gui|com.thisisgm.flea|qs|$FLEA_UI|flea|--backend|FLEA_FRONTEND=qs FLEA_BIN=$FLEA_BIN FLEA_UI=$FLEA_UI setsid nohup $FLEA_BIN --gui $FIXTURE"
   # The same backend helper, under the iced window instead of qs; skipped when its release build is absent.
-  "flea-iced|gui|com.thisisgm.flea.iced|flea-iced||flea|--backend|FLEA_FRONTEND=iced FLEA_ICED_BIN=$FLEA_ICED_BIN FLEA_BIN=$FLEA_BIN setsid nohup $FLEA_BIN --gui $FIXTURE"
+  "flea-iced|gui|com.thisisgm.flea|flea-iced||flea|--backend|FLEA_FRONTEND=iced FLEA_ICED_BIN=$FLEA_ICED_BIN FLEA_BIN=$FLEA_BIN setsid nohup $FLEA_BIN --gui $FIXTURE"
   "nautilus|gui|org.gnome.Nautilus|nautilus||||setsid nohup nautilus --new-window $FIXTURE"
   "thunar|gui|thunar|thunar||||setsid nohup thunar $FIXTURE"
   "pcmanfm|gui|pcmanfm|pcmanfm||||setsid nohup pcmanfm $FIXTURE"

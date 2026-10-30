@@ -25,7 +25,8 @@
   <img src="docs/images/release-0.3.0-themes.gif" alt="Flea 0.3.0 cycling through ten Omarchy themes, with the iPhone on the Devices rail and a photo in the preview column">
 </p>
 
-Flea combines a Rust backend with a Quickshell interface that follows your Omarchy theme.
+Flea combines a Rust backend with a native Rust window, built with iced, that follows your Omarchy
+theme; the earlier Quickshell window is still there with `FLEA_FRONTEND=qs`.
 Large directories stay responsive: the window loads rows and requests thumbnails as you need them.
 
 - **Three views.** List, columns and grid, with tabs and natural filename sorting.
@@ -155,6 +156,8 @@ inspect an archive.
 
 Measured on **8 September 2026**, using the source tree released as **0.1.6**.
 Cold caches, three runs per app, medians below. Seven GUI apps on the same Omarchy machine.
+These are the Quickshell window's numbers; the iced window that is now the default has not been
+measured against the field.
 
 ### 100,000 files
 

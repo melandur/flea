@@ -7,8 +7,11 @@ use std::process::Command;
 
 // exec rather than spawn, so the shell replaces this process and no pid is orphaned.
 pub fn exec_qs(ui: &Path, start: Option<&str>, select: Option<&str>) -> i32 {
-    if let Some(chosen) = iced_requested() {
-        let Some(bin) = chosen else { return iced_missing() };
+    let chosen = match front() {
+        Ok(chosen) => chosen,
+        Err(code) => return code,
+    };
+    if let Some(bin) = chosen {
         let mut cmd = iced_command(bin);
         cmd.args(start);
         if let Some(target) = select {
@@ -42,8 +45,11 @@ pub fn pick(reply: &str) -> i32 {
         eprintln!("flea: there is no graphical session to open a file chooser in");
         return 2;
     }
-    if let Some(chosen) = iced_requested() {
-        let Some(bin) = chosen else { return iced_missing() };
+    let chosen = match front() {
+        Ok(chosen) => chosen,
+        Err(code) => return code,
+    };
+    if let Some(bin) = chosen {
         let mut cmd = iced_command(bin);
         cmd.arg("--pick").env("FLEA_PICKER_REPLY", reply);
         return exec(cmd);
@@ -57,19 +63,39 @@ pub fn pick(reply: &str) -> i32 {
     exec(cmd)
 }
 
-// FLEA_FRONTEND=iced opts into the iced window, crates/flea-iced, for both front doors; anything
-// else, empty included, is the shipped qs window. None is not asked; Some(None) is asked for and not
-// found, which refuses rather than falling back, because the choice was the operator's.
-fn iced_requested() -> Option<Option<PathBuf>> {
-    if std::env::var("FLEA_FRONTEND").ok().as_deref() != Some("iced") {
-        return None;
+// Which window both front doors open, docs/iced-port.md stage 7: the iced one, crates/flea-iced, is
+// the default, and a box with no flea-iced installed opens the qs window and says so once, because a
+// package built before the switch carries none. FLEA_FRONTEND=iced asks for it and refuses rather than
+// falls back, because that choice was the operator's; FLEA_FRONTEND=qs is the QML window; an empty value
+// is absent, the rule paths::has_display() applies; any other value is refused rather than guessed at.
+// Ok(Some) is the iced binary, Ok(None) the qs window, Err the exit status of a refusal.
+fn front() -> Result<Option<PathBuf>, i32> {
+    let asked = std::env::var_os("FLEA_FRONTEND").filter(|v| !v.is_empty());
+    match asked.as_ref().map(|v| v.to_str()) {
+        None => match iced_binary() {
+            Some(bin) => Ok(Some(bin)),
+            None => {
+                eprintln!("flea: no flea-iced binary was found, so the qs window opens");
+                Ok(None)
+            }
+        },
+        Some(Some("iced")) => iced_binary().map(Some).ok_or_else(iced_missing),
+        Some(Some("qs")) => Ok(None),
+        Some(_) => {
+            eprintln!("flea: FLEA_FRONTEND takes iced or qs, and it held something else");
+            Err(2)
+        }
     }
+}
+
+// FLEA_ICED_BIN when set, else beside this binary, else the dev tree's own build.
+fn iced_binary() -> Option<PathBuf> {
     let runnable = |p: &PathBuf| p.is_file() && std::fs::metadata(p).is_ok_and(|m| {
         use std::os::unix::fs::PermissionsExt;
         m.permissions().mode() & 0o111 != 0
     });
     if let Some(explicit) = std::env::var_os("FLEA_ICED_BIN").filter(|v| !v.is_empty()) {
-        return Some(Some(PathBuf::from(explicit)).filter(runnable));
+        return Some(PathBuf::from(explicit)).filter(runnable);
     }
     // Beside this binary when packaged, else the dev tree's own build beside target/.
     let exe = std::env::current_exe().ok()?;
@@ -79,7 +105,7 @@ fn iced_requested() -> Option<Option<PathBuf>> {
             candidates.push(root.join("crates/flea-iced/target").join(profile).join("flea-iced"));
         }
     }
-    Some(candidates.into_iter().find(runnable))
+    candidates.into_iter().find(runnable)
 }
 
 fn iced_missing() -> i32 {

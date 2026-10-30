@@ -435,7 +435,7 @@ launch() {
     cat "$flea_log" >> "$run_log" 2>/dev/null || true
     : > "$flea_log"
     FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" \
-        setsid nohup "$flea_bin" --gui "$start_path" >"$flea_log" 2>&1 </dev/null &
+        FLEA_FRONTEND=qs setsid nohup "$flea_bin" --gui "$start_path" >"$flea_log" 2>&1 </dev/null &
     omarchy-drive wait window flea --timeout 15 >/dev/null
     omarchy-drive focus flea >/dev/null
     assert_window

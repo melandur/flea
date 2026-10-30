@@ -117,6 +117,7 @@ impl Flea {
 
     // The catalogue goes with the panel, so an application installed meanwhile is listed next time.
     pub(crate) fn close_panel(&mut self) {
+        self.end_theme_preview();
         self.panel.open = false;
         self.panel.card = None;
         self.panel.catalogue_asked = 0;
@@ -126,6 +127,7 @@ impl Flea {
     }
 
     pub(crate) fn show_section(&mut self, id: &str) {
+        self.end_theme_preview();
         self.panel.section = id.to_string();
         // Every rule row draws its application's own Name=, so the catalogue is asked for here.
         if id == "open" {
@@ -316,16 +318,23 @@ impl Flea {
             Key::Named(Named::ArrowUp) if on_favourite && shift => self.favourite_key(false, -1),
             Key::Named(Named::Tab) => {
                 self.panel.on_rail = !self.panel.on_rail;
+                if self.panel.on_rail {
+                    self.end_theme_preview();
+                } else {
+                    self.preview_theme();
+                }
                 Task::none()
             }
             Key::Named(Named::ArrowDown) | Key::Character("j") if self.panel.on_rail => self.rail_section(1),
             Key::Named(Named::ArrowUp) | Key::Character("k") if self.panel.on_rail => self.rail_section(-1),
             Key::Named(Named::ArrowDown) | Key::Character("j") => {
                 self.panel.cursor = settings::step_row(&rows, self.panel.cursor, 1);
+                self.preview_theme();
                 Task::none()
             }
             Key::Named(Named::ArrowUp) | Key::Character("k") => {
                 self.panel.cursor = settings::step_row(&rows, self.panel.cursor, -1);
+                self.preview_theme();
                 Task::none()
             }
             Key::Named(Named::ArrowRight) | Key::Character("l") if !self.panel.on_rail => self.panel_step(self.panel.cursor, 1),
@@ -338,6 +347,26 @@ impl Flea {
             Key::Named(Named::Space) if !rows.get(self.panel.cursor).is_some_and(|r| matches!(r.kind, Kind::Check | Kind::Group)) => Task::none(),
             Key::Named(Named::Enter | Named::Space) => self.panel_activate(self.panel.cursor),
             _ => Task::none(),
+        }
+    }
+
+    // The operator's ruling of 2026-10-30: in Theme the cursor's palette draws the whole window as the
+    // cursor moves through the list, and only Enter (or Space, as on every check) stores it. The
+    // stored one comes back the moment the cursor leaves the list without choosing: Escape, the rail,
+    // or another section.
+    fn preview_theme(&mut self) {
+        if self.panel.section != "theme" || self.panel.on_rail {
+            return;
+        }
+        let rows = self.panel_rows();
+        if let Some(id) = rows.get(self.panel.cursor).and_then(|r| r.id.strip_prefix("theme:")) {
+            self.palette = crate::theme::Palette::load(id);
+        }
+    }
+
+    fn end_theme_preview(&mut self) {
+        if self.panel.section == "theme" {
+            self.palette = crate::theme::Palette::load(&self.prefs.theme_id);
         }
     }
 

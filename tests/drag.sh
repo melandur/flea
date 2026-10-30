@@ -210,7 +210,7 @@ r5_state() {
 
 # The product entry resolves the UI, renderer and backend identity before execing Quickshell.
 QSG_RHI_BACKEND="${QSG_RHI_BACKEND:-vulkan}" HOME="$HOMEDIR" FLEA_TEST_RUN_ROOT="$SB" \
-  setsid "$FLEA_BIN" --gui "$HOMEDIR" >"$SB/flea.log" 2>&1 &
+  FLEA_FRONTEND=qs setsid "$FLEA_BIN" --gui "$HOMEDIR" >"$SB/flea.log" 2>&1 &
 FLEA_PID=$!
 MYID=""
 MYPID=""

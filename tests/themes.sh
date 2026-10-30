@@ -162,7 +162,7 @@ for colours in "$themes_dir"/*/colors.toml "$synthetic"; do
     real_home=$HOME
     export HOME="$home"
     FLEA_UI="$flea_ui" FLEA_BIN="$flea_bin" XDG_STATE_HOME="$sandbox/state" XDG_CONFIG_HOME="$sandbox/config" \
-        setsid nohup "$flea_bin" --gui "$sandbox/files" >"$sandbox/flea-$theme.log" 2>&1 </dev/null &
+        FLEA_FRONTEND=qs setsid nohup "$flea_bin" --gui "$sandbox/files" >"$sandbox/flea-$theme.log" 2>&1 </dev/null &
     launched=$!
     export HOME="$real_home"
     if ! omarchy-drive wait window "$class" --timeout 20 >/dev/null; then

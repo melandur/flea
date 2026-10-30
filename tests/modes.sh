@@ -12,6 +12,9 @@ BIN=./target/debug/flea
 BIN_REAL=$(readlink -f "$BIN")
 # An operator exporting any of these would answer for src/gui.rs, which is the thing under test here.
 unset QSG_RHI_BACKEND FLEA_RENDERER_AUTOMATIC VK_DRIVER_FILES VK_ICD_FILENAMES
+# The iced window is the default, and this tree's own build of it would be found; every case but the
+# front-end seam at the end is about the qs window's launch, its renderer, its environment and its exec.
+export FLEA_FRONTEND=qs
 fail=0
 
 check() {
@@ -608,9 +611,9 @@ check "select: a missing target still opens its directory" "/etc /etc/does-not-e
 out=$($BIN --select "file:///home/gm/My%20Files/note.txt" --print-target 2>&1)
 check "select: a percent-encoded uri decodes" "/home/gm/My Files /home/gm/My Files/note.txt" "$out"
 
-# FLEA_FRONTEND=iced is the opt-in seam onto crates/flea-iced, for the window and the chooser alike,
-# and nothing else chooses it. A stub on FLEA_ICED_BIN reports what crossed exec, and a qs stub
-# beside it proves the shipped window is still what every other value of the variable opens.
+# The front-end seam, for the window and the chooser alike: the iced window is the default, the qs one
+# is FLEA_FRONTEND=qs, and a box with no flea-iced opens qs and says so. A stub on FLEA_ICED_BIN
+# reports what crossed exec, and a qs stub beside it says when the QML window is what opened.
 D="$FIXTURE_ROOT/flea-iced-seam-test-$$"
 sandbox_make "$D"
 cat > "$D/iced" <<'STUB'
@@ -623,7 +626,8 @@ printf 'SELECT %s\n' "${FLEA_SELECT-unset}"
 STUB
 printf '#!/bin/sh\nprintf "QS %%s\\n" "$*"\n' > "$D/qs"
 chmod +x "$D/iced" "$D/qs"
-seam() { env -u FLEA_BIN WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" "$@" 2>&1 </dev/null; }
+# FLEA_FRONTEND is unset here, the exported qs above included, so each case asks for exactly what it names.
+seam() { env -u FLEA_BIN -u FLEA_FRONTEND WAYLAND_DISPLAY=flea-modes-test-display PATH="$D:/usr/bin:/bin" "$@" 2>&1 </dev/null; }
 out=$(seam FLEA_FRONTEND=iced FLEA_ICED_BIN="$D/iced" $BIN --gui /etc)
 check "iced: the window execs flea-iced on the start path" "1" "$(echo "$out" | grep -c '^ICED /etc$')"
 check "iced: the backend it calls back into is this binary" "1" "$(echo "$out" | grep -c "^FLEA_BIN $(readlink -f "$BIN")\$")"
@@ -640,10 +644,24 @@ out=$(seam FLEA_FRONTEND=iced FLEA_ICED_BIN="$D/absent" $BIN --gui /etc); rc=$?
 check "iced: a missing flea-iced refuses rather than falling back" "2" "$rc"
 check "iced: and says what to set" "1" "$(echo "$out" | grep -c 'set FLEA_ICED_BIN')"
 check "iced: and starts nothing at all" "0" "$(echo "$out" | grep -c '^QS \|^ICED ')"
+out=$(seam FLEA_ICED_BIN="$D/iced" $BIN --gui /etc)
+check "default: with nothing asked the window is the iced one" "1" "$(echo "$out" | grep -c '^ICED /etc$')"
+check "default: and the qs window is not started" "0" "$(echo "$out" | grep -c '^QS ')"
+out=$(seam FLEA_ICED_BIN="$D/iced" FLEA_PICKER='{}' $BIN --pick "$D/reply.json")
+check "default: the chooser is the iced one too" "1" "$(echo "$out" | grep -c '^ICED --pick$')"
 out=$(seam FLEA_FRONTEND= FLEA_ICED_BIN="$D/iced" $BIN --gui /etc)
-check "iced: an empty FLEA_FRONTEND is the qs window" "1" "$(echo "$out" | grep -c '^QS -p ')"
-out=$(seam FLEA_FRONTEND=qt FLEA_ICED_BIN="$D/iced" $BIN --gui /etc)
-check "iced: any other value is the qs window" "0" "$(echo "$out" | grep -c '^ICED ')"
+check "default: an empty FLEA_FRONTEND is no choice, so iced" "1" "$(echo "$out" | grep -c '^ICED /etc$')"
+out=$(seam FLEA_ICED_BIN="$D/absent" $BIN --gui /etc); rc=$?
+check "default: a box with no flea-iced opens the qs window" "1" "$(echo "$out" | grep -c '^QS -p ')"
+check "default: and says so" "1" "$(echo "$out" | grep -c 'no flea-iced binary was found, so the qs window opens')"
+check "default: and it is not an error" "0" "$rc"
+out=$(seam FLEA_FRONTEND=qs FLEA_ICED_BIN="$D/iced" $BIN --gui /etc)
+check "qs: FLEA_FRONTEND=qs is the QML window" "1" "$(echo "$out" | grep -c '^QS -p ')"
+check "qs: and starts no iced window" "0" "$(echo "$out" | grep -c '^ICED ')"
+out=$(seam FLEA_FRONTEND=qt FLEA_ICED_BIN="$D/iced" $BIN --gui /etc); rc=$?
+check "any other value is refused rather than guessed at" "2" "$rc"
+check "and names the two it takes" "1" "$(echo "$out" | grep -c 'FLEA_FRONTEND takes iced or qs')"
+check "and starts nothing at all" "0" "$(echo "$out" | grep -c '^QS \|^ICED ')"
 
 [ "$fail" -eq 0 ] && echo "modes: all checks passed"
 exit $fail

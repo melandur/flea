@@ -16,7 +16,9 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
 - **Logic lives in toolkit-free modules with unit tests** (`pane.rs` is the model): every input is a
   method and every output an `Effect` the shell carries out, the way `ui/js/*.js` imported no QML.
 - **A key that is not ported yet says so in the status bar** rather than doing nothing.
-- The window runs under the app id `com.thisisgm.flea.iced` while both front ends exist.
+- The window ran under the app id `com.thisisgm.flea.iced` while the QML one was the default; since the
+  default switch it carries the product's own `com.thisisgm.flea`, which the desktop entry's
+  `StartupWMClass` names and the QML window it falls back to also carries.
 - `FLEA_ICED_TRACE` writes every request to stderr, the counting seam `thumbRequests` and
   `listRequests` were in QML.
 
@@ -224,7 +226,7 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      `OpenWith.matching` lower-cases each label and not the typed text, so a search with a capital
      letter matches nothing, in QML and here alike.
 7. **The chooser (done, its keyboard not yet driven live) and the opt-in launch (done); the default
-   switch (not taken).**
+   switch (taken 2026-10-30).**
    - `src/picker/` is the chooser window `flea --pick` opens for `tools/flea-portal`. `mod.rs` is
      `ui/js/Picker.js`, the request with every field defaulted, the labels, the chips, the name rule
      mirrored from `ops.rs`, `Format.fileUri`, and the reply written in Picker.js's own key order;
@@ -290,8 +292,21 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      a terminal inside the test compositor on the first headless run. It is `tests/iced-headless.sh`, its
      fixture, state and screenshots under `FLEA_FIXTURE_ROOT/flea-iced-headless` through the
      sandbox guard, listed in `tests/run-all.sh`'s not-run inventory because sway is no dependency.
-   - **The default stays `qs`.** Switching it waits on a field-bench run showing the switch loses no
-     column Flea wins today, which has not been done.
+   - **The default is iced, the operator's ruling of 2026-10-30.** The switch waited on a field-bench
+     run showing it loses no column Flea wins; the run was prepared (`~/bench/default-switch.sh` and
+     its report, outside the tree) and the operator ruled it unnecessary, so **no field number stands
+     behind the switch**, and the README's comparison tables are the QML window's. `src/gui.rs`
+     `front()` decides for both front doors: unset or empty is the iced window, found as before
+     (FLEA_ICED_BIN, beside the binary, then this tree's build), and a box with none, a package built
+     before the switch, opens the qs window and says so once on stderr; `FLEA_FRONTEND=iced` still
+     refuses rather than falls back; `FLEA_FRONTEND=qs` is the QML window; any other value is refused
+     with a sentence. The iced window took the product's app id with it. Every script that drives the
+     QML window through `flea --gui` (`tests/ui.sh`, `tests/drag.sh`, `tests/themes.sh`, the
+     acceptance drive, the showcase, the README shots and the field bench's `flea` row) now names
+     `FLEA_FRONTEND=qs`, and so do `tests/modes.sh` and `tests/uistate.sh` for their stubbed `qs`
+     cases; `tests/modes.sh` drives the default, the empty value, the missing binary, `qs` and a
+     refused value. **What still needs the QML tree:** the fallback above, and `main()`, which still
+     resolves the `ui/` directory before either window opens.
 8. **Parity, in four parts.** What the QML window does that the iced one does not, each part a
    commit of its own.
    - **8a, the listing menu (done, driven headless).** `menu.rs` ports ui/js/Menu.js: the one
@@ -720,3 +735,11 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      A unit test pins the grid arithmetic, and the headless run ends thirty Downs on the first tile of
      a 206-tile grid's last row and clicks just under where that row's top must now be, which takes
      the row's second tile; the old arithmetic takes the tile in the row above, 83 checks.
+   - **Theme previews as the cursor moves, the operator's ruling of 2026-10-30.** In Settings > Theme
+     the palette under the cursor draws the whole window as the cursor walks the list, and only Enter
+     (or Space, as on any check) stores it; Escape, the rail or another section puts the stored
+     palette back. QML had no preview: its rows stored on Enter and drew nothing before it. Driven
+     headless by a pixel of the rail's ground, panel open against panel open because the panel lays a
+     scrim over the window (compared closed against open, the check passed with the preview taken out,
+     and that is why it is measured this way): one Down onto 0x96f recolours the window and stores
+     nothing, Escape gives the first colour back, and Enter stores 0x96f, 87 checks.
