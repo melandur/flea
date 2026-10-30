@@ -29,6 +29,15 @@ impl Flea {
             return Task::none();
         }
         let keyboard::Event::KeyPressed { key, modifiers, repeat, text, .. } = event else { return Task::none() };
+        // Focus.handleKey: while a band is held every key is its, and Escape puts back what it began
+        // from, held Ctrl or not.
+        if self.pane.band_active() {
+            if key == Key::Named(Named::Escape) {
+                let effects = self.pane.band_finish(true);
+                return self.run(effects);
+            }
+            return Task::none();
+        }
         // FLEA_ICED_TRACE: every key the window was handed, beside the requests it caused.
         if std::env::var_os("FLEA_ICED_TRACE").is_some_and(|v| !v.is_empty()) {
             eprintln!("flea-iced: key {key:?} {modifiers:?} repeat={repeat} text={text:?}");

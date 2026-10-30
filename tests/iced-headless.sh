@@ -401,6 +401,41 @@ check "a held Space marks each row it reaches once, and its release ends the swe
 n=$(mark); k -k Up -k Up; k -P space -k Down -p space; ctrl c; sleep 1
 check "pressed on a marked row, the sweep unmarks" "[0]" "$(since "$n" | grep '"c":"paths"' | tail -1 | sed 's/^flea-iced: sent //' | jq -c .rows)"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+
+# The selection band (ui/SelectionBand.qml): six files, so the ground under them takes a press. The
+# chrome and the header are a row each, so row r is drawn from 74 + 37r. A drag from the ground up
+# and left into row 1 (a band with no width marks nothing, Marquee.cells) marks rows 1 to 5, read
+# off Ctrl+C's paths request; a second band held over rows 3 to 5 and cancelled with Escape
+# mid-drag puts those five marks back, where a release would leave three.
+mkdir -p "$T/band"; for i in 0 1 2 3 4 5; do : > "$T/band/band-$i.txt"; done
+band() { WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 800 700 1 600 "$@"; }
+launch "$T/band"
+band 130; sleep 0.5; shot band; n=$(mark); ctrl c; sleep 1
+check "a band from the ground marks every row it crosses" "[1,2,3,4,5]" "$(since "$n" | grep '"c":"paths"' | tail -1 | sed 's/^flea-iced: sent //' | jq -c .rows)"
+band 210 2500 & held=$!; sleep 1.6; k -k Escape; wait "$held"; n=$(mark); ctrl c; sleep 1
+check "Escape mid-band puts back the marks it began from" "[1,2,3,4,5]" "$(since "$n" | grep '"c":"paths"' | tail -1 | sed 's/^flea-iced: sent //' | jq -c .rows)"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+# The grid's edge scroll. The tiles stretch to fill the width, so the grid's only ground is the
+# empty trailing cell of its last tile row: 206 files in nine columns leave one. Sixty wheel notches
+# pin that row to the list's bottom edge, a band starts in the empty cell and is dragged up past the top.
+# Held two seconds it must reach further up than the same drag released at once, because the list
+# scrolled under it.
+for i in $(seq -w 0 199); do : > "$T/band/tile-$i.txt"; done
+jq '.view = "grid"' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+corner() { WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 1515 900 1 1000 15 "$@"; }
+bottom() { WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 800 500 4 60; sleep 0.5; }
+launch "$T/band"; bottom
+corner; n=$(mark); ctrl c; sleep 1
+still=$(since "$n" | grep '"c":"paths"' | tail -1 | sed 's/^flea-iced: sent //' | jq '.rows | min')
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+launch "$T/band"; bottom
+corner 2000; sleep 0.5; shot band-grid; n=$(mark); ctrl c; sleep 1
+held=$(since "$n" | grep '"c":"paths"' | tail -1 | sed 's/^flea-iced: sent //' | jq '.rows | min')
+check "a band held past the edge scrolls and marks further up" yes "$([ "${held:-999}" -lt "${still:-0}" ] 2> /dev/null && echo yes || echo "no: $still then $held")"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+jq '.view = "list"' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+# The chooser below counts the tree's rows.
+rm -rf "$T/band"
 APP=""
 
 # The chooser, the window tools/flea-portal opens through flea --pick.

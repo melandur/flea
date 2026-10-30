@@ -4,6 +4,7 @@ mod actioncard;
 mod activation;
 mod archives;
 mod backend;
+mod band;
 mod boot;
 mod brands;
 mod cardshell;
@@ -37,6 +38,7 @@ mod live_tests;
 mod card_live_tests;
 mod listcols;
 mod marks;
+mod marquee;
 mod media;
 mod menu;
 mod message;
@@ -214,6 +216,7 @@ impl Flea {
                 f.viewport_h = viewport.bounds().height;
                 f.report_viewport()
             }),
+            Message::Band(side, ev) => self.band_message(side, ev),
             Message::RowPressed(side, i) => {
                 let focused = self.focus_side(side);
                 Task::batch([focused, self.tap(i)])

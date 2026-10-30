@@ -33,12 +33,12 @@ impl Flea {
         }
         col = col.push(space().height((tile_rows - first_row - shown_rows) as f32 * g.cell_h));
         let side = v.side;
-        scrollable(col.width(Length::Fill))
+        let grid = scrollable(col.width(Length::Fill))
             .id(list_id(side))
             .on_scroll(move |vp| Message::Scrolled(side, vp))
             .height(Length::Fill)
-            .width(Length::Fill)
-            .into()
+            .width(Length::Fill);
+        iced::widget::stack![grid, self.band_over(v, g.columns, Some(g.cell_w), g.cell_h)].into()
     }
 
     fn tile<'a>(&'a self, v: PaneView<'a>, i: usize, g: Geometry) -> Element<'a, Message> {

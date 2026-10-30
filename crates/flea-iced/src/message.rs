@@ -11,6 +11,8 @@ pub enum Message {
     Key(keyboard::Event),
     Scrolled(u8, scrollable::Viewport),
     RowPressed(u8, usize),
+    // The selection band's press, sweep, release and edge scroll, for the pane on that side.
+    Band(u8, crate::band::Ev),
     RenameInput(String),
     RenameSubmit,
     Opened(u8, Option<i32>, String),

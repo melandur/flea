@@ -624,3 +624,25 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      the unmarking sweep; the headless run holds Space in one `wtype` across two Downs with 1.5 s
      either side, past the repeat delay, and reads the marked rows off Ctrl+C's `paths` request, and
      with the repeat guard removed both of its checks go red, 72 checks.
+   - **9c, the selection band (done).** `marquee.rs` is ui/js/Marquee.js line for line: the cells a
+     rectangle covers in a grid of `columns` (the list is a grid of one), and the marks it leaves,
+     visiting only the strips that enter or leave it, walked toward the pointer so the cursor lands
+     on the cell reached last; Ctrl at the press keeps what was marked, a cancel puts back the marks,
+     the cursor and the anchor, and a filter's view maps each cell to the row it draws.
+     tests/js/marquee.js is ported case for case, the 5476 small-grid overlap cases included.
+     `band.rs` is SelectionBand.qml as an iced widget laid over the list's and the grid's scrollable:
+     a press on the ground no row is drawn on (below the rows, the grid's trailing cells) starts it,
+     a press on a row passes through to the row, and Qt's 10 px drag distance begins it. It tracks the
+     pointer itself and sends a message only when the covered cells change, never one per motion,
+     draws the accent rectangle at Style's default 0.35 fill, and while the pointer is past the top
+     or bottom edge scrolls on frame events at SelectionBand's rate, one accelerated notch (288 px)
+     a second. It ends on the release; Escape cancels it and every other key is swallowed while it
+     is held (Focus.handleKey); a navigation or a listing in flight cancels it, and so does a change
+     in the columns, the cell size, the row count or the band's own size; it owes the watched re-read
+     as PaneWire's watchBusy has it. `examples/test-pointer.rs` gained a drag and a wheel. Driven
+     headless: a diagonal band from the ground marks rows 1 to 5, a second one cancelled by Escape
+     mid-drag puts those five back (removing the cancel turns it red), and in the grid, scrolled to
+     its end with the wheel, a band from the empty trailing cell held past the top for two seconds
+     reaches further up than the same drag released at once, 75 checks. **Seen in passing, not this
+     stage's:** the grid's scroll to a cursor below the screen counts in items rather than tile rows,
+     so the cursor's row can stay partly below the bottom edge (21 px of 130 here).

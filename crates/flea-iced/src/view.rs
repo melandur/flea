@@ -3,7 +3,7 @@
 use crate::pane::Pane;
 use crate::listcols::{self, Cols};
 use crate::{contrast, format, list_id, marks, wire, Flea, Message, DATE_W, ICON_SLOT, ITEMS_W, KIND_W, MARK, MODE_W, PAD_X, RENAME_ID, ROW_H, SIZE_W, TEXT_PX};
-use iced::widget::{column, container, image, mouse_area, row, scrollable, space, svg, text, text_input, Id};
+use iced::widget::{column, container, image, mouse_area, row, scrollable, space, stack, svg, text, text_input, Id};
 use iced::{Background, Border, Color, Element, Length};
 
 // One pane as the view draws it: which side it sits on, where its listing is scrolled, and whether
@@ -182,12 +182,20 @@ impl Flea {
         }
         rows = rows.push(space().height((total - first - shown) as f32 * self.file_h()));
         let side = v.side;
-        scrollable(rows.width(Length::Fill))
+        let list = scrollable(rows.width(Length::Fill))
             .id(list_id(side))
             .on_scroll(move |vp| Message::Scrolled(side, vp))
             .height(Length::Fill)
-            .width(Length::Fill)
-            .into()
+            .width(Length::Fill);
+        stack![list, self.band_over(v, 1, None, self.file_h())].into()
+    }
+
+    // List.qml's and GridArea.qml's SelectionBand, enabled as it is: no listing in flight, no rename
+    // open, a listing that is ready.
+    pub(crate) fn band_over<'a>(&self, v: PaneView<'a>, columns: usize, cell_w: Option<f32>, cell_h: f32) -> Element<'a, Message> {
+        let pane = v.pane;
+        let enabled = pane.listed_once && !pane.list_in_flight() && pane.renaming.is_none() && pane.error.is_none();
+        crate::band::band(v.side, columns, cell_w, cell_h, pane.view_total(), v.scroll_y, pane.band.epoch, enabled, self.palette.accent)
     }
 
     fn row<'a>(&'a self, v: PaneView<'a>, i: usize) -> Element<'a, Message> {

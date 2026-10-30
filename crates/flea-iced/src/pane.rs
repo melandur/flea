@@ -129,6 +129,7 @@ pub struct Pane {
     pub(crate) list_requests: u64,
     // Marks.painting: 1 while a held Space marks, -1 while it unmarks, 0 with no sweep.
     pub(crate) painting: i8,
+    pub band: crate::marquee::Band,
 }
 
 impl Pane {
@@ -183,6 +184,8 @@ impl Pane {
         if !std::mem::take(&mut self.keep_filter) {
             self.filter_close();
         }
+        // SelectionBand's enabled: a listing in flight ends a sweep, putting back what it began from.
+        self.band_finish(true);
         self.anchor = anchor;
         self.locating = None;
         self.window_pending = None;
