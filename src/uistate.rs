@@ -155,6 +155,7 @@ fn fits(rule: &Rule, value: &Json) -> bool {
             _ => value.as_f64().map(|n| TEXT_SIZE_STOPS.contains(&n)).unwrap_or(false),
         },
         Rule::ThemeId => value.as_str().map(is_theme_id).unwrap_or(false),
+        Rule::Colour => value.as_str().is_some_and(|s| s.is_empty() || (s.len() == 7 && s.starts_with('#') && s[1..].bytes().all(|b| b.is_ascii_hexdigit()))),
         Rule::Group(_) => value.as_object().is_some(),
     }
 }

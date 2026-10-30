@@ -108,7 +108,7 @@ impl Flea {
         for (i, r) in self.columns.rows(path).iter().enumerate() {
             let lifted = trail.as_deref() == Some(r.n.as_str());
             // An ancestor column that is not on the trail reads back, so its text drops to muted.
-            let ink = if which == 0 && !lifted { p.muted } else { p.foreground };
+            let ink = if which == 0 && !lifted { p.muted } else { p.name_ink(r.d, r.p) };
             let line = self.column_line(r, ink, lifted, false, None, false);
             col = col.push(mouse_area(line).on_press(Message::Column(Msg::Tap(which, i))).on_right_press(Message::Column(Msg::Menu(which, i))));
         }
@@ -118,7 +118,7 @@ impl Flea {
     // ui/ColumnRow.qml: the mark, the name, a size in the pane's own column, a chevron on a folder.
     fn column_line<'a>(&'a self, r: &Row, ink: Color, lifted: bool, cursor: bool, size: Option<String>, selected: bool) -> Element<'a, Message> {
         let p = self.palette;
-        let mark_ink = if cursor { p.accent } else { p.muted };
+        let mark_ink = if cursor { p.accent } else { p.chosen_mark(r.d, r.p).unwrap_or(p.muted) };
         let mut line = row![
             svg(marks::handle(marks::glyph_for_row(&r.i, r.p, &r.n, r.d, false), mark_ink)).width(MARK).height(MARK),
             text(r.n.clone()).color(ink).width(Length::Fill).wrapping(text::Wrapping::None),
@@ -169,7 +169,7 @@ impl Flea {
                 None => {
                     // ColumnRow.sizeText: a link says so, a folder's own size is not walked here.
                     let size = if format::is_symlink(r.p) { "link".to_string() } else if r.d { String::new() } else { format::size(r.s) };
-                    let ink = if cursor { p.accent } else { p.foreground };
+                    let ink = if cursor { p.accent } else { p.name_ink(r.d, r.p) };
                     // ColumnRow's drop target: the frame, and the board's words where the size sits.
                     match v.drop.filter(|d| d.0 == i) {
                         Some((_, copy)) => {

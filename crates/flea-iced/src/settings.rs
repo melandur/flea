@@ -239,12 +239,49 @@ fn theme_rows(data: &Value) -> Vec<Row> {
         group("Theme"),
         Row { value: if chosen.is_none() { "the desktop's own".into() } else { String::new() }, ..check("theme:omarchy", "Follow Omarchy", "sliders", chosen.is_none()) },
         hint("Every window follows omarchy-theme-set until you pick one below."),
-        Row { value: format!("{} themes", crate::theme::entries().count()), ..group("Bundled palettes") },
     ];
+    out.extend(colour_rows(data));
+    out.extend([
+        Row { value: format!("{} themes", crate::theme::entries().count()), ..group("Bundled palettes") },
+    ]);
     for (id, name) in crate::theme::entries() {
         out.push(check(&format!("theme:{id}"), name, "palette", chosen == Some(id)));
     }
     out.push(hint("Vendored from Strata, MIT. Most are Tinted Base16 palettes."));
+    out
+}
+
+// The swatches a Colours row steps through, "" first, which is the palette's own.
+pub const SWATCHES: [(&str, &str); 13] = [
+    ("", "Theme"), ("#7aa2f7", "Blue"), ("#7dcfff", "Sky"), ("#2ac3de", "Teal"), ("#9ece6a", "Green"),
+    ("#e0af68", "Yellow"), ("#ff9e64", "Orange"), ("#f7768e", "Red"), ("#ff007c", "Pink"),
+    ("#bb9af7", "Violet"), ("#c0caf5", "White"), ("#737aa2", "Grey"), ("#3b4261", "Slate"),
+];
+
+// Settings > Theme > Colours: one choice per role over the swatches, and a hand-written "#rrggbb"
+// the swatches do not carry kept as one more segment, so a step never silently replaces it.
+fn colour_rows(data: &Value) -> Vec<Row> {
+    let labels = [
+        ("cursor", "Cursor and accent", "palette"),
+        ("marked", "Marked rows", "check"),
+        ("folder", "Folders", "folder"),
+        ("file", "Files", "file"),
+        ("executable", "Programs", "terminal"),
+        ("symlink", "Links", "symlink"),
+        ("mark", "File marks", "image"),
+    ];
+    let mut out = vec![group("Colours")];
+    for (id, label, glyph) in labels {
+        let stored = at(data, &format!("/display/colors/{id}")).as_str().unwrap_or("").to_lowercase();
+        let mut values: Vec<Value> = SWATCHES.iter().map(|(v, _)| json!(v)).collect();
+        let mut names: Vec<&str> = SWATCHES.iter().map(|(_, n)| *n).collect();
+        if !SWATCHES.iter().any(|(v, _)| *v == stored) {
+            values.push(json!(stored));
+            names.push(&stored);
+        }
+        out.push(Row { role: "colour", ..choice(&format!("color:{id}"), label, Some(glyph), values, &names, &json!(stored)) });
+    }
+    out.push(hint("Left and Right step a colour; Theme keeps the palette's own. Folders also colour the folder mark."));
     out
 }
 
@@ -274,6 +311,9 @@ fn about_rows(f: &Facts) -> Vec<Row> {
 pub fn patch(id: &str, value: Value) -> Value {
     if id == "places.rail" {
         return json!({ "places": { "rail": if value == json!(true) { "shown" } else { "hidden" } } });
+    }
+    if let Some(role) = id.strip_prefix("color:") {
+        return json!({ "display": { "colors": { role: value } } });
     }
     if let Some(theme) = id.strip_prefix("theme:") {
         return json!({ "display": { "theme": theme } });

@@ -18,6 +18,42 @@ pub struct Palette {
     pub symlink: Color,
     pub executable: Color,
     pub error: Color,
+    // A folder's name and a plain file's name; the foreground until Settings > Theme > Colours says.
+    pub folder: Color,
+    pub file: Color,
+    // A folder's mark when the operator chose one, which wins over the filetype tier's colour.
+    pub folder_mark: Option<Color>,
+}
+
+// display.colors: each role the operator chose, None where the palette's own stands.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Overrides {
+    pub cursor: Option<Color>,
+    pub marked: Option<Color>,
+    pub folder: Option<Color>,
+    pub file: Option<Color>,
+    pub executable: Option<Color>,
+    pub symlink: Option<Color>,
+    pub mark: Option<Color>,
+}
+
+impl Overrides {
+    pub fn from_json(colors: Option<&serde_json::Value>) -> Self {
+        let get = |k: &str| colors.and_then(|c| c.get(k)).and_then(serde_json::Value::as_str).and_then(hex);
+        Overrides {
+            cursor: get("cursor"),
+            marked: get("marked"),
+            folder: get("folder"),
+            file: get("file"),
+            executable: get("executable"),
+            symlink: get("symlink"),
+            mark: get("mark"),
+        }
+    }
+}
+
+pub fn parse_hex(s: &str) -> Option<Color> {
+    hex(s)
 }
 
 fn hex(s: &str) -> Option<Color> {
@@ -60,6 +96,9 @@ impl Palette {
             symlink: ensure_ratio(get("cyan", get("color6", d.symlink)), background, 4.5),
             executable: ensure_ratio(get("green", get("color2", d.executable)), background, 4.5),
             error: ensure_ratio(get("red", get("color1", d.error)), background, 4.5),
+            folder: foreground,
+            file: foreground,
+            folder_mark: None,
         }
     }
 
@@ -76,6 +115,9 @@ impl Palette {
             symlink: c("#449dab"),
             executable: c("#9ece6a"),
             error: c("#f7768e"),
+            folder: c("#a9b1d6"),
+            file: c("#a9b1d6"),
+            folder_mark: None,
         }
     }
 
@@ -119,6 +161,37 @@ pub fn palette_body(id: &str) -> Option<String> {
 }
 
 impl Palette {
+    // The palette with the operator's own colours laid over it, taken as chosen and never lifted:
+    // the operator picked the colour against the background they are looking at.
+    pub fn with(mut self, o: &Overrides) -> Self {
+        self.accent = o.cursor.unwrap_or(self.accent);
+        self.selection = o.marked.unwrap_or(self.selection);
+        self.folder = o.folder.unwrap_or(self.folder);
+        self.folder_mark = o.folder;
+        self.file = o.file.unwrap_or(self.file);
+        self.executable = o.executable.unwrap_or(self.executable);
+        self.symlink = o.symlink.unwrap_or(self.symlink);
+        self.dim = o.mark.unwrap_or(self.dim);
+        self
+    }
+
+    // A row's name: a link, a folder, a program or a plain file, each in its own role.
+    pub fn name_ink(&self, is_dir: bool, mode: u32) -> Color {
+        if crate::format::is_symlink(mode) {
+            self.symlink
+        } else if is_dir {
+            self.folder
+        } else if crate::format::is_executable(mode) {
+            self.executable
+        } else {
+            self.file
+        }
+    }
+
+    // The folder colour the operator chose, for a folder's own mark and never a link's.
+    pub fn chosen_mark(&self, is_dir: bool, mode: u32) -> Option<Color> {
+        self.folder_mark.filter(|_| is_dir && !crate::format::is_symlink(mode))
+    }
 }
 
 #[cfg(test)]
@@ -144,5 +217,18 @@ mod tests {
         // No dark_background, so the surface ladder takes background next.
         assert_eq!(p.surface, Color::from_rgb8(0, 0, 0));
         assert_eq!(p.error, Palette::fallback().error);
+    }
+
+    #[test]
+    fn a_chosen_colour_replaces_its_role_and_an_empty_one_keeps_the_palette() {
+        let o = Overrides::from_json(Some(&serde_json::json!({"cursor": "#ff0000", "folder": "#00ff00", "file": "", "mark": "nope"})));
+        let base = Palette::fallback();
+        let p = base.with(&o);
+        assert_eq!(p.accent, Color::from_rgb8(255, 0, 0));
+        assert_eq!(p.folder, Color::from_rgb8(0, 255, 0));
+        assert_eq!(p.folder_mark, Some(Color::from_rgb8(0, 255, 0)));
+        assert_eq!(p.file, base.file);
+        assert_eq!(p.dim, base.dim);
+        assert_eq!(p.selection, base.selection);
     }
 }

@@ -93,7 +93,7 @@ pub fn boot() -> (Picking, Task<PMsg>) {
         // 10 rows is the 440 px card's own list height; the first viewport report corrects it.
         c: Chooser::new(req, 10),
         backend: None,
-        palette: Palette::load(&prefs.theme_id),
+        palette: Palette::load(&prefs.theme_id).with(&prefs.colors),
         reply_path: std::env::var("FLEA_PICKER_REPLY").unwrap_or_default(),
         user_dirs: std::fs::read_to_string(format!("{config}/user-dirs.dirs")).unwrap_or_default(),
         home: home.clone(),

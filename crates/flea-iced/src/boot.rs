@@ -28,7 +28,7 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
     let mut flea = Flea {
         pane,
         backend: None,
-        palette: Palette::load(&prefs.theme_id),
+        palette: Palette::load(&prefs.theme_id).with(&prefs.colors),
         message: None,
         message_gen: 0,
         modifiers: keyboard::Modifiers::default(),

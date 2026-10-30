@@ -52,7 +52,7 @@ impl Flea {
                 let tier = pane.file_type_colours;
                 let mark = marks::glyph_for_row(&r.i, r.p, &r.n, r.d, tier);
                 let rest = if cursor || selected { p.foreground } else { p.muted };
-                let ink = tier.then(|| marks::row_colour(&r.n, r.p, r.d)).flatten().map(|c| contrast::ensure_ratio(c, p.background, 3.0)).unwrap_or(rest);
+                let ink = p.chosen_mark(r.d, r.p).or_else(|| tier.then(|| marks::row_colour(&r.n, r.p, r.d)).flatten().map(|c| contrast::ensure_ratio(c, p.background, 3.0))).unwrap_or(rest);
                 svg(marks::handle(mark, ink)).width(g.thumb).height(g.thumb).into()
             }
         };
@@ -69,7 +69,7 @@ impl Flea {
                     text(crate::dragdrop::label(copy)).size(11.0).color(p.accent).align_x(iced::Center).width(Length::Fill),
                 ]
                 .into(),
-                None => text(r.n.clone()).size(11.0).color(p.foreground).align_x(iced::Center).width(Length::Fill).into(),
+                None => text(r.n.clone()).size(11.0).color(p.name_ink(r.d, r.p)).align_x(iced::Center).width(Length::Fill).into(),
             },
         };
         let dropping = v.drop.is_some_and(|d| d.0 == i);

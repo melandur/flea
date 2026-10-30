@@ -47,3 +47,16 @@ fn the_theme_section_lists_the_catalog_and_marks_the_one_in_force() {
     let lost = rows("theme", &json!({ "display": { "theme": "gone-theme" } }), &facts());
     assert!(lost.iter().find(|r| r.id == "theme:omarchy").unwrap().on);
 }
+
+#[test]
+fn a_colours_row_writes_one_leaf_of_display_colors_and_keeps_a_hand_written_colour() {
+    assert_eq!(patch("color:folder", json!("#ff9e64")), json!({ "display": { "colors": { "folder": "#ff9e64" } } }));
+    let data = json!({ "display": { "colors": { "folder": "#123456", "cursor": "#ff9e64" } } });
+    let rows = theme_rows(&data);
+    let folder = rows.iter().find(|r| r.id == "color:folder").unwrap();
+    assert_eq!(folder.values.last(), Some(&json!("#123456")), "a colour the swatches lack stays reachable");
+    assert_eq!(folder.selected, folder.values.len() - 1);
+    let cursor = rows.iter().find(|r| r.id == "color:cursor").unwrap();
+    assert_eq!(cursor.value, "Orange");
+    assert_eq!(rows.iter().find(|r| r.id == "color:file").unwrap().value, "Theme");
+}

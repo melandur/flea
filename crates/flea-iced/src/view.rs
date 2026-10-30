@@ -231,15 +231,7 @@ impl Flea {
             }
             Some(r) => {
                 let link = format::is_symlink(r.p);
-                let ink = if link {
-                    p.symlink
-                } else if r.d {
-                    p.foreground
-                } else if format::is_executable(r.p) {
-                    p.executable
-                } else {
-                    p.foreground
-                };
+                let ink = p.name_ink(r.d, r.p);
                 // A search result is a path under the walked folder: the leaf is its name and the rest
                 // its location, drawn muted beside it, the split the client makes (protocol "search").
                 let (leafname, location) = match (pane.search_listed(), r.n.rsplit_once('/')) {
@@ -326,10 +318,10 @@ impl Flea {
                 let tier = pane.file_type_colours;
                 let mark = marks::glyph_for_row(&r.i, r.p, &r.n, r.d, tier);
                 // Theme.markInk: a vendored colour lifted to 3:1 on the background, else the dim ink.
-                let ink = tier
+                let ink = p.chosen_mark(r.d, r.p).or_else(|| tier
                     .then(|| marks::row_colour(&r.n, r.p, r.d))
                     .flatten()
-                    .map(|c| contrast::ensure_ratio(c, p.background, 3.0))
+                    .map(|c| contrast::ensure_ratio(c, p.background, 3.0)))
                     .unwrap_or(p.dim);
                 let size = MARK.min(ICON_SLOT);
                 Element::from(svg(marks::handle(mark, ink)).width(size).height(size))

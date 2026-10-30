@@ -360,13 +360,13 @@ impl Flea {
         }
         let rows = self.panel_rows();
         if let Some(id) = rows.get(self.panel.cursor).and_then(|r| r.id.strip_prefix("theme:")) {
-            self.palette = crate::theme::Palette::load(id);
+            self.palette = crate::theme::Palette::load(id).with(&self.prefs.colors);
         }
     }
 
     fn end_theme_preview(&mut self) {
         if self.panel.section == "theme" {
-            self.palette = crate::theme::Palette::load(&self.prefs.theme_id);
+            self.palette = crate::theme::Palette::load(&self.prefs.theme_id).with(&self.prefs.colors);
         }
     }
 

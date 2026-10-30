@@ -85,6 +85,16 @@ impl Flea {
                 let mut segs = IcedRow::new().spacing(4);
                 for (k, label) in r.labels.iter().enumerate() {
                     let on = k == r.selected || (r.values.is_empty() && *label == r.value);
+                    // A Colours row draws each colour as its own swatch, and Theme as the word.
+                    let swatch = (r.role == "colour").then(|| r.values.get(k).and_then(serde_json::Value::as_str).and_then(crate::theme::parse_hex)).flatten();
+                    if let Some(c) = swatch {
+                        segs = segs.push(button(space().width(14).height(14)).padding(2).on_press_maybe((!r.unavailable).then_some(Message::PanelPick(i, k))).style(move |_, _| button::Style {
+                            background: Some(c.into()),
+                            border: Border { color: if on { p.foreground } else { Color::TRANSPARENT }, width: 2.0, radius: 4.0.into() },
+                            ..Default::default()
+                        }));
+                        continue;
+                    }
                     segs = segs.push(button(text(label.clone()).size(11.0)).on_press_maybe((!r.unavailable).then_some(Message::PanelPick(i, k))).style(move |_, _| button::Style {
                         background: Some(if on { Color { a: 0.25, ..p.accent } } else { p.surface }.into()),
                         text_color: p.foreground,
