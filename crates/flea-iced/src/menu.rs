@@ -187,13 +187,14 @@ pub fn trash_entries(kind: Kind, total: usize, busy: bool, hidden: &[String]) ->
 }
 
 // Menu.headerEntries: Hide or Show for each optional column the list can draw, then the hidden-files
-// row. Items has no row until the folder walk arrives to fill its cells.
+// row.
 pub fn header_entries(columns: &[String], show_hidden: bool) -> Vec<Item> {
     let entry = |id, label, glyph| Entry { id, action: id, label, glyph, disabled: false, danger: false, hint: "", errored: false, sub: vec![] };
     let shown = |k: &str| columns.iter().any(|c| c == k);
-    let rows: [(&'static str, &'static str, &'static str, &'static str, &'static str); 4] = [
+    let rows: [(&'static str, &'static str, &'static str, &'static str, &'static str); 5] = [
         ("col:mode", "Hide Mode", "Show Mode", "lock", "mode"),
         ("col:size", "Hide Size", "Show Size", "drive", "size"),
+        ("col:items", "Hide Items", "Show Items", "list", "items"),
         ("col:date", "Hide Modified", "Show Modified", "download", "date"),
         ("col:kind", "Hide Kind", "Show Kind", "type", "kind"),
     ];

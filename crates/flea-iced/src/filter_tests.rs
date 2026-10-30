@@ -55,7 +55,7 @@ fn enter_stands_it_escape_and_a_new_folder_close_it_and_the_watch_keeps_it() {
     p.filter_commit();
     assert!(!p.filter_typing && p.filtering());
     // A watched re-read narrows the same directory again.
-    p.receive(Reply::Changed { path: "/d".into() });
+    p.receive(Reply::Changed { path: "/d".into(), sizes: true });
     let out = p.watch_fired();
     assert!(matches!(sends(&out)[..], [Request::List { .. }]));
     listed(&mut p, "/d", 3);

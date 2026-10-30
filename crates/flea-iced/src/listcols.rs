@@ -2,13 +2,13 @@
 // stop gives it. The name is the one column a file manager cannot do without, so it never loses:
 // each metadata column drops, widest first, at the width where keeping it would push the name under
 // its floor, and the header and every row resolve their set from the same width. Toolkit free.
-use crate::{DATE_W, ICON_SLOT, KIND_W, MODE_W, NAME_MIN, PAD_X, SIZE_W};
+use crate::{DATE_W, ICON_SLOT, ITEMS_W, KIND_W, MODE_W, NAME_MIN, PAD_X, SIZE_W};
 
 // Theme.spacing.gap, the space between two cells.
 pub const GAP: f32 = 8.0;
 // The optional columns in the order they drop: Kind first, the most redundant and the widest; Mode
-// last, the permanent column. Items sits with them in QML and arrives with the folder walk.
-const DROP_ORDER: [&str; 4] = ["kind", "date", "size", "mode"];
+// last, the permanent column; Items, narrow and only a folder's, outlives the date beside it.
+const DROP_ORDER: [&str; 5] = ["kind", "date", "items", "size", "mode"];
 // src/uischema.rs's optional column keys, Items among them, in the header menu's own order.
 pub const OPTIONAL: [&str; 5] = ["mode", "size", "items", "date", "kind"];
 
@@ -16,6 +16,7 @@ pub const OPTIONAL: [&str; 5] = ["mode", "size", "items", "date", "kind"];
 pub struct Cols {
     pub mode: bool,
     pub size: bool,
+    pub items: bool,
     pub date: bool,
     pub kind: bool,
 }
@@ -25,6 +26,7 @@ fn width_of(key: &str) -> f32 {
         "mode" => MODE_W,
         "size" => SIZE_W,
         "date" => DATE_W,
+        "items" => ITEMS_W,
         _ => KIND_W,
     }
 }
@@ -51,6 +53,7 @@ pub fn set(width: f32, hidden: &[&str]) -> Cols {
             "mode" => out.mode = on,
             "size" => out.size = on,
             "date" => out.date = on,
+            "items" => out.items = on,
             _ => out.kind = on,
         }
     }
@@ -95,13 +98,14 @@ mod tests {
     #[test]
     fn the_name_keeps_its_floor_and_the_columns_drop_widest_first() {
         let all = set(2000.0, &[]);
-        assert_eq!(all, Cols { mode: true, size: true, date: true, kind: true });
+        assert_eq!(all, Cols { mode: true, size: true, items: true, date: true, kind: true });
         let floor = name_floor();
         let at = |w: f32| set(w, &[]);
         assert_eq!(at(floor + MODE_W + GAP), Cols { mode: true, ..Default::default() });
-        assert_eq!(at(floor + MODE_W + SIZE_W + DATE_W + 3.0 * GAP), Cols { mode: true, size: true, date: true, kind: false });
+        assert_eq!(at(floor + MODE_W + SIZE_W + ITEMS_W + DATE_W + 4.0 * GAP), Cols { mode: true, size: true, items: true, date: true, kind: false });
+        assert_eq!(at(floor + MODE_W + SIZE_W + ITEMS_W + 3.0 * GAP), Cols { mode: true, size: true, items: true, ..Default::default() });
         assert_eq!(at(floor), Cols::default());
-        assert_eq!(set(2000.0, &["mode", "kind"]), Cols { size: true, date: true, ..Default::default() });
+        assert_eq!(set(2000.0, &["mode", "kind", "items"]), Cols { size: true, date: true, ..Default::default() });
     }
 
     #[test]

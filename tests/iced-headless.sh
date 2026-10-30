@@ -369,6 +369,9 @@ jq '.density = "compact"' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/
 launch "$T"
 WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 400 55 3; sleep 0.5; k -k Return; sleep 1.5; shot columns-mode
 check "the header menu's Show Mode adds it to the stored columns" '["name","size","date","mode"]' "$(jq -c '.columns' "$D/state/flea/ui.json")"
+check "the list asks the folder walk for its visible folders" yes "$(grep -q '"c":"dirsize"' "$D/trace.log" && echo yes || echo no)"
+WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 400 55 3; sleep 0.5; k -k Down -k Down -k Return; sleep 1.5; shot columns-items
+check "and Show Items adds the count beside it" '["name","size","date","mode","items"]' "$(jq -c '.columns' "$D/state/flea/ui.json")"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 jq '.density = "normal" | .columns = ["name","size","date"]' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
 APP=""

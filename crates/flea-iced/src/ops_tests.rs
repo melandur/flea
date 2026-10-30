@@ -130,7 +130,7 @@ fn a_new_folder_lands_the_cursor_on_it_with_its_rename_field_open() {
 fn a_selection_owes_the_watched_reread_and_clearing_it_pays() {
     let mut p = pane(3);
     p.toggle_select();
-    assert!(p.receive(Reply::Changed { path: "/d".into() }).is_empty());
+    assert!(p.receive(Reply::Changed { path: "/d".into(), sizes: true }).is_empty());
     let out = p.escape();
     assert!(matches!(sends(&out)[0], Request::List { .. }));
 }
@@ -159,7 +159,7 @@ fn duplicate_names_the_cursor_row_alone_and_its_answer_lands_on_the_copy() {
 fn an_open_menu_owes_the_watched_reread_and_closing_it_pays() {
     let mut p = pane(5);
     p.menu_open = true;
-    assert!(p.receive(Reply::Changed { path: "/d".into() }).iter().all(|e| !matches!(e, Effect::Send(_))));
+    assert!(p.receive(Reply::Changed { path: "/d".into(), sizes: true }).iter().all(|e| !matches!(e, Effect::Send(_))));
     p.watch_fired();
     assert!(sends(&p.pay_debt()).is_empty());
     p.menu_open = false;

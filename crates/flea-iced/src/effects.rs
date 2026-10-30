@@ -87,6 +87,17 @@ impl Flea {
         self.run(effects)
     }
 
+    // List.qml's gate on the walk: the list view only, and only while folder sizes are on or the
+    // Items column is drawn; the split's panes are lists that never draw Items.
+    pub(crate) fn dirs_follow(&mut self) {
+        let wanted = !self.grid_mode() && !self.columns_mode() && (self.prefs.folder_sizes || self.list_cols(false).items);
+        self.pane.dirs.wanted = wanted;
+        let folder_sizes = self.prefs.folder_sizes;
+        if let Some(o) = self.other.as_mut() {
+            o.pane.dirs.wanted = folder_sizes;
+        }
+    }
+
     pub(crate) fn say(&mut self, text: String) -> Task<Message> {
         self.show(text, false)
     }

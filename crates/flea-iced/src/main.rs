@@ -23,6 +23,7 @@ mod devices;
 mod delimited;
 mod dialog;
 mod dialogview;
+mod dirsizes;
 mod facts;
 mod effects;
 mod form;
@@ -56,6 +57,7 @@ mod opreplies;
 mod ops;
 mod pane;
 mod pathbar;
+mod paths;
 mod places_rows;
 mod pdf;
 mod placemenu;
@@ -187,6 +189,7 @@ impl Flea {
         let task = self.handle(message);
         let owed = self.pane.pay_debt();
         let paid = self.run(owed);
+        self.dirs_follow();
         Task::batch([task, paid, self.columns_follow()])
     }
 

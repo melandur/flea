@@ -560,5 +560,17 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      click is Menu.headerEntries, Hide or Show per column then the dotfile toggle, saving the whole
      shown set. `examples/test-pointer.rs` takes a fifth argument for the right button. Driven
      headless at compact density: the header's Show Mode stores `["name","size","date","mode"]`.
-   - **8d-iv-b-2**, folder sizes and the Items column, both answered by the backend's `dirsize` walk.
+   - **8d-iv-b-2, folder sizes and the Items column (done).** `dirsizes.rs` is ui/js/DirSizes.js and
+     List.qml's requestDirSizes: the list view asks `dirsize` for its visible folder rows on the
+     thumbnails' own settle, once a row, and only while `folderSizes` is on or Items is drawn; a
+     scroll that moved the visible range sends one `dirsizecancel` when anything still waits; a
+     `dirsized` for a listing still in flight is dropped, and the map is capped as the thumbnails'
+     is. The `changed` line's `sizes` is read now: a re-read of the same folder keeps the answers
+     unless a structural burst came first, Nav.js's rule. The Size cell draws a folder's walked total
+     (a floor marked `>`) or `·`, and Items, which drops between Size and Modified by width and is
+     never in the split's panes or a search, draws the folder's own child count or `·`; its head
+     sorts nothing and the header menu gained its row. `join` and `parent` moved to `paths.rs` to
+     make room in `pane.rs`. **Not done:** a filter change does not cancel the walk's queue as
+     List.qml's does; a waiting row answers later instead, which costs nothing it would not.
+     Driven headless: the list asks the walk, and Show Items stores the column, 67 checks.
    - **8d-iv-c**, text size, which makes the crate's fixed metrics follow a stored stop.

@@ -12,7 +12,9 @@ fn the_rows_sample_from_the_protocol_parses() {
 
 #[test]
 fn an_unknown_line_is_other_and_junk_is_none() {
-    assert_eq!(parse(r#"{"t":"dirsized","row":4,"bytes":1048576,"partial":false,"entries":12,"ms":12.500}"#), Some(Reply::Other));
+    assert_eq!(parse(r#"{"t":"fsinfo","fs":"btrfs","free":1,"path":"/"}"#), Some(Reply::Other));
+    assert_eq!(parse(r#"{"t":"dirsized","row":4,"bytes":1048576,"partial":false,"entries":12,"ms":12.500}"#), Some(Reply::DirSized { row: 4, bytes: 1048576, partial: false, entries: 12 }));
+    assert_eq!(parse(r#"{"t":"changed","path":"/d","sizes":false}"#), Some(Reply::Changed { path: "/d".into(), sizes: false }));
     assert_eq!(parse(r#"{"t":"thumbed","row":2,"file":"/x.png","ms":1.0}"#), Some(Reply::Thumbed { row: 2, file: "/x.png".into() }));
     assert_eq!(parse("not json"), None);
 }

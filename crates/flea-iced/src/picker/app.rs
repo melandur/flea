@@ -361,7 +361,7 @@ impl Picking {
                     self.c.rows_arrived(start, rows);
                     vec![]
                 }
-                Reply::Changed { path } => self.c.changed(&path),
+                Reply::Changed { path, .. } => self.c.changed(&path),
                 Reply::Error { r#where, msg, .. } => self.c.failed(&r#where, &msg),
                 Reply::Picker(answer) => self.c.checked(answer),
                 _ => vec![],

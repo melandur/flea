@@ -72,6 +72,12 @@ impl Pane {
             out.push(Effect::Send(Request::Thumb { rows: ask }));
             self.settle_ms = SETTLE_MS;
         }
+        // The same settle asks for the folders' walk, List.qml's requestDirSizes.
+        let dirs = self.dir_plan(&visible);
+        if !dirs.is_empty() {
+            self.settle_ms = SETTLE_MS;
+        }
+        out.extend(dirs);
         out
     }
 

@@ -9,6 +9,8 @@ use crate::ops::Ops;
 pub use crate::sentence::sentence;
 pub use crate::thumbs::Thumb;
 use crate::thumbs::FIRST_SETTLE_MS;
+pub use crate::paths::join;
+pub(crate) use crate::paths::parent;
 use crate::wire::{Order, Reply, Request, Row};
 use std::collections::{BTreeSet, HashMap, VecDeque};
 
@@ -121,24 +123,8 @@ pub struct Pane {
     pub(crate) watch_debt: bool,
     // tabs.rs: the hidden tabs' snapshots, and the listing counter a selection's return is checked by.
     pub tabs: crate::tabs::Tabs,
+    pub dirs: crate::dirsizes::DirSizes,
     pub(crate) list_requests: u64,
-}
-
-pub fn join(dir: &str, name: &str) -> String {
-    if dir.ends_with('/') {
-        format!("{dir}{name}")
-    } else {
-        format!("{dir}/{name}")
-    }
-}
-
-pub(crate) fn parent(path: &str) -> Option<(String, String)> {
-    let trimmed = path.trim_end_matches('/');
-    if trimmed.is_empty() {
-        return None;
-    }
-    let (dir, leaf) = trimmed.rsplit_once('/')?;
-    Some((if dir.is_empty() { "/".into() } else { dir.into() }, leaf.into()))
 }
 
 impl Pane {
@@ -221,7 +207,17 @@ impl Pane {
             }
             Reply::Rows { start, rows, kinds } => self.on_rows(start, rows, kinds),
             Reply::Error { r#where, path, msg } => self.on_error(&r#where, &path, &msg),
-            Reply::Changed { path } => self.on_changed(&path),
+            Reply::Changed { path, sizes } => {
+                // A chmod cannot move a size, so only a structural burst spoils the folder sizes.
+                if sizes && path == self.path {
+                    self.dirs.stale = true;
+                }
+                self.on_changed(&path)
+            }
+            Reply::DirSized { row, bytes, partial, entries } => {
+                self.on_dirsized(row, bytes, partial, entries);
+                vec![]
+            }
             Reply::Located { directory, path, index } => self.on_located(&directory, &path, index),
             Reply::Thumbed { row, file } => self.on_thumbed(row, file),
             Reply::Searching { n, scanned, ms } => self.on_searching(n, scanned, ms),
@@ -237,6 +233,7 @@ impl Pane {
             // The listing's own first screenful: commit the pair.
             Some((path, total)) => {
                 self.in_flight = None;
+                self.dirs_listed(&path);
                 self.path = path;
                 self.total = total;
                 self.held = start;
@@ -337,10 +334,13 @@ impl Pane {
     // The scrollable reports which rows are on screen: `visible` fully, `last_partial` the last with
     // any pixel showing. The held window follows only on drift; every report restarts the settle.
     pub fn viewport(&mut self, first: usize, visible: usize, last_partial: usize) -> Vec<Effect> {
+        // A scroll cancels every walk still waiting; the next settle asks for what is on screen then.
+        let moved = first != self.first_visible || last_partial != self.last_partial;
         self.first_visible = first;
         self.visible_rows = visible.max(1);
         self.last_partial = last_partial;
-        let mut out = vec![self.restart_settle()];
+        let mut out = if moved { self.dir_cancel() } else { vec![] };
+        out.push(self.restart_settle());
         out.extend(self.request_if_drifted());
         out
     }

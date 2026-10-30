@@ -217,6 +217,6 @@ fn a_place_row_menu_acts_on_its_folder_and_is_one_remove_while_its_extras_row_is
 fn the_header_menu_names_each_column_by_whether_it_shows() {
     let shipped: Vec<String> = ["name", "size", "date"].map(String::from).to_vec();
     let labels = |items: Vec<Item>| items.into_iter().map(|i| match i { Item::Row(e) => e.label, Item::Separator => "|" }).collect::<Vec<_>>();
-    assert_eq!(labels(header_entries(&shipped, false)), ["Show Mode", "Hide Size", "Hide Modified", "Show Kind", "|", "Show hidden files"]);
+    assert_eq!(labels(header_entries(&shipped, false)), ["Show Mode", "Hide Size", "Show Items", "Hide Modified", "Show Kind", "|", "Show hidden files"]);
     assert_eq!(labels(header_entries(&shipped, true)).last(), Some(&"Hide hidden files"));
 }

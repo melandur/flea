@@ -88,11 +88,11 @@ fn a_watch_burst_is_one_timer_and_one_reread_on_the_name() {
     p.open("/a".into(), None);
     listed(&mut p, "/a", 20);
     p.step(3);
-    assert_eq!(p.receive(Reply::Changed { path: "/a".into() }), vec![Effect::WatchTimer]);
+    assert_eq!(p.receive(Reply::Changed { path: "/a".into(), sizes: true }), vec![Effect::WatchTimer]);
     // Absorbed, not restarted.
-    assert!(p.receive(Reply::Changed { path: "/a".into() }).is_empty());
+    assert!(p.receive(Reply::Changed { path: "/a".into(), sizes: true }).is_empty());
     // A change for a directory we are not on says nothing.
-    assert!(p.receive(Reply::Changed { path: "/elsewhere".into() }).is_empty());
+    assert!(p.receive(Reply::Changed { path: "/elsewhere".into(), sizes: true }).is_empty());
     let out = p.watch_fired();
     assert_eq!(sends(&out)[0], Request::List { path: "/a".into(), first: 310, hidden: false, order: Order::default() });
     // A file created above the cursor shifts it down by one; the anchor follows the name.
@@ -110,7 +110,7 @@ fn a_change_during_a_navigation_away_is_not_paid_in_the_new_directory() {
     p.open("/a".into(), None);
     listed(&mut p, "/a", 5);
     p.open("/b".into(), None);
-    assert!(p.receive(Reply::Changed { path: "/a".into() }).is_empty());
+    assert!(p.receive(Reply::Changed { path: "/a".into(), sizes: true }).is_empty());
     let out = listed(&mut p, "/b", 5);
     assert!(sends(&out).is_empty());
 }
@@ -121,7 +121,7 @@ fn a_change_during_the_same_directorys_list_is_paid_when_it_lands() {
     p.open("/a".into(), None);
     listed(&mut p, "/a", 5);
     p.reread();
-    assert!(p.receive(Reply::Changed { path: "/a".into() }).is_empty());
+    assert!(p.receive(Reply::Changed { path: "/a".into(), sizes: true }).is_empty());
     let out = listed(&mut p, "/a", 6);
     assert_eq!(sends(&out).len(), 1);
 }

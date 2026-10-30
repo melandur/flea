@@ -108,5 +108,5 @@ fn a_change_under_the_results_is_owed_to_the_folder_not_paid_into_them() {
     p.search_start(false);
     let g = timer(&p.search_typed("x"));
     p.search_live(g);
-    assert!(p.receive(Reply::Changed { path: "/home/u".into() }).is_empty());
+    assert!(p.receive(Reply::Changed { path: "/home/u".into(), sizes: true }).is_empty());
 }

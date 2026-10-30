@@ -2,7 +2,7 @@
 // status bar. The shell's state and its update live elsewhere; nothing here changes either.
 use crate::pane::Pane;
 use crate::listcols::{self, Cols};
-use crate::{contrast, format, list_id, marks, wire, Flea, Message, DATE_W, ICON_SLOT, KIND_W, MARK, MODE_W, PAD_X, RENAME_ID, ROW_H, SIZE_W, TEXT_PX};
+use crate::{contrast, format, list_id, marks, wire, Flea, Message, DATE_W, ICON_SLOT, ITEMS_W, KIND_W, MARK, MODE_W, PAD_X, RENAME_ID, ROW_H, SIZE_W, TEXT_PX};
 use iced::widget::{column, container, image, mouse_area, row, scrollable, space, svg, text, text_input, Id};
 use iced::{Background, Border, Color, Element, Length};
 
@@ -117,6 +117,10 @@ impl Flea {
         if cols.size {
             header = header.push(container(head("Size", "size")).width(SIZE_W));
         }
+        // Nothing sorts by a count, so Items is the one head with no press (Header.qml).
+        if cols.items {
+            header = header.push(container(text("Items")).width(ITEMS_W));
+        }
         if cols.date {
             header = header.push(container(head("Modified", "mtime")).width(DATE_W));
         }
@@ -218,7 +222,15 @@ impl Flea {
                     None => leafname,
                 };
                 // p 0 is a failed stat, and it condemns s and m with it; see docs/protocol.md "rows".
-                let size = if r.d { String::new() } else if link { "link".into() } else if r.p == 0 { "--".into() } else { format::size(r.s) };
+                let size = if link {
+                    "link".into()
+                } else if r.d {
+                    crate::dirsizes::size_text(pane.dirs.get(i), self.prefs.folder_sizes)
+                } else if r.p == 0 {
+                    "--".into()
+                } else {
+                    format::size(r.s)
+                };
                 let date = if r.p == 0 { "--".into() } else { format::date(r.m) };
                 // Row.qml's cells, right of the name in the header's order, each drawn only when it fits.
                 let cols = self.list_cols(pane.search_listed());
@@ -228,6 +240,9 @@ impl Flea {
                 }
                 if cols.size {
                     line = line.push(text(size).color(p.muted).width(SIZE_W));
+                }
+                if cols.items {
+                    line = line.push(text(crate::dirsizes::items_text(r.d, link, pane.dirs.get(i))).color(p.muted).width(ITEMS_W));
                 }
                 if cols.date {
                     line = line.push(text(date).color(p.muted).width(DATE_W));

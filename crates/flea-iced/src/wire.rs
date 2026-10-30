@@ -51,7 +51,9 @@ pub enum Reply {
     Listed { n: usize },
     Rows { start: usize, rows: Vec<Row>, kinds: Vec<String> },
     // `sizes` absent reads as true, per docs/protocol.md "changed".
-    Changed { path: String },
+    Changed { path: String, sizes: bool },
+    // A folder's recursive size, a floor when partial, and its own child count, -1 when unreadable.
+    DirSized { row: usize, bytes: u64, partial: bool, entries: i64 },
     Located { directory: String, path: String, index: i64 },
     Error { r#where: String, path: String, msg: String },
     Paths { paths: Vec<String> },
@@ -116,7 +118,13 @@ pub fn parse(line: &str) -> Option<Reply> {
             rows: serde_json::from_value(v.get("rows")?.clone()).ok()?,
             kinds: serde_json::from_value(v.get("kinds").cloned().unwrap_or(json!([]))).ok()?,
         },
-        "changed" => Reply::Changed { path: field("path") },
+        "changed" => Reply::Changed { path: field("path"), sizes: v.get("sizes").and_then(Value::as_bool).unwrap_or(true) },
+        "dirsized" => Reply::DirSized {
+            row: uint("row")? as usize,
+            bytes: uint("bytes").unwrap_or(0),
+            partial: flag("partial"),
+            entries: v.get("entries").and_then(Value::as_i64).unwrap_or(-1),
+        },
         // The single-path form only; the batch form carries `matches` and no `index`.
         "located" if v.get("index").is_some() => Reply::Located {
             directory: field("directory"),
@@ -264,6 +272,9 @@ pub enum Request {
     // Never sent with an empty rows: thumbcancel with none cancels everything queued.
     Thumb { rows: Vec<usize> },
     ThumbCancel { rows: Vec<usize> },
+    // Never sent with an empty rows; the cancel always means everything queued.
+    DirSize { rows: Vec<usize> },
+    DirSizeCancel,
     // One row's archive index, asked only while that archive is the thing open: never a sweep.
     MetaArchive { row: usize },
     // The preview column's one row, with the three hints its classification names; the token tells
@@ -309,6 +320,8 @@ impl Request {
             Request::Undo => json!({"c": "undo"}),
             Request::Thumb { rows } => json!({"c": "thumb", "rows": rows}),
             Request::ThumbCancel { rows } => json!({"c": "thumbcancel", "rows": rows}),
+            Request::DirSize { rows } => json!({"c": "dirsize", "rows": rows}),
+            Request::DirSizeCancel => json!({"c": "dirsizecancel"}),
             Request::Search { path, query, hidden, shallow } => json!({"c": "search", "path": path, "query": query, "hidden": hidden, "shallow": shallow}),
             Request::SearchCancel => json!({"c": "searchcancel"}),
             Request::MenuInstalled { id } => json!({"c": "menuaction", "op": "installed", "id": id}),

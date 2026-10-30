@@ -52,6 +52,8 @@ pub struct Prefs {
     // density, the file row's padding; columns, what a list row shows, name always among them.
     pub density: String,
     pub columns: Vec<String>,
+    // folderSizes: whether a folder's Size cell draws its walked total.
+    pub folder_sizes: bool,
 }
 
 impl Default for Prefs {
@@ -95,6 +97,7 @@ impl Default for Prefs {
             new_tab: "current".into(),
             density: "normal".into(),
             columns: ["name", "size", "date"].map(String::from).to_vec(),
+            folder_sizes: true,
         }
     }
 }
@@ -154,6 +157,7 @@ impl Prefs {
                 Some(a) => a.iter().filter_map(|x| x.as_str().map(String::from)).collect(),
                 None => d.columns,
             },
+            folder_sizes: v.pointer("/folderSizes").and_then(Value::as_bool) != Some(false),
         }
     }
 
