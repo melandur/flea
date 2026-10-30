@@ -24,7 +24,15 @@ pub enum Act {
     Settings,
     SheetClose,
     MouseBack,
+    // WindowDrag: a press on the bar's own ground, the pointer travelling over it, and the release.
+    Grab,
+    Travel(iced::Point),
+    Let,
 }
+
+// WindowDrag's dragThreshold: well under Qt's own 10, because a title bar reads a few pixels of
+// travel as intent.
+const WINDOW_DRAG_PX: f32 = 4.0;
 
 // The mouse's back button, which belongs to no row: keys.toml's [[pointer]] where = "window".
 pub(crate) fn mouse_back(event: iced::Event, _: iced::event::Status, _: iced::window::Id) -> Option<Act> {
@@ -43,6 +51,8 @@ pub struct Chrome {
     // The peek a Tab is waiting on, and the last folder's names, keyed by folder and hidden flag.
     pending: Option<(String, bool)>,
     cached: Option<((String, bool), Vec<String>)>,
+    // A press on the bar's ground, and where the pointer first moved after it.
+    grab: Option<Option<iced::Point>>,
 }
 
 // Format.tilde: home itself or home and a separator, never a sibling wearing home's name.
@@ -69,9 +79,35 @@ fn home() -> String {
 
 impl Flea {
     pub(crate) fn chrome_act(&mut self, act: Act) -> Task<Message> {
+        // ui/WindowDrag.qml: the press is a click on whatever is under it until it travels, and then
+        // the move is the compositor's (startSystemMove).
+        match act {
+            Act::Grab => {
+                self.chrome.grab = Some(None);
+                return Task::none();
+            }
+            Act::Let => {
+                self.chrome.grab = None;
+                return Task::none();
+            }
+            Act::Travel(at) => {
+                let Some(origin) = self.chrome.grab else { return Task::none() };
+                let Some(origin) = origin else {
+                    self.chrome.grab = Some(Some(at));
+                    return Task::none();
+                };
+                if origin.distance(at) < WINDOW_DRAG_PX {
+                    return Task::none();
+                }
+                self.chrome.grab = None;
+                return iced::window::latest().and_then(iced::window::drag);
+            }
+            _ => {}
+        }
         // Nav.mouseBack: a press behind an open menu, card or panel goes nowhere.
         let covered = self.menu.is_some() || self.card.is_some() || self.panel.open || self.dialog.is_some() || self.sheet_open;
         let effects = match act {
+            Act::Grab | Act::Travel(_) | Act::Let => return Task::none(),
             Act::SheetClose => {
                 self.sheet_open = false;
                 return Task::none();
@@ -282,13 +318,23 @@ impl Flea {
         ]
         .spacing(4)
         .align_y(iced::Center);
-        container(row![left, container(body).width(Length::Fill), right].spacing(12).align_y(iced::Center))
+        let bar = container(row![left, container(body).width(Length::Fill), right].spacing(12).align_y(iced::Center))
             .padding([0.0, PAD_X])
             .height(ROW_H)
             .width(Length::Fill)
             .align_y(iced::Center)
-            .style(move |_| iced::widget::container::Style::default().background(p.surface))
-            .into()
+            .style(move |_| iced::widget::container::Style::default().background(p.surface));
+        // The buttons and the crumbs take their own presses; only the bar's ground reaches this, and
+        // it hears the pointer travel only between that press and its release.
+        // The path being typed in selects text under a travelling press; the window stays put.
+        if self.chrome.editing {
+            return bar.into();
+        }
+        let grab = mouse_area(bar).on_press(Message::Chrome(Act::Grab)).on_release(Message::Chrome(Act::Let));
+        if self.chrome.grab.is_some() {
+            return grab.on_move(|at| Message::Chrome(Act::Travel(at))).on_exit(Message::Chrome(Act::Let)).into();
+        }
+        grab.into()
     }
 }
 

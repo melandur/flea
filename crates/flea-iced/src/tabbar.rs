@@ -119,7 +119,9 @@ impl Flea {
             // The current tab's accent edge replaces the strip's bottom hairline under it.
             let edge = container(space().width(width).height(2)).style(move |_| container::Style::default().background(if on { p.accent } else { Color::TRANSPARENT }));
             let tab = stack![plate, container(edge).height(ROW_H).align_y(iced::Bottom)];
-            strip = strip.push(mouse_area(tab).on_press(Message::Tab(Msg::Select(i))).on_middle_press(Message::Tab(Msg::Close(i))));
+            // A drag resting on a tab selects it, and a drop on the tab lands in its folder (DropInto).
+            let area = mouse_area(tab).on_press(Message::Tab(Msg::Select(i))).on_middle_press(Message::Tab(Msg::Close(i)));
+            strip = strip.push(self.drag_target(area, crate::dragdrop::Target::Tab(i)));
         }
         let add = button(svg(marks::handle("plus", p.foreground)).width(12).height(12))
             .on_press(Message::Tab(Msg::New))

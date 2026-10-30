@@ -1,7 +1,7 @@
 use super::*;
 
 fn row(d: bool, p: u32, i: &str) -> Row {
-    Row { n: "x".into(), d, s: 0, m: 0, p, i: i.into(), t: false, k: 0, l: None }
+    Row { n: "x".into(), d, s: 0, m: 0, p, i: i.into(), t: false, k: 0, l: None, v: 0 }
 }
 
 // The cases tests/js/picker.js drives, so the two ports cannot drift.

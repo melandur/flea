@@ -353,7 +353,7 @@ impl Picking {
             backend::Event::Exited(_) => self.c.failed("backend", "The backend stopped"),
             backend::Event::Unreadable => self.c.say("The backend sent a line this build cannot read.", true),
             backend::Event::Reply(r) => match r {
-                Reply::Listed { n } => {
+                Reply::Listed { n, .. } => {
                     self.c.listed(n);
                     vec![]
                 }

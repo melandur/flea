@@ -5,7 +5,7 @@ use crate::wire::{Reply, Request};
 fn pane(names: &[&str]) -> Pane {
     let mut p = Pane::new(false, 10);
     p.open("/d".into(), None);
-    p.receive(Reply::Listed { n: names.len() });
+    p.receive(Reply::Listed { n: names.len(), v: 0 });
     p.receive(Reply::Rows { start: 0, rows: names.iter().map(|n| row(n, false)).collect(), kinds: vec![] });
     p
 }

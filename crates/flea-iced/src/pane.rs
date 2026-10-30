@@ -47,8 +47,8 @@ pub enum Effect {
 #[derive(Debug)]
 pub(crate) struct InFlight {
     pub(crate) path: String,
-    // Some once `listed` arrived: the count waiting for the rows it rides with.
-    total: Option<usize>,
+    // Some once `listed` arrived: the count and the directory's device, waiting for the rows.
+    total: Option<(usize, u64)>,
 }
 
 // Who the cursor should land on once a listing commits: a name, or failing that an old index.
@@ -130,6 +130,8 @@ pub struct Pane {
     // Marks.painting: 1 while a held Space marks, -1 while it unmarks, 0 with no sweep.
     pub(crate) painting: i8,
     pub band: crate::marquee::Band,
+    // The listed directory's device (Backend.dirDev), which a drop on its floor is measured against.
+    pub(crate) dir_dev: u64,
 }
 
 impl Pane {
@@ -202,13 +204,13 @@ impl Pane {
 
     pub fn receive(&mut self, reply: Reply) -> Vec<Effect> {
         match reply {
-            Reply::Listed { n } => {
+            Reply::Listed { n, v } => {
                 // A walk's first line, or a superseded walk's, is the search's to count.
                 if self.search_listed_line(n) {
                     return vec![];
                 }
                 if let Some(f) = self.in_flight.as_mut() {
-                    f.total = Some(n);
+                    f.total = Some((n, v));
                 }
                 vec![]
             }
@@ -238,8 +240,9 @@ impl Pane {
         let mut out = vec![];
         match self.in_flight.as_ref().and_then(|f| f.total.map(|t| (f.path.clone(), t))) {
             // The listing's own first screenful: commit the pair.
-            Some((path, total)) => {
+            Some((path, (total, dev))) => {
                 self.in_flight = None;
+                self.dir_dev = dev;
                 self.dirs_listed(&path);
                 self.path = path;
                 self.total = total;

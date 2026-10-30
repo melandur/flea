@@ -3,7 +3,7 @@ use crate::picker::request;
 use crate::wire::PickerReply;
 
 fn file(n: &str) -> Row {
-    Row { n: n.into(), d: false, s: 3, m: 0, p: 0o100644, i: "text-x-generic".into(), t: false, k: 0, l: None }
+    Row { n: n.into(), d: false, s: 3, m: 0, p: 0o100644, i: "text-x-generic".into(), t: false, k: 0, l: None, v: 0 }
 }
 fn dir(n: &str) -> Row {
     Row { d: true, i: "folder".into(), ..file(n) }

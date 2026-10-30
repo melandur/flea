@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) fn row(n: &str, d: bool) -> Row {
-    Row { n: n.into(), d, s: 0, m: 0, p: 0o100644, i: String::new(), t: false, k: 0, l: None }
+    Row { n: n.into(), d, s: 0, m: 0, p: 0o100644, i: String::new(), t: false, k: 0, l: None, v: 0 }
 }
 
 pub(crate) fn rows(start: usize, count: usize) -> Vec<Row> {
@@ -10,7 +10,7 @@ pub(crate) fn rows(start: usize, count: usize) -> Vec<Row> {
 
 pub(crate) fn listed(p: &mut Pane, path: &str, total: usize) -> Vec<Effect> {
     let first = p.window_size().min(total);
-    let mut out = p.receive(Reply::Listed { n: total });
+    let mut out = p.receive(Reply::Listed { n: total, v: 0 });
     out.extend(p.receive(Reply::Rows { start: 0, rows: rows(0, first), kinds: vec![] }));
     assert_eq!(p.path, path);
     out
@@ -118,7 +118,7 @@ fn a_watch_burst_is_one_timer_and_one_reread_on_the_name() {
     let out = p.watch_fired();
     assert_eq!(sends(&out)[0], Request::List { path: "/a".into(), first: 310, hidden: false, order: Order::default() });
     // A file created above the cursor shifts it down by one; the anchor follows the name.
-    let first = Reply::Listed { n: 21 };
+    let first = Reply::Listed { n: 21, v: 0 };
     p.receive(first);
     let mut shifted = vec![row("aaa-new", false)];
     shifted.extend(rows(0, 20));
@@ -178,12 +178,12 @@ fn wrap_at_ends_comes_round_only_from_an_end() {
 fn enter_navigates_a_directory_and_hands_a_file_to_the_opener() {
     let mut p = Pane::new(false, 10);
     p.open("/".into(), None);
-    p.receive(Reply::Listed { n: 2 });
+    p.receive(Reply::Listed { n: 2, v: 0 });
     p.receive(Reply::Rows { start: 0, rows: vec![row("etc", true), row("x.txt", false)], kinds: vec![] });
     assert_eq!(sends(&p.activate())[0], Request::List { path: "/etc".into(), first: 310, hidden: false, order: Order::default() });
     let mut p2 = Pane::new(false, 10);
     p2.open("/".into(), None);
-    p2.receive(Reply::Listed { n: 2 });
+    p2.receive(Reply::Listed { n: 2, v: 0 });
     p2.receive(Reply::Rows { start: 0, rows: vec![row("etc", true), row("x.txt", false)], kinds: vec![] });
     p2.step(1);
     assert_eq!(p2.activate(), vec![Effect::OpenFile("/x.txt".into())]);

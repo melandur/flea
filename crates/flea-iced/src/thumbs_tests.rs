@@ -15,7 +15,7 @@ fn settle(p: &mut Pane) -> Vec<Effect> {
 fn a_settle_asks_only_visible_thumbnailable_rows_and_never_asks_twice() {
     let mut p = Pane::new(false, 3).with_view("media", false);
     p.open("/m".into(), None);
-    p.receive(Reply::Listed { n: 6 });
+    p.receive(Reply::Listed { n: 6, v: 0 });
     let rows = vec![trow("a.jpg", true, "image-x-generic"), trow("b.txt", false, "text-x-generic"),
                     trow("c.mp4", true, "video-x-generic"), trow("d.jpg", true, "image-x-generic"),
                     trow("e.jpg", true, "image-x-generic"), trow("f.jpg", true, "image-x-generic")];
@@ -32,7 +32,7 @@ fn a_settle_asks_only_visible_thumbnailable_rows_and_never_asks_twice() {
 fn a_settle_before_any_viewport_report_names_the_first_screen() {
     let mut p = Pane::new(false, 3).with_view("media", false);
     p.open("/m".into(), None);
-    p.receive(Reply::Listed { n: 5 });
+    p.receive(Reply::Listed { n: 5, v: 0 });
     let rows = (0..5).map(|i| trow(&format!("{i}.jpg"), true, "image-x-generic")).collect();
     p.receive(Reply::Rows { start: 0, rows, kinds: vec![] });
     assert_eq!(sends(&settle(&mut p)), vec![Request::Thumb { rows: vec![0, 1, 2] }]);
@@ -42,7 +42,7 @@ fn a_settle_before_any_viewport_report_names_the_first_screen() {
 fn a_stale_settle_does_nothing_and_a_row_left_waiting_is_cancelled_then_asked_again() {
     let mut p = Pane::new(false, 2).with_view("media", false);
     p.open("/m".into(), None);
-    p.receive(Reply::Listed { n: 4 });
+    p.receive(Reply::Listed { n: 4, v: 0 });
     let rows = (0..4).map(|i| trow(&format!("{i}.jpg"), true, "image-x-generic")).collect();
     p.receive(Reply::Rows { start: 0, rows, kinds: vec![] });
     p.viewport(0, 2, 1);
@@ -63,7 +63,7 @@ fn a_stale_settle_does_nothing_and_a_row_left_waiting_is_cancelled_then_asked_ag
 fn images_mode_skips_video_and_off_asks_nothing() {
     let mut p = Pane::new(false, 2).with_view("images", false);
     p.open("/m".into(), None);
-    p.receive(Reply::Listed { n: 2 });
+    p.receive(Reply::Listed { n: 2, v: 0 });
     p.receive(Reply::Rows { start: 0, rows: vec![trow("a.mp4", true, "video-x-generic"), trow("b.png", true, "image-x-generic")], kinds: vec![] });
     p.viewport(0, 2, 1);
     assert_eq!(sends(&settle(&mut p)), vec![Request::Thumb { rows: vec![1] }]);

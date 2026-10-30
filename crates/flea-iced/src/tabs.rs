@@ -21,6 +21,8 @@ pub struct Snapshot {
     order: Order,
     // Issue 94: the listing counter, so a selection only returns to its own rows.
     list_requests: u64,
+    // Tabs.devAt: the folder's device as it was listed, which a drop on the tab is measured against.
+    dev: u64,
 }
 
 #[derive(Debug, Default)]
@@ -70,6 +72,15 @@ impl Pane {
         self.tabs.items.get(i).map(|s| s.path.clone()).unwrap_or_default()
     }
 
+    // Tabs.devAt: the current tab's device once its listing has landed, a hidden tab's as snapshotted,
+    // and 0, unknown, which makes a drop copy, while a listing is still out.
+    pub fn tab_dev(&self, i: usize) -> u64 {
+        if i == self.tabs.index {
+            return if self.list_in_flight() { 0 } else { self.dir_dev };
+        }
+        self.tabs.items.get(i).map(|s| s.dev).unwrap_or(0)
+    }
+
     // Where a tab snapshotted now reopens: a search sets the path to the scope it walks.
     fn resting_path(&self) -> String {
         if self.search_listed() && !self.search.from.is_empty() {
@@ -91,6 +102,7 @@ impl Pane {
             selected: if elsewhere { vec![] } else { self.selection.iter().copied().collect() },
             order: self.order.clone(),
             list_requests: self.list_requests,
+            dev: if elsewhere { 0 } else { self.dir_dev },
         }
     }
 

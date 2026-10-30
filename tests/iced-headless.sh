@@ -415,6 +415,29 @@ check "a band from the ground marks every row it crosses" "[1,2,3,4,5]" "$(since
 band 210 2500 & held=$!; sleep 1.6; k -k Escape; wait "$held"; n=$(mark); ctrl c; sleep 1
 check "Escape mid-band puts back the marks it began from" "[1,2,3,4,5]" "$(since "$n" | grep '"c":"paths"' | tail -1 | sed 's/^flea-iced: sent //' | jq -c .rows)"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+
+# Dragging rows (ui/RowDrag.qml, ui/DropInto.qml): a folder named into sorts first, so the rows are
+# into, then band-0 to band-5, each 37 px from 74. A row dragged onto into moves there, the folder
+# being on the same filesystem; a two-row selection dragged by its second row moves both, which is
+# the press leaving the selection whole until it is a drag or a release; a drag held over into and
+# ended with Escape moves nothing; and in the split, a row dragged from the left pane onto the right
+# pane's floor, which lists into, lands there.
+mkdir "$T/band/into"
+drag() { WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 "$@"; }
+row_y() { echo $((74 + 37 * $1 + 18)); }
+launch "$T/band"
+drag 500 "$(row_y 4)" 1 520 "$(row_y 0)"; sleep 1
+check "a row dragged onto a folder moves into it" "yes no" "$(exists "$T/band/into/band-3.txt") $(exists "$T/band/band-3.txt")"
+k -k Down; k -k space; k -k Down; k -k space
+drag 500 "$(row_y 2)" 1 520 "$(row_y 0)"; sleep 1
+check "a selection dragged by one of its rows moves whole" "yes yes" "$(exists "$T/band/into/band-0.txt") $(exists "$T/band/into/band-1.txt")"
+drag 500 "$(row_y 1)" 1 520 "$(row_y 0)" 2500 & held=$!; sleep 1.6; shot drag-held; k -k Escape; wait "$held"; sleep 1
+check "Escape ends a drag with nothing dropped" "yes no" "$(exists "$T/band/band-2.txt") $(exists "$T/band/into/band-2.txt")"
+ctrl t; sleep 1.5; k -k Right; sleep 1
+drag 400 "$(row_y 1)" 1 1300 700; sleep 1
+check "a row dragged onto the other pane's floor lands in its folder" "yes no" "$(exists "$T/band/into/band-2.txt") $(exists "$T/band/band-2.txt")"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+rm -rf "$T/band/into"
 # The grid's edge scroll. The tiles stretch to fill the width, so the grid's only ground is the
 # empty trailing cell of its last tile row: 206 files in nine columns leave one. Sixty wheel notches
 # pin that row to the list's bottom edge, a band starts in the empty cell and is dragged up past the top.

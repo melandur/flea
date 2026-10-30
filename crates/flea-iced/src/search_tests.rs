@@ -37,9 +37,9 @@ fn a_superseded_walks_lines_are_dropped_and_the_newest_is_ranked_into_a_fresh_wi
     let g = timer(&p.search_typed("b"));
     p.search_live(g);
     // The first walk's listed and searching arrive, then the second walk's.
-    p.receive(Reply::Listed { n: 0 });
+    p.receive(Reply::Listed { n: 0, v: 0 });
     assert!(p.receive(Reply::Searching { n: 99, scanned: 1, ms: 1.0 }).is_empty());
-    p.receive(Reply::Listed { n: 0 });
+    p.receive(Reply::Listed { n: 0, v: 0 });
     p.receive(Reply::Searching { n: 3, scanned: 40, ms: 5.0 });
     assert_eq!(p.total, 3);
     let out = p.receive(Reply::Searched { n: 3, scanned: 40, ms: 6.0, cancelled: false });
@@ -53,7 +53,7 @@ fn escape_cancels_a_running_walk_then_returns_to_the_folder() {
     p.search_start(false);
     let g = timer(&p.search_typed("x"));
     p.search_live(g);
-    p.receive(Reply::Listed { n: 0 });
+    p.receive(Reply::Listed { n: 0, v: 0 });
     assert_eq!(sends(&p.search_cancel()), vec![Request::SearchCancel]);
     p.receive(Reply::Searched { n: 1, scanned: 5, ms: 1.0, cancelled: true });
     let out = p.search_cancel();
@@ -76,7 +76,7 @@ fn reveal_opens_the_results_folder_on_the_result() {
     p.search_start(true);
     let g = timer(&p.search_typed("help"));
     p.search_live(g);
-    p.receive(Reply::Listed { n: 0 });
+    p.receive(Reply::Listed { n: 0, v: 0 });
     p.receive(Reply::Searched { n: 1, scanned: 2, ms: 1.0, cancelled: false });
     p.receive(Reply::Rows { start: 0, rows: vec![row("docs/helper.txt", false)], kinds: vec![] });
     let out = p.search_reveal();

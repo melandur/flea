@@ -82,7 +82,7 @@ fn trash_sends_rows_and_lands_on_the_row_that_took_the_blocks_place() {
     assert_eq!(sends(&p.trash()), vec![Request::Trash { rows: vec![4, 5, 6] }]);
     let out = p.receive(Reply::Trashed { ok: 3, failed: 0 });
     assert_eq!(out[0], Effect::Message("Moved 3 items to Trash · Ctrl+Z undoes".into()));
-    p.receive(Reply::Listed { n: 7 });
+    p.receive(Reply::Listed { n: 7, v: 0 });
     let mut after: Vec<_> = (0..4).map(|i| row(&format!("f{i:06}"), false)).collect();
     after.extend((7..10).map(|i| row(&format!("f{i:06}"), false)));
     let out = p.receive(Reply::Rows { start: 0, rows: after, kinds: vec![] });
@@ -120,7 +120,7 @@ fn a_new_folder_lands_the_cursor_on_it_with_its_rename_field_open() {
     assert_eq!(sends(&p.new_folder()), vec![Request::Mkdir { path: "/d".into() }]);
     let out = p.receive(Reply::Made { path: "/d/New Folder".into() });
     assert_eq!(out[0], Effect::Message("Created New Folder · Ctrl+Z undoes".into()));
-    p.receive(Reply::Listed { n: 3 });
+    p.receive(Reply::Listed { n: 3, v: 0 });
     let out = p.receive(Reply::Rows { start: 0, rows: vec![row("New Folder", true), row("a", false), row("b", false)], kinds: vec![] });
     assert!(out.contains(&Effect::FocusRename));
     assert_eq!(p.renaming.as_ref().unwrap().source, "/d/New Folder");

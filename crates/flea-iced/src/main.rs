@@ -25,6 +25,8 @@ mod delimited;
 mod dialog;
 mod dialogview;
 mod dirsizes;
+mod dragdrop;
+mod dragshell;
 mod facts;
 mod effects;
 mod form;
@@ -143,6 +145,9 @@ struct Flea {
     message: Option<(String, u64, bool)>,
     modifiers: keyboard::Modifiers,
     last_tap: Option<(usize, Instant)>,
+    // dragshell.rs: a drag in flight, and a plain press inside a selection waiting for its release.
+    drag: Option<dragshell::Drag>,
+    pending_collapse: Option<(u8, usize)>,
     message_gen: u64,
     opening: bool,
     quitting: bool,
@@ -217,6 +222,9 @@ impl Flea {
                 f.report_viewport()
             }),
             Message::Band(side, ev) => self.band_message(side, ev),
+            Message::RowReleased(side, i) => self.row_released(side, i),
+            Message::DragHover(target, inside) => self.drag_hover(target, inside),
+            Message::DragTab(stamp) => self.drag_tab_switch(stamp),
             Message::RowPressed(side, i) => {
                 let focused = self.focus_side(side);
                 Task::batch([focused, self.tap(i)])

@@ -55,7 +55,7 @@ impl Live {
         while !done(self) {
             let line = self.lines.recv_timeout(deadline.saturating_duration_since(Instant::now())).unwrap_or_else(|_| panic!("timed out waiting for {what}"));
             let out = match wire::parse(&line) {
-                Some(Reply::Listed { n }) => {
+                Some(Reply::Listed { n, .. }) => {
                     self.c.listed(n);
                     vec![]
                 }

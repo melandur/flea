@@ -170,13 +170,24 @@ impl Flea {
                     // ColumnRow.sizeText: a link says so, a folder's own size is not walked here.
                     let size = if format::is_symlink(r.p) { "link".to_string() } else if r.d { String::new() } else { format::size(r.s) };
                     let ink = if cursor { p.accent } else { p.foreground };
-                    self.column_line(r, ink, false, cursor, Some(size), pane.selection.contains(&i) || (i == pane.cursor && !v.focused))
+                    // ColumnRow's drop target: the frame, and the board's words where the size sits.
+                    match v.drop.filter(|d| d.0 == i) {
+                        Some((_, copy)) => {
+                            let line = self.column_line(r, ink, false, cursor, Some(crate::dragdrop::label(copy).to_string()), false);
+                            container(line).style(move |_| crate::dragshell::drop_frame(p.accent)).into()
+                        }
+                        None => self.column_line(r, ink, false, cursor, Some(size), pane.selection.contains(&i) || (i == pane.cursor && !v.focused)),
+                    }
                 }
             };
-            col = col.push(mouse_area(line).on_press(Message::RowPressed(v.side, i)).on_right_press(Message::Menu(crate::menushell::Msg::Row(v.side, i))));
+            let area = mouse_area(line).on_press(Message::RowPressed(v.side, i)).on_release(Message::RowReleased(v.side, i)).on_right_press(Message::Menu(crate::menushell::Msg::Row(v.side, i)));
+            col = col.push(self.drag_target(area, crate::dragdrop::Target::Row(v.side, i)));
         }
         col = col.push(space().height((total - first - shown) as f32 * self.file_h()));
         let side = v.side;
-        scrollable(col.width(Length::Fill)).id(list_id(side)).on_scroll(move |vp| Message::Scrolled(side, vp)).height(Length::Fill).into()
+        let list = scrollable(col.width(Length::Fill)).id(list_id(side)).on_scroll(move |vp| Message::Scrolled(side, vp)).height(Length::Fill);
+        // Only the middle column owns this directory, so it alone is the floor a drop lands on.
+        let layer = iced::widget::stack![list, self.band_over(v, 1, None, self.file_h(), false)];
+        self.drag_target(mouse_area(layer), crate::dragdrop::Target::Floor(v.side)).into()
     }
 }

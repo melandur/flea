@@ -646,3 +646,34 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      reaches further up than the same drag released at once, 75 checks. **Seen in passing, not this
      stage's:** the grid's scroll to a cursor below the screen counts in items rather than tile rows,
      so the cursor's row can stay partly below the bottom edge (21 px of 130 here).
+   - **9d-i, dragging inside the window and moving it by its title bar (done; dragging to and from
+     other applications is 9d-ii).** `dragdrop.rs` is ui/js/Drag.js's rules for a drag that stays in
+     the window: the lift carries the selection only when the pressed row is in it, every carried
+     row's path or none when the selection reaches past the rows the pane holds, and ctrl read at the
+     lift alone; a folder takes a drop by path unless it is the source, the dragged folder or one of
+     its subtree, or the folder an item already lives in; a selection too wide for paths drops by
+     index on a folder of its own listing only; and Finder's rule, one place, decides move (same
+     device) against copy (another device, an unknown one, or ctrl). `listed` and `rows` now carry
+     `v`, each tab snapshot keeps its folder's device, and `transfer` gained its `rows` form.
+     `band.rs`'s layer lifts a drag off a row press that travels 10 px and takes the release that
+     ends it, so no row beneath reads it as a tap. While a drag is up, and only then, folder rows in
+     the list, the grid and the columns' middle column, each pane's floor (the columns' middle column
+     alone) and the tabs report the pointer entering and leaving; `dragshell.rs` decides what the drop
+     would do, as RowDrag over DropInto does (a tab answers for itself, a folder row when it can take
+     the drop, and what a row refuses falls to the floor under it, never a search or the Trash), frames
+     that folder with a hairline of accent over the hover wash and "move here" or "copy here" in its
+     columns' place, says FileDrag's line in the status bar, selects a tab rested on for 400 ms, and
+     sends the one transfer through the pane it lands in. Escape ends a drag with nothing dropped and
+     every other key waits, as the platform's own loop hands QML no keys. **The press no longer narrows
+     a selection it is part of**: a plain press inside a selection waits for its release on the same
+     row, because Tap.tapped fires on the release in QML and a press that narrowed would leave only
+     one row to drag. `chrome.rs` is ui/WindowDrag.qml: a press on the bar's ground that travels 4 px
+     hands the move to the compositor (`window::drag`); the buttons and the crumbs keep their presses
+     and the path field selects text. **Deviations:** the 4 px is measured from the first motion after
+     the press, because iced reports no position with a press; the columns' neighbour columns neither
+     lift nor take a drop. **Not driven:** the window move (a tiled window in the test compositor does
+     not move), a tab's hover switch and ctrl at the lift, which a virtual pointer cannot hold. Driven
+     headless: a row dragged onto a folder moves into it, a two-row selection dragged by its second
+     row moves both (reverting the deferred narrowing moves one), a drag held over a folder and ended
+     with Escape moves nothing, and in the split a row dragged onto the other pane's floor lands in
+     that pane's folder, 79 checks.

@@ -33,6 +33,8 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         message_gen: 0,
         modifiers: keyboard::Modifiers::default(),
         last_tap: None,
+        drag: None,
+        pending_collapse: None,
         opening: false,
         quitting: false,
         viewport_h: 36.0 * ROW_H,

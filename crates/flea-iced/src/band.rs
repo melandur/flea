@@ -28,6 +28,9 @@ pub enum Ev {
     End,
     Cancel,
     Scroll(f32),
+    // RowDrag's DragHandler: a press on a row that travelled the drag distance, and its release.
+    Lift { view: usize },
+    Drop,
 }
 
 // What the band is laid over, every field read fresh from the pane at each rebuild.
@@ -41,6 +44,8 @@ pub(crate) struct Band {
     scroll_y: f32,
     epoch: u64,
     enabled: bool,
+    // The columns view's middle column lifts rows but has no band (ColumnPane carries none).
+    ground: bool,
     accent: Color,
 }
 
@@ -57,11 +62,15 @@ struct State {
     // onColumnsChanged, onCellWidthChanged, onCountChanged and the size handlers do.
     shape: (usize, u32, u32, usize, u32, u32),
     frame: Option<Instant>,
+    // A press on a row, in window coordinates with the view position under it, and whether it has
+    // become a drag; the row itself still takes the press.
+    row_press: Option<(Point, usize)>,
+    lifting: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn band<'a>(side: u8, columns: usize, cell_w: Option<f32>, cell_h: f32, count: usize, scroll_y: f32, epoch: u64, enabled: bool, accent: Color) -> Element<'a, Message> {
-    Element::new(Band { side, columns: columns.max(1), cell_w, cell_h, count, scroll_y, epoch, enabled, accent })
+pub(crate) fn band<'a>(side: u8, columns: usize, cell_w: Option<f32>, cell_h: f32, count: usize, scroll_y: f32, epoch: u64, enabled: bool, ground: bool, accent: Color) -> Element<'a, Message> {
+    Element::new(Band { side, columns: columns.max(1), cell_w, cell_h, count, scroll_y, epoch, enabled, ground, accent })
 }
 
 impl Band {
@@ -94,12 +103,13 @@ impl Band {
         *state = State { epoch: state.epoch, ..State::default() };
     }
 
-    // SelectionBand.onPressed: indexAt answers -1 on the ground under or beside the cells.
-    fn on_ground(&self, bounds: Rectangle, p: Point) -> bool {
+    // SelectionBand.onPressed: indexAt answers -1 on the ground under or beside the cells, and the
+    // view position of the cell otherwise.
+    fn cell_at(&self, bounds: Rectangle, p: Point) -> Option<usize> {
         let (x, y) = (p.x, p.y + self.scroll_y);
         let column = (x / self.cell_w(bounds)).floor() as usize;
-        let row = (y / self.cell_h).floor() as usize;
-        column >= self.columns || row * self.columns + column >= self.count
+        let at = (y / self.cell_h).floor() as usize * self.columns + column;
+        (column < self.columns && at < self.count).then_some(at)
     }
 }
 
@@ -141,7 +151,15 @@ impl<Theme, R: renderer::Renderer> Widget<Message, Theme, R> for Band {
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let Some(p) = cursor.position_in(bounds) else { return };
-                if !self.enabled || !self.on_ground(bounds, p) {
+                if !self.enabled {
+                    return;
+                }
+                // A row keeps its press, which may still turn into a drag of it.
+                if let Some(view) = self.cell_at(bounds, p) {
+                    *state = State { epoch: state.epoch, row_press: Some((cursor.position().unwrap_or_default(), view)), ..State::default() };
+                    return;
+                }
+                if !self.ground {
                     return;
                 }
                 *state = State {
@@ -155,6 +173,13 @@ impl<Theme, R: renderer::Renderer> Widget<Message, Theme, R> for Band {
                 shell.capture_event();
             }
             Event::Mouse(mouse::Event::CursorMoved { position }) => {
+                if let Some((origin, view)) = state.row_press {
+                    if !state.lifting && origin.distance(*position) >= DRAG_DISTANCE {
+                        state.lifting = true;
+                        shell.publish(Message::Band(self.side, Ev::Lift { view }));
+                    }
+                    return;
+                }
                 let Some((origin, _)) = state.press else { return };
                 state.at = *position;
                 if !state.begun && origin.distance(*position) < DRAG_DISTANCE {
@@ -164,6 +189,14 @@ impl<Theme, R: renderer::Renderer> Widget<Message, Theme, R> for Band {
                 shell.request_redraw();
             }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                // The release that ends a drag is the drop, and no row under it takes it as a tap.
+                if state.row_press.take().is_some() {
+                    if std::mem::take(&mut state.lifting) {
+                        shell.publish(Message::Band(self.side, Ev::Drop));
+                        shell.capture_event();
+                    }
+                    return;
+                }
                 if state.press.is_none() {
                     return;
                 }
@@ -212,8 +245,11 @@ impl<Theme, R: renderer::Renderer> Widget<Message, Theme, R> for Band {
 
 impl Flea {
     pub(crate) fn band_message(&mut self, side: u8, ev: Ev) -> Task<Message> {
-        if let Ev::Scroll(dy) = ev {
-            return operation::scroll_by(list_id(side), scrollable::AbsoluteOffset { x: 0.0, y: dy });
+        match ev {
+            Ev::Scroll(dy) => return operation::scroll_by(list_id(side), scrollable::AbsoluteOffset { x: 0.0, y: dy }),
+            Ev::Lift { view } => return self.drag_lift(side, view),
+            Ev::Drop => return self.drag_drop(),
+            _ => {}
         }
         // SelectionBand.onPressed takes the keyboard into the listing of the pane it was pressed in.
         let focused = if matches!(ev, Ev::Press) { self.focus_side(side) } else { Task::none() };
@@ -230,7 +266,7 @@ impl Flea {
                 }
                 Ev::End => f.pane.band_finish(false),
                 Ev::Cancel => f.pane.band_finish(true),
-                Ev::Scroll(_) => vec![],
+                Ev::Scroll(_) | Ev::Lift { .. } | Ev::Drop => vec![],
             };
             f.run(effects)
         });

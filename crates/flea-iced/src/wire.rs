@@ -22,6 +22,9 @@ pub struct Row {
     pub k: usize,
     #[serde(default)]
     pub l: Option<String>,
+    // A folder row's own filesystem, which decides a drop's move against copy (docs/protocol.md).
+    #[serde(default)]
+    pub v: u64,
 }
 
 // docs/protocol.md "meta": w and h from the file's header, ms and rate from the probe, entries and
@@ -48,7 +51,8 @@ pub struct Meta {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Reply {
-    Listed { n: usize },
+    // v is the listed directory's own filesystem, 0 when its stat failed.
+    Listed { n: usize, v: u64 },
     Rows { start: usize, rows: Vec<Row>, kinds: Vec<String> },
     // `sizes` absent reads as true, per docs/protocol.md "changed".
     Changed { path: String, sizes: bool },
@@ -112,7 +116,7 @@ pub fn parse(line: &str) -> Option<Reply> {
     let uint = |k: &str| v.get(k).and_then(Value::as_u64);
     let flag = |k: &str| v.get(k).and_then(Value::as_bool).unwrap_or(false);
     Some(match t {
-        "listed" => Reply::Listed { n: v.get("n")?.as_u64()? as usize },
+        "listed" => Reply::Listed { n: v.get("n")?.as_u64()? as usize, v: v.get("v").and_then(Value::as_u64).unwrap_or(0) },
         "rows" => Reply::Rows {
             start: v.get("start")?.as_u64()? as usize,
             rows: serde_json::from_value(v.get("rows")?.clone()).ok()?,
@@ -261,6 +265,8 @@ pub enum Request {
     // rows, not paths: a selection can be wider than the window the client holds.
     Paths { rows: Vec<usize> },
     Transfer { moving: bool, paths: Vec<String>, dest: String },
+    // Drag.drop: a selection too wide to carry paths, dropped on a folder of its own listing.
+    TransferRows { moving: bool, rows: Vec<usize>, dest: String },
     TransferCancel { id: u64 },
     Trash { rows: Vec<usize> },
     Rename { path: String, to: String },
@@ -311,6 +317,9 @@ impl Request {
             // Anything but exactly "move" copies, so a malformed request can never remove a source.
             Request::Transfer { moving, paths, dest } => json!({
                 "c": "transfer", "op": if *moving { "move" } else { "copy" }, "paths": paths, "dest": dest,
+            }),
+            Request::TransferRows { moving, rows, dest } => json!({
+                "c": "transfer", "op": if *moving { "move" } else { "copy" }, "rows": rows, "dest": dest,
             }),
             Request::TransferCancel { id } => json!({"c": "transfercancel", "id": id}),
             Request::Trash { rows } => json!({"c": "trash", "rows": rows}),

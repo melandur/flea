@@ -29,6 +29,14 @@ impl Flea {
             return Task::none();
         }
         let keyboard::Event::KeyPressed { key, modifiers, repeat, text, .. } = event else { return Task::none() };
+        // A drag runs in the platform's own loop in QML, which hands the window no keys: Escape ends it
+        // with nothing dropped, and every other key waits for the release.
+        if self.drag.is_some() {
+            if key == Key::Named(Named::Escape) {
+                self.drag = None;
+            }
+            return Task::none();
+        }
         // Focus.handleKey: while a band is held every key is its, and Escape puts back what it began
         // from, held Ctrl or not.
         if self.pane.band_active() {
@@ -234,6 +242,14 @@ impl Flea {
         self.rail.focused = false;
         self.rail.menu = None;
         let (ctrl, shift) = (self.modifiers.control(), self.modifiers.shift());
+        // A plain press on a row inside a selection may yet lift it whole: the narrowing waits for
+        // the release on the same row (dragshell.rs row_released).
+        let p = &self.pane;
+        if taps == 1 && !ctrl && !shift && !self.columns_mode() && !p.search_listed() && p.selection.len() > 1 && p.selection.contains(&index) {
+            self.pending_collapse = Some((self.side, index));
+            return Task::none();
+        }
+        self.pending_collapse = None;
         let effects = if self.columns_mode() { self.pane.tap_middle(index, taps, ctrl, shift) } else { self.pane.tap(index, taps, ctrl, shift) };
         self.run(effects)
     }

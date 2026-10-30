@@ -13,6 +13,10 @@ pub enum Message {
     RowPressed(u8, usize),
     // The selection band's press, sweep, release and edge scroll, for the pane on that side.
     Band(u8, crate::band::Ev),
+    // The release of a row press, the drag's targets reporting the pointer, and a tab's hover switch.
+    RowReleased(u8, usize),
+    DragHover(crate::dragdrop::Target, bool),
+    DragTab(u64),
     RenameInput(String),
     RenameSubmit,
     Opened(u8, Option<i32>, String),

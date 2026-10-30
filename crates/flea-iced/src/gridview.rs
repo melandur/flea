@@ -38,7 +38,7 @@ impl Flea {
             .on_scroll(move |vp| Message::Scrolled(side, vp))
             .height(Length::Fill)
             .width(Length::Fill);
-        iced::widget::stack![grid, self.band_over(v, g.columns, Some(g.cell_w), g.cell_h)].into()
+        iced::widget::stack![grid, self.band_over(v, g.columns, Some(g.cell_w), g.cell_h, true)].into()
     }
 
     fn tile<'a>(&'a self, v: PaneView<'a>, i: usize, g: Geometry) -> Element<'a, Message> {
@@ -62,8 +62,17 @@ impl Flea {
                 text(e.error.clone()).size(11.0).color(p.error),
             ]
             .into(),
-            None => text(r.n.clone()).size(11.0).color(p.foreground).align_x(iced::Center).width(Length::Fill).into(),
+            // GridTile's drop target: the name on one line and the board's words under it.
+            None => match v.drop.filter(|d| d.0 == i) {
+                Some((_, copy)) => column![
+                    text(r.n.clone()).size(11.0).color(p.foreground).align_x(iced::Center).width(Length::Fill).wrapping(text::Wrapping::None),
+                    text(crate::dragdrop::label(copy)).size(11.0).color(p.accent).align_x(iced::Center).width(Length::Fill),
+                ]
+                .into(),
+                None => text(r.n.clone()).size(11.0).color(p.foreground).align_x(iced::Center).width(Length::Fill).into(),
+            },
         };
+        let dropping = v.drop.is_some_and(|d| d.0 == i);
         let body = column![
             container(slot).width(Length::Fill).center_x(Length::Fill),
             container(caption).height(2.0 * CAPTION_LINE).width(Length::Fill).clip(true),
@@ -72,7 +81,9 @@ impl Flea {
         .padding([PAD_X, GAP]);
         let band = container(body).width(g.cell_w).height(g.cell_h).style(move |_| {
             // GridTile: the cursor's accent fill with its hairline edge, a marked tile the plain fill.
-            if cursor && focused {
+            if dropping {
+                crate::dragshell::drop_frame(p.accent)
+            } else if cursor && focused {
                 container::Style::default().background(Color { a: 0.18, ..p.accent }).border(Border { color: p.accent, width: 1.0, radius: 0.0.into() })
             } else if selected || cursor {
                 container::Style::default().background(p.selection)
@@ -80,9 +91,10 @@ impl Flea {
                 container::Style::default()
             }
         });
-        mouse_area(band)
+        let area = mouse_area(band)
             .on_press(Message::RowPressed(v.side, i))
-            .on_right_press(Message::Menu(crate::menushell::Msg::Row(v.side, i)))
-            .into()
+            .on_release(Message::RowReleased(v.side, i))
+            .on_right_press(Message::Menu(crate::menushell::Msg::Row(v.side, i)));
+        self.drag_target(area, crate::dragdrop::Target::Row(v.side, i)).into()
     }
 }

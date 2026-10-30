@@ -14,6 +14,8 @@ pub(crate) struct PaneView<'a> {
     pub(crate) side: u8,
     pub(crate) scroll_y: f32,
     pub(crate) focused: bool,
+    // The row of this pane a drag in flight would drop on, and whether it would copy there.
+    pub(crate) drop: Option<(usize, bool)>,
 }
 
 impl Flea {
@@ -35,12 +37,14 @@ impl Flea {
 
     pub(crate) fn view(&self) -> Element<'_, Message> {
         let p = self.palette;
-        let mine = PaneView { pane: &self.pane, side: self.side, scroll_y: self.scroll_y, focused: true };
+        let drop = self.drop_row();
+        let on = |side: u8| drop.filter(|d| d.0 == side).map(|d| (d.1, d.2));
+        let mine = PaneView { pane: &self.pane, side: self.side, scroll_y: self.scroll_y, focused: true, drop: on(self.side) };
         let column_of_mine = self.pane_column(mine);
         let panes: Element<'_, Message> = match &self.other {
             None => column_of_mine,
             Some(o) => {
-                let theirs = self.pane_column(PaneView { pane: &o.pane, side: o.side, scroll_y: o.scroll_y, focused: false });
+                let theirs = self.pane_column(PaneView { pane: &o.pane, side: o.side, scroll_y: o.scroll_y, focused: false, drop: on(o.side) });
                 // The primary is always the left one, whichever holds the keyboard.
                 let (left, right) = if self.side == 0 { (column_of_mine, theirs) } else { (theirs, column_of_mine) };
                 let rule = container(space().width(1).height(Length::Fill)).style(move |_| container::Style::default().background(p.surface));
@@ -66,10 +70,12 @@ impl Flea {
             count += &format!(" · {} selected", format::count(self.pane.selection.len()));
         }
         // A transient message wins the slot; the running transfer's sticky line is under it.
-        let (note, ink) = match &self.message {
-            Some((t, _, alert)) => (t.clone(), if *alert { p.error } else { p.foreground }),
-            None if self.pane.search_listed() && self.pane.search.mode == crate::search::Mode::Results => (self.pane.search_status(), p.foreground),
-            None => (self.pane.sticky.clone(), p.foreground),
+        let (note, ink) = match (&self.message, self.drag_line()) {
+            (Some((t, _, alert)), _) => (t.clone(), if *alert { p.error } else { p.foreground }),
+            // FileDrag.say: the drag's own line while it is up, under a transient one.
+            (None, Some(line)) => (line, p.foreground),
+            (None, None) if self.pane.search_listed() && self.pane.search.mode == crate::search::Mode::Results => (self.pane.search_status(), p.foreground),
+            (None, None) => (self.pane.sticky.clone(), p.foreground),
         };
         // The query line takes the path's place while it is being typed in; a filter's stays while it stands.
         let left: Element<'_, Message> = if self.pane.filter_typing || !self.pane.filter_query.is_empty() {
@@ -154,7 +160,7 @@ impl Flea {
                 self.background(v, container(tile).center(Length::Fill).into())
             }
             _ if self.grid_mode() => self.background(v, self.grid_listing(v)),
-            _ if self.columns_mode() => self.background(v, self.columns_view(v)),
+            _ if self.columns_mode() => mouse_area(self.columns_view(v)).on_right_press(Message::Menu(crate::menushell::Msg::Background(v.side))).into(),
             _ => self.background(v, self.listing(v)),
         };
         let body = if v.focused { self.preview_layer(body) } else { body };
@@ -164,7 +170,8 @@ impl Flea {
 
     // A right click a row did not take is the background menu's: the empty space below the rows.
     fn background<'a>(&self, v: PaneView<'a>, body: Element<'a, Message>) -> Element<'a, Message> {
-        mouse_area(body).on_right_press(Message::Menu(crate::menushell::Msg::Background(v.side))).into()
+        let area = mouse_area(body).on_right_press(Message::Menu(crate::menushell::Msg::Background(v.side)));
+        self.drag_target(area, crate::dragdrop::Target::Floor(v.side)).into()
     }
 
     // Rule 2: a spacer above, the rows on screen, a spacer below. Nothing else is ever built.
@@ -187,15 +194,16 @@ impl Flea {
             .on_scroll(move |vp| Message::Scrolled(side, vp))
             .height(Length::Fill)
             .width(Length::Fill);
-        stack![list, self.band_over(v, 1, None, self.file_h())].into()
+        stack![list, self.band_over(v, 1, None, self.file_h(), true)].into()
     }
 
     // List.qml's and GridArea.qml's SelectionBand, enabled as it is: no listing in flight, no rename
     // open, a listing that is ready.
-    pub(crate) fn band_over<'a>(&self, v: PaneView<'a>, columns: usize, cell_w: Option<f32>, cell_h: f32) -> Element<'a, Message> {
+    // `ground` is false for the columns view's middle column, which lifts rows and draws no band.
+    pub(crate) fn band_over<'a>(&self, v: PaneView<'a>, columns: usize, cell_w: Option<f32>, cell_h: f32, ground: bool) -> Element<'a, Message> {
         let pane = v.pane;
         let enabled = pane.listed_once && !pane.list_in_flight() && pane.renaming.is_none() && pane.error.is_none();
-        crate::band::band(v.side, columns, cell_w, cell_h, pane.view_total(), v.scroll_y, pane.band.epoch, enabled, self.palette.accent)
+        crate::band::band(v.side, columns, cell_w, cell_h, pane.view_total(), v.scroll_y, pane.band.epoch, enabled, ground, self.palette.accent)
     }
 
     fn row<'a>(&'a self, v: PaneView<'a>, i: usize) -> Element<'a, Message> {
@@ -249,7 +257,9 @@ impl Flea {
                 };
                 let date = if r.p == 0 { "--".into() } else { format::date(r.m) };
                 // Row.qml's cells, right of the name in the header's order, each drawn only when it fits.
-                let cols = self.list_cols(pane.search_listed());
+                // A drop target draws the board's words in the columns' place (Row.qml).
+                let dropping = v.drop.filter(|d| d.0 == i).map(|d| d.1);
+                let cols = if dropping.is_some() { listcols::Cols::default() } else { self.list_cols(pane.search_listed()) };
                 let mut line = row![self.icon(pane, i, r), text(name).color(ink).width(Length::Fill).wrapping(text::Wrapping::None)];
                 if cols.mode {
                     line = line.push(text(crate::facts::permissions(r.p)).color(p.muted).width(MODE_W).wrapping(text::Wrapping::None));
@@ -267,16 +277,23 @@ impl Flea {
                     let kind = pane.kinds.get(r.k).cloned().unwrap_or_default();
                     line = line.push(text(kind).color(p.muted).width(KIND_W).wrapping(text::Wrapping::None));
                 }
+                if let Some(copy) = dropping {
+                    line = line.push(text(crate::dragdrop::label(copy)).size(11.0).color(p.accent));
+                }
                 line.spacing(listcols::GAP).into()
             }
             // Outside the held window: the row's slot stands until its window arrives.
             None => row![text("").width(Length::Fill)].into(),
         };
         let focused = v.focused;
+        let dropping = v.drop.is_some_and(|d| d.0 == i);
         let band = container(cells).padding([0.0, PAD_X]).height(self.file_h()).width(Length::Fill).align_y(iced::Center).style(move |_| {
             // The focused pane's cursor draws the accent fill; the other pane's cursor, and a marked
-            // row that is not the cursor, the plain one (Row.qml in dual mode).
-            if cursor && focused {
+            // row that is not the cursor, the plain one (Row.qml in dual mode). A drop target takes
+            // the board's hairline of accent over the hover rung's wash.
+            if dropping {
+                crate::dragshell::drop_frame(p.accent)
+            } else if cursor && focused {
                 container::Style::default()
                     .background(Background::Color(Color { a: 0.18, ..p.accent }))
                     .border(Border { color: p.accent, width: 0.0, radius: 0.0.into() })
@@ -286,10 +303,11 @@ impl Flea {
                 container::Style::default()
             }
         });
-        mouse_area(band)
+        let area = mouse_area(band)
             .on_press(Message::RowPressed(v.side, i))
-            .on_right_press(Message::Menu(crate::menushell::Msg::Row(v.side, i)))
-            .into()
+            .on_release(Message::RowReleased(v.side, i))
+            .on_right_press(Message::Menu(crate::menushell::Msg::Row(v.side, i)));
+        self.drag_target(area, crate::dragdrop::Target::Row(v.side, i)).into()
     }
 
     // The icon slot: the thumbnail when the pane holds a decoded one, the row's mark otherwise. One

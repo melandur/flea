@@ -9,7 +9,7 @@ fn file(n: &str, icon: &str, t: bool) -> Row {
 fn pane(rows: Vec<Row>) -> Pane {
     let mut p = Pane::new(false, 10);
     p.open("/d".into(), None);
-    p.receive(Reply::Listed { n: rows.len() });
+    p.receive(Reply::Listed { n: rows.len(), v: 0 });
     p.receive(Reply::Rows { start: 0, rows, kinds: vec!["Plain text document".into()] });
     p
 }
