@@ -152,7 +152,7 @@ pub fn hints(r: &Req) -> String {
     if r.saving() {
         return "Enter save · Esc cancel".into();
     }
-    let pick = if r.directory { "Enter open · Space mark folder" } else { "Space select · Enter open/send" };
+    let pick = if r.directory { "Space mark · Enter choose · Right open" } else { "Space mark · Enter send · Right open" };
     format!("{pick} · Esc cancel")
 }
 

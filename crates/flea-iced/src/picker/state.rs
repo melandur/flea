@@ -303,15 +303,34 @@ impl Chooser {
         vec![e]
     }
 
-    // Enter. A directory is always walked into; a file submits what is checked, and nothing checked
-    // is nothing to submit, which keeps a stray Enter from sending.
+    // Enter. Whatever is marked is sent. With nothing marked, a row the caller can receive is marked
+    // and sent in one press, and any other directory is walked into. A save keeps its own rule.
     pub fn activate(&mut self, index: usize) -> Vec<Effect> {
         let Some(row) = self.row_for(index) else { return vec![] };
-        if picker::is_directory(row) {
-            let next = picker::row_path(&self.path, &row.n);
-            return self.open(&next);
+        let (directory, markable) = (picker::is_directory(row), self.markable(row));
+        if self.req.saving() || !self.marks.is_empty() || (!directory && !markable) {
+            return if self.req.saving() && directory { self.enter(index) } else { self.accept(false) };
         }
-        self.accept(false)
+        if !markable {
+            return self.enter(index);
+        }
+        let idle = self.mark_request == 0;
+        let out = self.toggle_mark(index);
+        if idle && self.mark_request != 0 {
+            self.accept_marks = true;
+        }
+        out
+    }
+
+    // Right: a directory is walked into, and nothing else moves.
+    pub fn enter(&mut self, index: usize) -> Vec<Effect> {
+        match self.row_for(index) {
+            Some(row) if picker::is_directory(row) => {
+                let next = picker::row_path(&self.path, &row.n);
+                self.open(&next)
+            }
+            _ => vec![],
+        }
     }
 
     pub fn accept(&mut self, reviewed: bool) -> Vec<Effect> {

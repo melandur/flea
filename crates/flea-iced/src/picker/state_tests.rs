@@ -156,3 +156,27 @@ fn scrolling_past_the_held_rows_asks_for_a_window() {
     assert_eq!(c.drifted(30), None);
     assert_eq!(c.drifted(65), Some(Effect::Send(Request::Window { start: 48, count: 70 })));
 }
+
+#[test]
+fn enter_with_nothing_marked_marks_the_cursor_row_and_sends_it() {
+    let at = |req: &str| {
+        let mut c = Chooser::new(request(req), 10);
+        c.start("/x");
+        listed(&mut c, vec![dir("sub"), file("a")]);
+        c
+    };
+    // A directory the caller cannot receive is walked into; Right does the same and nothing more.
+    assert!(matches!(&sent(&at("{}").activate(0))[0], Request::PickerList { path, .. } if path == "/x/sub"));
+    assert!(at("{}").enter(1).is_empty());
+    let mut c = at("{}");
+    let e = c.activate(1);
+    assert_eq!(sent(&e), vec![Request::PickerMark { id: 1, path: "/x/a".into(), directory: false, multiple: false }]);
+    let e = c.checked(PickerReply { marks: vec![("/x/a".into(), 3)], ..answer(1) });
+    assert_eq!(e, vec![Effect::Send(Request::PickerClose), Effect::Finish(r#"{"response":0,"uris":["file:///x/a"],"filter":-1}"#.into())]);
+    // In a folder request Enter chooses the folder under the cursor, and Right walks into it.
+    assert!(matches!(&sent(&at(r#"{"directory":true}"#).enter(0))[0], Request::PickerList { path, .. } if path == "/x/sub"));
+    let mut c = at(r#"{"directory":true}"#);
+    let e = c.activate(0);
+    assert_eq!(sent(&e), vec![Request::PickerMark { id: 1, path: "/x/sub".into(), directory: true, multiple: false }]);
+    assert!(c.submitting());
+}

@@ -54,6 +54,9 @@ pub struct Picking {
     pub scroll_y: f32,
     pub viewport_h: f32,
     last_tap: Option<(usize, Instant)>,
+    // The folder and cursor last scrolled into view: only a change to either scrolls, so the wheel
+    // and the rows it asks for never pull the list back to the cursor.
+    revealed: (String, usize),
     quitting: bool,
 }
 
@@ -102,6 +105,7 @@ pub fn boot() -> (Picking, Task<PMsg>) {
         scroll_y: 0.0,
         viewport_h: 10.0 * ROW_H,
         last_tap: None,
+        revealed: (String::new(), 0),
         quitting: false,
     };
     p.rebuild_places();
@@ -207,8 +211,12 @@ impl Picking {
         )
     }
 
-    // Keep the cursor row on screen after a key moved it.
-    fn reveal(&self) -> Task<PMsg> {
+    // Keep the cursor row on screen after a key moved it, or a new folder put it back on row 0.
+    fn reveal(&mut self) -> Task<PMsg> {
+        if self.revealed.0 == self.c.path && self.revealed.1 == self.c.cursor {
+            return Task::none();
+        }
+        self.revealed = (self.c.path.clone(), self.c.cursor);
         let top = self.c.cursor as f32 * ROW_H;
         let y = if top < self.scroll_y {
             top

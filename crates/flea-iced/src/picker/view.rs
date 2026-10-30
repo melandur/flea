@@ -5,7 +5,7 @@ use crate::picker::{self, RECENT_LABEL};
 use crate::picker::app::{Focus, PMsg, Picking, Place, LIST_ID, SAVE_ID};
 use crate::picker::state::Listing;
 use crate::{format, marks, wire, ICON_SLOT, MARK, PAD_X, ROW_H, SIZE_W, TEXT_PX};
-use iced::widget::{button, column, container, mouse_area, row, scrollable, space, svg, text, text_input, Column, Id, Row};
+use iced::widget::{button, column, container, mouse_area, row, scrollable, space, svg, text, text_input, tooltip, Column, Id, Row};
 use iced::{Border, Color, Element, Length};
 
 const RAIL_W: f32 = 172.0;
@@ -25,8 +25,8 @@ impl Picking {
     fn chrome(&self) -> Element<'_, PMsg> {
         let p = self.palette;
         let busy = self.c.submitting() || self.c.backend_unavailable;
-        let back = button(text("Back")).on_press_maybe((!busy && !self.c.history.is_empty()).then_some(PMsg::Back));
-        let up = button(text("Parent")).on_press_maybe((!busy && !self.c.recent() && self.c.path != "/").then_some(PMsg::Up));
+        let back = self.icon_button("arrow-left", "Back".into(), None, false, (!busy && !self.c.history.is_empty()).then_some(PMsg::Back));
+        let up = self.icon_button("arrow-up", "Parent folder".into(), None, false, (!busy && !self.c.recent() && self.c.path != "/").then_some(PMsg::Up));
         let location = if self.c.recent() { RECENT_LABEL.to_string() } else { self.c.path.clone() };
         let mut heading = column![text(self.title()).size(TEXT_PX + 2.0)];
         let sub = picker::subtitle(&self.c.req);
@@ -34,8 +34,8 @@ impl Picking {
             heading = heading.push(text(sub).size(11.0).color(p.muted));
         }
         let mut strip = column![
-            row![heading, space().width(Length::Fill), button(text("Cancel")).on_press(PMsg::Cancel),
-                button(text(picker::accept_label(&self.c.req, self.c.marks.len()))).on_press_maybe(self.c.can_accept().then_some(PMsg::Accept))]
+            row![heading, space().width(Length::Fill), self.icon_button("x", "Cancel".into(), None, false, Some(PMsg::Cancel)),
+                self.icon_button("check", picker::accept_label(&self.c.req, self.c.marks.len()), (self.c.marks.len() > 1).then(|| self.c.marks.len().to_string()), true, self.c.can_accept().then_some(PMsg::Accept))]
             .spacing(8)
             .align_y(iced::Center),
             row![back, up, text(location).color(p.muted).wrapping(text::Wrapping::None)].spacing(8).align_y(iced::Center),
@@ -54,6 +54,35 @@ impl Picking {
             strip = strip.push(line);
         }
         container(strip).padding([8.0, PAD_X]).width(Length::Fill).style(move |_| container::Style::default().background(p.surface)).into()
+    }
+
+    // A glyph button with its action named in a tooltip; the primary one is filled with the accent and
+    // carries the marked count beside its check.
+    fn icon_button(&self, glyph: &'static str, tip: String, count: Option<String>, primary: bool, press: Option<PMsg>) -> Element<'_, PMsg> {
+        let p = self.palette;
+        let enabled = press.is_some();
+        let ink = match (primary, enabled) {
+            (_, false) => Color { a: 0.35, ..p.muted },
+            (true, true) => p.background,
+            (false, true) => p.foreground,
+        };
+        let mut face = row![svg(marks::handle(glyph, ink)).width(MARK).height(MARK)].spacing(4).align_y(iced::Center);
+        if let Some(n) = count {
+            face = face.push(text(n).size(11.0).color(ink));
+        }
+        let b = button(face).padding([4.0, 8.0]).on_press_maybe(press).style(move |_, status| {
+            let fill = match (primary && enabled, status) {
+                (true, button::Status::Hovered) => Some(Color { a: 0.85, ..p.accent }),
+                (true, _) => Some(p.accent),
+                (false, button::Status::Hovered) if enabled => Some(Color { a: 0.18, ..p.accent }),
+                _ => None,
+            };
+            button::Style { background: fill.map(Into::into), border: Border { radius: 4.0.into(), ..Border::default() }, ..button::Style::default() }
+        });
+        let label = container(text(tip).size(11.0)).padding([2.0, 6.0]).style(move |_| {
+            container::Style::default().background(p.surface).color(p.foreground).border(Border { color: p.muted, width: 1.0, radius: 3.0.into() })
+        });
+        tooltip(b, label, tooltip::Position::Bottom).into()
     }
 
     fn rail(&self) -> Element<'_, PMsg> {

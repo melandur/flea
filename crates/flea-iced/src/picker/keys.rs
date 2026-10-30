@@ -43,8 +43,10 @@ impl Picking {
                     vec![]
                 } else if named(Named::Space) && modifiers.is_empty() {
                     self.c.toggle_mark(cursor)
-                } else if named(Named::Enter) || named(Named::ArrowRight) {
+                } else if named(Named::Enter) {
                     self.c.activate(cursor)
+                } else if named(Named::ArrowRight) {
+                    self.c.enter(cursor)
                 } else if named(Named::ArrowLeft) {
                     self.c.go_up()
                 } else {

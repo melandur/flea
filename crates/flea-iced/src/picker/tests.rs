@@ -32,7 +32,7 @@ fn a_request_is_read_with_every_field_defaulted() {
 
     assert_eq!(status_line(0, 0), "0 selected");
     assert_eq!(status_line(3, 2_100_000), "3 selected · 2.1 MB");
-    assert_eq!(hints(&req), "Space select · Enter open/send · Esc cancel");
+    assert_eq!(hints(&req), "Space mark · Enter send · Right open · Esc cancel");
     assert_eq!(hints(&request(r#"{"mode":"save"}"#)), "Enter save · Esc cancel");
 
     let c = chips(&req);
