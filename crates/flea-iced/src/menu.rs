@@ -14,6 +14,8 @@ pub enum Kind {
     TrashSelection,
     // PlaceMenu: a Places or Favorites row's own folder menu; true for a favourite.
     Place(bool),
+    // Menu.headerEntries: the list header's own, the columns to show and the dotfile toggle.
+    Header,
 }
 
 // What the rules read. `targets` is ui/js/Ops.js targetIndices' length: the selection when there is
@@ -181,6 +183,23 @@ pub fn trash_entries(kind: Kind, total: usize, busy: bool, hidden: &[String]) ->
         group = grp;
         out.push(Item::Row(entry(id, id, label, glyph, id != "open" && (total == 0 || busy))));
     }
+    out
+}
+
+// Menu.headerEntries: Hide or Show for each optional column the list can draw, then the hidden-files
+// row. Items has no row until the folder walk arrives to fill its cells.
+pub fn header_entries(columns: &[String], show_hidden: bool) -> Vec<Item> {
+    let entry = |id, label, glyph| Entry { id, action: id, label, glyph, disabled: false, danger: false, hint: "", errored: false, sub: vec![] };
+    let shown = |k: &str| columns.iter().any(|c| c == k);
+    let rows: [(&'static str, &'static str, &'static str, &'static str, &'static str); 4] = [
+        ("col:mode", "Hide Mode", "Show Mode", "lock", "mode"),
+        ("col:size", "Hide Size", "Show Size", "drive", "size"),
+        ("col:date", "Hide Modified", "Show Modified", "download", "date"),
+        ("col:kind", "Hide Kind", "Show Kind", "type", "kind"),
+    ];
+    let mut out: Vec<Item> = rows.iter().map(|&(id, hide, show, glyph, key)| Item::Row(entry(id, if shown(key) { hide } else { show }, glyph))).collect();
+    out.push(Item::Separator);
+    out.push(Item::Row(if show_hidden { entry("toggleHidden", "Hide hidden files", "eye-off") } else { entry("toggleHidden", "Show hidden files", "eye") }));
     out
 }
 

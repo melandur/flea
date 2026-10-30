@@ -60,7 +60,7 @@ impl Flea {
         self.pane.selection.clear();
         self.close_menu();
         self.rail.focused = false;
-        let rows = (self.viewport_h / ROW_H).ceil() as usize;
+        let rows = (self.viewport_h / self.file_h()).ceil() as usize;
         self.trash.window_rows = (rows + 2).clamp(1, crate::trash::MAX_WINDOW);
         self.trash.visible = rows.max(1);
         let outs = self.trash.open(action);
@@ -92,15 +92,15 @@ impl Flea {
             Msg::RowMenu(i) => {
                 let marked = self.trash.row_at(i).is_some_and(|r| self.trash.is_selected(&r.uri));
                 let chose = if marked { Task::none() } else { self.trash_row_pressed(i) };
-                let y = ROW_H * 3.0 + self.tab_strip_h() + (i.saturating_sub(self.trash.top) + 1) as f32 * ROW_H;
+                let y = ROW_H * 3.0 + self.tab_strip_h() + (i.saturating_sub(self.trash.top) + 1) as f32 * self.file_h();
                 let total = self.trash.total;
                 return Task::batch([chose, self.open_trash_menu(Kind::TrashSelection, None, y, total)]);
             }
             Msg::Back => self.trash.close(),
             Msg::Empty => self.trash.prepare(true),
             Msg::Scrolled(vp) => {
-                self.trash.top = (vp.absolute_offset().y / ROW_H).floor().max(0.0) as usize;
-                self.trash.visible = (vp.bounds().height / ROW_H).ceil().max(1.0) as usize;
+                self.trash.top = (vp.absolute_offset().y / self.file_h()).floor().max(0.0) as usize;
+                self.trash.visible = (vp.bounds().height / self.file_h()).ceil().max(1.0) as usize;
                 self.trash.ensure_window()
             }
             Msg::Cancel => self.trash.confirm_cancel(),
@@ -186,7 +186,7 @@ impl Flea {
         let visible = t.visible.max(1);
         let top = if row < t.top { row } else if row >= t.top + visible { row + 1 - visible } else { return Task::none() };
         self.trash.top = top;
-        operation::scroll_to(LIST_ID, scrollable::AbsoluteOffset { x: 0.0, y: top as f32 * ROW_H })
+        operation::scroll_to(LIST_ID, scrollable::AbsoluteOffset { x: 0.0, y: top as f32 * self.file_h() })
     }
 
     // Every key while the view is up: the rail's own when it holds the keyboard, the confirmation's

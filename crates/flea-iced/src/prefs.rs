@@ -49,6 +49,9 @@ pub struct Prefs {
     pub trash_swept_on: i64,
     // newTab: where a new tab opens, the current folder, home or the start folder.
     pub new_tab: String,
+    // density, the file row's padding; columns, what a list row shows, name always among them.
+    pub density: String,
+    pub columns: Vec<String>,
 }
 
 impl Default for Prefs {
@@ -90,6 +93,8 @@ impl Default for Prefs {
             trash_auto_empty: false,
             trash_swept_on: 0,
             new_tab: "current".into(),
+            density: "normal".into(),
+            columns: ["name", "size", "date"].map(String::from).to_vec(),
         }
     }
 }
@@ -144,6 +149,11 @@ impl Prefs {
             trash_auto_empty: v.pointer("/trashAutoEmpty").and_then(Value::as_bool) == Some(true),
             trash_swept_on: v.pointer("/trashSweptOn").and_then(Value::as_i64).unwrap_or(0),
             new_tab: v.pointer("/newTab").and_then(Value::as_str).unwrap_or("current").to_string(),
+            density: v.pointer("/density").and_then(Value::as_str).unwrap_or("normal").to_string(),
+            columns: match v.pointer("/columns").and_then(Value::as_array) {
+                Some(a) => a.iter().filter_map(|x| x.as_str().map(String::from)).collect(),
+                None => d.columns,
+            },
         }
     }
 
@@ -178,6 +188,12 @@ impl Prefs {
 
 pub fn save_rail(bin: &str, shown: bool) -> bool {
     let patch = serde_json::json!({ "places": { "rail": if shown { "shown" } else { "hidden" } } }).to_string();
+    Command::new(bin).arg("--ui-state").arg(patch).output().map(|o| o.status.success()).unwrap_or(false)
+}
+
+// ViewState.toggleColumn: the whole shown set, which src/uistate.rs checks as one value.
+pub fn save_columns(bin: &str, columns: &[String]) -> bool {
+    let patch = serde_json::json!({ "columns": columns }).to_string();
     Command::new(bin).arg("--ui-state").arg(patch).output().map(|o| o.status.success()).unwrap_or(false)
 }
 

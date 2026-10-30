@@ -1,7 +1,8 @@
 // What the window draws: the chrome, the rail, one or two panes of header and listing, and the
 // status bar. The shell's state and its update live elsewhere; nothing here changes either.
 use crate::pane::Pane;
-use crate::{contrast, format, list_id, marks, wire, Flea, Message, DATE_W, ICON_SLOT, MARK, PAD_X, RENAME_ID, ROW_H, SIZE_W, TEXT_PX};
+use crate::listcols::{self, Cols};
+use crate::{contrast, format, list_id, marks, wire, Flea, Message, DATE_W, ICON_SLOT, KIND_W, MARK, MODE_W, PAD_X, RENAME_ID, ROW_H, SIZE_W, TEXT_PX};
 use iced::widget::{column, container, image, mouse_area, row, scrollable, space, svg, text, text_input, Id};
 use iced::{Background, Border, Color, Element, Length};
 
@@ -16,6 +17,22 @@ pub(crate) struct PaneView<'a> {
 }
 
 impl Flea {
+    // Theme.fileRowHeight at the stored density: the list's, the columns view's and the Trash's rows.
+    pub(crate) fn file_h(&self) -> f32 {
+        listcols::row_height(&self.prefs.density)
+    }
+
+    // The columns a row of this pane draws; a search keeps Size and drops the others, as Row.qml does.
+    pub(crate) fn list_cols(&self, searching: bool) -> Cols {
+        let hidden = listcols::hidden(&self.prefs.columns);
+        let width = self.pane_width();
+        let mut cols = if self.other.is_some() { listcols::dual_set(width, &hidden) } else { listcols::set(width, &hidden) };
+        if searching {
+            cols = Cols { size: cols.size, ..Cols::default() };
+        }
+        cols
+    }
+
     pub(crate) fn view(&self) -> Element<'_, Message> {
         let p = self.palette;
         let mine = PaneView { pane: &self.pane, side: self.side, scroll_y: self.scroll_y, focused: true };
@@ -91,16 +108,25 @@ impl Flea {
             let mark = if order.by == key { if order.desc { " ▼" } else { " ▲" } } else { "" };
             mouse_area(text(format!("{label}{mark}"))).on_press(Message::SortColumn(side, key))
         };
-        let header = row![
-            container(head("Name", "name")).width(Length::Fill),
-            container(head("Size", "size")).width(SIZE_W),
-            container(head("Date Modified", "mtime")).width(DATE_W),
-        ]
-        .spacing(8)
-        .padding([0.0, PAD_X])
-        .height(ROW_H)
-        .align_y(iced::Center);
-        let header = container(header).style(move |_| container::Style::default().color(p.muted)).width(Length::Fill);
+        // The header heads exactly the columns its rows draw, from the same width; Mode sorts nothing.
+        let cols = self.list_cols(v.pane.search_listed());
+        let mut header = row![container(head("Name", "name")).width(Length::Fill)];
+        if cols.mode {
+            header = header.push(container(text("Mode")).width(MODE_W));
+        }
+        if cols.size {
+            header = header.push(container(head("Size", "size")).width(SIZE_W));
+        }
+        if cols.date {
+            header = header.push(container(head("Modified", "mtime")).width(DATE_W));
+        }
+        if cols.kind {
+            header = header.push(container(head("Kind", "kind")).width(KIND_W));
+        }
+        let header = header.spacing(listcols::GAP).padding([0.0, PAD_X]).height(ROW_H).align_y(iced::Center);
+        // A right click on the band is the header menu: the columns to show and the dotfile toggle.
+        let header = mouse_area(container(header).style(move |_| container::Style::default().color(p.muted)).width(Length::Fill))
+            .on_right_press(Message::Menu(crate::menushell::Msg::Header(side)));
         let body: Element<'a, Message> = match (&self.share_browser, v.focused) {
             (Some(b), true) => self.share_browser_view(b),
             _ if v.pane.error.is_some() => container(text(v.pane.error.clone().unwrap_or_default()).color(p.muted)).center(Length::Fill).into(),
@@ -133,16 +159,16 @@ impl Flea {
     // Under a filter these are view positions, each drawing the listing row the filter kept there.
     fn listing<'a>(&'a self, v: PaneView<'a>) -> Element<'a, Message> {
         let total = v.pane.view_total();
-        let first = ((v.scroll_y / ROW_H).floor().max(0.0) as usize).min(total);
-        let shown = ((self.viewport_h / ROW_H).ceil() as usize + 1).min(total - first);
-        let mut rows = column![space().height(first as f32 * ROW_H)];
+        let first = ((v.scroll_y / self.file_h()).floor().max(0.0) as usize).min(total);
+        let shown = ((self.viewport_h / self.file_h()).ceil() as usize + 1).min(total - first);
+        let mut rows = column![space().height(first as f32 * self.file_h())];
         for at in first..first + shown {
             rows = rows.push(match v.pane.at_view(at) {
                 Some(i) => self.row(v, i),
-                None => space().height(ROW_H).into(),
+                None => space().height(self.file_h()).into(),
             });
         }
-        rows = rows.push(space().height((total - first - shown) as f32 * ROW_H));
+        rows = rows.push(space().height((total - first - shown) as f32 * self.file_h()));
         let side = v.side;
         scrollable(rows.width(Length::Fill))
             .id(list_id(side))
@@ -194,20 +220,29 @@ impl Flea {
                 // p 0 is a failed stat, and it condemns s and m with it; see docs/protocol.md "rows".
                 let size = if r.d { String::new() } else if link { "link".into() } else if r.p == 0 { "--".into() } else { format::size(r.s) };
                 let date = if r.p == 0 { "--".into() } else { format::date(r.m) };
-                row![
-                    self.icon(pane, i, r),
-                    text(name).color(ink).width(Length::Fill).wrapping(text::Wrapping::None),
-                    text(size).color(p.muted).width(SIZE_W),
-                    text(date).color(p.muted).width(DATE_W),
-                ]
-                .spacing(8)
-                .into()
+                // Row.qml's cells, right of the name in the header's order, each drawn only when it fits.
+                let cols = self.list_cols(pane.search_listed());
+                let mut line = row![self.icon(pane, i, r), text(name).color(ink).width(Length::Fill).wrapping(text::Wrapping::None)];
+                if cols.mode {
+                    line = line.push(text(crate::facts::permissions(r.p)).color(p.muted).width(MODE_W).wrapping(text::Wrapping::None));
+                }
+                if cols.size {
+                    line = line.push(text(size).color(p.muted).width(SIZE_W));
+                }
+                if cols.date {
+                    line = line.push(text(date).color(p.muted).width(DATE_W));
+                }
+                if cols.kind {
+                    let kind = pane.kinds.get(r.k).cloned().unwrap_or_default();
+                    line = line.push(text(kind).color(p.muted).width(KIND_W).wrapping(text::Wrapping::None));
+                }
+                line.spacing(listcols::GAP).into()
             }
             // Outside the held window: the row's slot stands until its window arrives.
             None => row![text("").width(Length::Fill)].into(),
         };
         let focused = v.focused;
-        let band = container(cells).padding([0.0, PAD_X]).height(ROW_H).width(Length::Fill).align_y(iced::Center).style(move |_| {
+        let band = container(cells).padding([0.0, PAD_X]).height(self.file_h()).width(Length::Fill).align_y(iced::Center).style(move |_| {
             // The focused pane's cursor draws the accent fill; the other pane's cursor, and a marked
             // row that is not the cursor, the plain one (Row.qml in dual mode).
             if cursor && focused {

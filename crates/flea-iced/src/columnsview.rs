@@ -6,7 +6,7 @@
 use crate::columns::{child_path, parent_path, tapped_neighbour};
 use crate::view::PaneView;
 use crate::wire::Row;
-use crate::{format, list_id, marks, Flea, Message, MARK, PAD_X, RENAME_ID, ROW_H, TEXT_PX};
+use crate::{format, list_id, marks, Flea, Message, MARK, PAD_X, RENAME_ID, TEXT_PX};
 use iced::widget::{column, container, mouse_area, row, scrollable, space, svg, text, text_input, Column};
 use iced::{Color, Element, Length, Task};
 
@@ -131,7 +131,7 @@ impl Flea {
         if r.d {
             line = line.push(svg(marks::handle("chevron-right", mark_ink)).width(11.0).height(11.0));
         }
-        container(line).padding([0.0, PAD_X]).height(ROW_H).width(Length::Fill).align_y(iced::Center).clip(true).style(move |_| {
+        container(line).padding([0.0, PAD_X]).height(self.file_h()).width(Length::Fill).align_y(iced::Center).clip(true).style(move |_| {
             if cursor {
                 container::Style::default().background(Color { a: 0.18, ..p.accent })
             } else if selected {
@@ -150,20 +150,20 @@ impl Flea {
         let p = self.palette;
         let pane = v.pane;
         let total = pane.view_total();
-        let first = ((v.scroll_y / ROW_H).floor().max(0.0) as usize).min(total);
-        let shown = ((self.viewport_h / ROW_H).ceil() as usize + 1).min(total - first);
-        let mut col = column![space().height(first as f32 * ROW_H)];
+        let first = ((v.scroll_y / self.file_h()).floor().max(0.0) as usize).min(total);
+        let shown = ((self.viewport_h / self.file_h()).ceil() as usize + 1).min(total - first);
+        let mut col = column![space().height(first as f32 * self.file_h())];
         for at in first..first + shown {
             let Some(i) = pane.at_view(at) else { continue };
             let Some(r) = pane.row_at(i) else {
-                col = col.push(space().height(ROW_H));
+                col = col.push(space().height(self.file_h()));
                 continue;
             };
             let cursor = i == pane.cursor && v.focused;
             let line: Element<'a, Message> = match pane.renaming.as_ref().filter(|e| e.index == i) {
                 Some(e) => container(text_input("Name", &e.draft).id(iced::widget::Id::new(RENAME_ID)).on_input_maybe(e.pending.is_none().then_some(Message::RenameInput)).on_submit(Message::RenameSubmit).size(TEXT_PX))
                     .padding([0.0, PAD_X])
-                    .height(ROW_H)
+                    .height(self.file_h())
                     .align_y(iced::Center)
                     .into(),
                 None => {
@@ -175,7 +175,7 @@ impl Flea {
             };
             col = col.push(mouse_area(line).on_press(Message::RowPressed(v.side, i)).on_right_press(Message::Menu(crate::menushell::Msg::Row(v.side, i))));
         }
-        col = col.push(space().height((total - first - shown) as f32 * ROW_H));
+        col = col.push(space().height((total - first - shown) as f32 * self.file_h()));
         let side = v.side;
         scrollable(col.width(Length::Fill)).id(list_id(side)).on_scroll(move |vp| Message::Scrolled(side, vp)).height(Length::Fill).into()
     }

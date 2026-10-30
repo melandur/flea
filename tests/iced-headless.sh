@@ -362,6 +362,15 @@ check "closing the other tab lists nothing" 0 "$(since "$n" | grep -c '"c":"list
 k m; k -k Down -k Down -k Down -k Down -k Return; sleep 1.5
 check "Remove from Favorites drops the row's own record" 0 "$(jq '.places.favourites | length' "$D/state/flea/ui.json")"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+
+# Density and the list's columns: compact rows, and the header's right click showing Mode, saved
+# as the whole shown set.
+jq '.density = "compact"' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+launch "$T"
+WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 400 55 3; sleep 0.5; k -k Return; sleep 1.5; shot columns-mode
+check "the header menu's Show Mode adds it to the stored columns" '["name","size","date","mode"]' "$(jq -c '.columns' "$D/state/flea/ui.json")"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+jq '.density = "normal" | .columns = ["name","size","date"]' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
 APP=""
 
 # The chooser, the window tools/flea-portal opens through flea --pick.

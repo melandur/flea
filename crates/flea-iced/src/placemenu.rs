@@ -33,3 +33,12 @@ impl Flea {
         Task::perform(blocking(move || crate::dialog::add_favourite(&bin, &op)), |r| Message::Menu(Msg::Favourite(r)))
     }
 }
+
+impl Flea {
+    // ViewState.toggleColumn: the stored set changes on screen at once and is saved whole.
+    pub(crate) fn toggle_column(&mut self, key: &str) -> Task<Message> {
+        self.prefs.columns = crate::listcols::toggled(&self.prefs.columns, key);
+        let (bin, columns) = (crate::backend::binary(), self.prefs.columns.clone());
+        Task::perform(blocking(move || crate::prefs::save_columns(&bin, &columns)), Message::Saved)
+    }
+}

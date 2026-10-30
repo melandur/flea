@@ -17,6 +17,11 @@ pub(crate) const THUMB_PX: u32 = 46;
 pub(crate) const DECODED_CAP: usize = 480;
 pub(crate) const SIZE_W: f32 = 90.0;
 pub(crate) const DATE_W: f32 = 140.0;
+// Theme.column's other widths at this size: Mode's nine characters, Kind's 120 px base at bodySmall
+// 12 scaled to 13, and the name's floor of twenty characters, in the face the rows draw with.
+pub(crate) const MODE_W: f32 = 80.0;
+pub(crate) const KIND_W: f32 = 130.0;
+pub(crate) const NAME_MIN: f32 = 160.0;
 // A pane's listing scrollable, one id per side, so a scroll lands on the pane it was meant for.
 pub(crate) fn list_id(side: u8) -> iced::widget::Id {
     iced::widget::Id::from(format!("listing-{side}"))

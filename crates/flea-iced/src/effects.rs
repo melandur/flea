@@ -1,7 +1,7 @@
 // What the pane asks for, carried out: requests to the backend, scrolling, the opener, timers, the
 // status line, saving a setting and decoding a thumbnail.
 use crate::pane::Effect;
-use crate::{backend, blocking, decode, list_id, pane, prefs, sleep, Flea, Message, RENAME_ID, ROW_H};
+use crate::{backend, blocking, decode, list_id, pane, prefs, sleep, Flea, Message, RENAME_ID};
 use iced::widget::{operation, scrollable};
 use iced::Task;
 use std::time::Duration;
@@ -18,7 +18,7 @@ impl Flea {
                     }
                 }
                 Effect::ScrollTo(index) => {
-                    let y = if self.grid_mode() { self.grid_geometry().scroll_y(index) } else { index as f32 * ROW_H };
+                    let y = if self.grid_mode() { self.grid_geometry().scroll_y(index) } else { index as f32 * self.file_h() };
                     tasks.push(operation::scroll_to(list_id(self.side), scrollable::AbsoluteOffset { x: 0.0, y }));
                 }
                 // Nav.openCursor: an archive nobody claimed opens Flea's own view and launches nothing.
@@ -78,11 +78,11 @@ impl Flea {
             let effects = self.pane.viewport(first, visible, last);
             return self.run(effects);
         }
-        let first = (self.scroll_y / ROW_H).floor().max(0.0) as usize;
+        let first = (self.scroll_y / self.file_h()).floor().max(0.0) as usize;
         // Fully visible rows, which is what the cursor clamp wants; the view draws one more.
-        let visible = (self.viewport_h / ROW_H).floor().max(1.0) as usize;
+        let visible = (self.viewport_h / self.file_h()).floor().max(1.0) as usize;
         // Thumbs.viewport: measured in pixels, so a row straddling the bottom edge is asked for.
-        let last = ((self.scroll_y + self.viewport_h) / ROW_H).ceil().max(1.0) as usize - 1;
+        let last = ((self.scroll_y + self.viewport_h) / self.file_h()).ceil().max(1.0) as usize - 1;
         let effects = self.pane.viewport(first, visible, last);
         self.run(effects)
     }

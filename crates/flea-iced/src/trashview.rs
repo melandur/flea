@@ -95,7 +95,7 @@ impl Flea {
         let t = &self.trash;
         let first = t.top.min(t.total);
         let shown = (t.visible + 1).min(t.total - first);
-        let mut col = column![space().height(first as f32 * ROW_H)];
+        let mut col = column![space().height(first as f32 * self.file_h())];
         for i in first..first + shown {
             let line: Element<'_, Message> = match t.row_at(i) {
                 Some(r) => {
@@ -110,18 +110,18 @@ impl Flea {
                     .spacing(8)
                     .align_y(iced::Center);
                     // HANDOFF rule 7: a marked row takes the selection rung and the accent's edge.
-                    let band = container(cells).padding([0.0, PAD_X]).height(ROW_H).width(Length::Fill).align_y(iced::Center).clip(true).style(move |_| {
+                    let band = container(cells).padding([0.0, PAD_X]).height(self.file_h()).width(Length::Fill).align_y(iced::Center).clip(true).style(move |_| {
                         let s = container::Style::default();
                         if marked { s.background(p.selection) } else { s }
                     });
-                    let edge = container(space().width(2).height(ROW_H)).style(move |_| container::Style::default().background(if marked { p.accent } else { Color::TRANSPARENT }));
+                    let edge = container(space().width(2).height(self.file_h())).style(move |_| container::Style::default().background(if marked { p.accent } else { Color::TRANSPARENT }));
                     mouse_area(row![edge, band]).on_press(Message::Trash(Msg::Row(i))).on_right_press(Message::Trash(Msg::RowMenu(i))).into()
                 }
-                None => space().height(ROW_H).into(),
+                None => space().height(self.file_h()).into(),
             };
             col = col.push(line);
         }
-        col = col.push(space().height((t.total - first - shown) as f32 * ROW_H));
+        col = col.push(space().height((t.total - first - shown) as f32 * self.file_h()));
         scrollable(col.width(Length::Fill)).id(Id::new(LIST_ID)).on_scroll(|vp| Message::Trash(Msg::Scrolled(vp))).height(Length::Fill).into()
     }
 

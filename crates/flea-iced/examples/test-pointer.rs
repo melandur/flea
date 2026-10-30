@@ -1,7 +1,8 @@
 // A left click at one point of the compositor's output, through zwlr_virtual_pointer_v1, for
 // tests/iced-headless.sh: its private sway has no pointer device, so no window there ever gets a
 // pointer, and ydotool would click on the operator's own desktop through uinput instead.
-// Usage: test-pointer <output width> <output height> <x> <y>, against $WAYLAND_DISPLAY.
+// Usage: test-pointer <output width> <output height> <x> <y> [3 for the right button], against
+// $WAYLAND_DISPLAY.
 use wayland_client::protocol::{wl_pointer::ButtonState, wl_registry, wl_seat};
 use wayland_client::{Connection, Dispatch, QueueHandle};
 use wayland_protocols_wlr::virtual_pointer::v1::client::{zwlr_virtual_pointer_manager_v1 as manager, zwlr_virtual_pointer_v1 as pointer};
@@ -28,12 +29,14 @@ wayland_client::delegate_noop!(State: ignore wl_seat::WlSeat);
 wayland_client::delegate_noop!(State: manager::ZwlrVirtualPointerManagerV1);
 wayland_client::delegate_noop!(State: pointer::ZwlrVirtualPointerV1);
 
-// linux/input-event-codes.h BTN_LEFT.
+// linux/input-event-codes.h BTN_LEFT and BTN_RIGHT.
 const BTN_LEFT: u32 = 0x110;
+const BTN_RIGHT: u32 = 0x111;
 
 fn main() {
     let n: Vec<u32> = std::env::args().skip(1).map(|a| a.parse().expect("four whole numbers")).collect();
-    let [w, h, x, y] = n[..] else { panic!("usage: test-pointer <width> <height> <x> <y>") };
+    let [w, h, x, y] = n[..4.min(n.len())] else { panic!("usage: test-pointer <width> <height> <x> <y> [3]") };
+    let button = if n.get(4) == Some(&3) { BTN_RIGHT } else { BTN_LEFT };
     let conn = Connection::connect_to_env().expect("no compositor at WAYLAND_DISPLAY");
     let mut queue = conn.new_event_queue();
     let qh = queue.handle();
@@ -50,10 +53,10 @@ fn main() {
     device.motion_absolute(0, x, y, w, h);
     device.frame();
     pause(&mut queue, &mut state, 300);
-    device.button(10, BTN_LEFT, ButtonState::Pressed);
+    device.button(10, button, ButtonState::Pressed);
     device.frame();
     pause(&mut queue, &mut state, 60);
-    device.button(70, BTN_LEFT, ButtonState::Released);
+    device.button(70, button, ButtonState::Released);
     device.frame();
     pause(&mut queue, &mut state, 300);
     device.destroy();

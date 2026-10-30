@@ -19,6 +19,7 @@ pub enum Msg {
     // A right click on a row of the pane on that side, or on the empty space below its rows.
     Row(u8, usize),
     Background(u8),
+    Header(u8),
     Chose(usize),
     SubChose(usize),
     Close,
@@ -63,6 +64,16 @@ impl Flea {
                 self.close_menu();
                 let focused = self.focus_side(side);
                 Task::batch([focused, self.open_menu(Kind::Background, None)])
+            }
+            // Under the header band's left end: iced reports no pointer position with the press.
+            Msg::Header(side) => {
+                self.close_menu();
+                let focused = self.focus_side(side);
+                let items = menu::header_entries(&self.prefs.columns, self.pane.hidden);
+                let (x0, _) = self.pane_box();
+                let y = 2.0 * ROW_H + self.tab_strip_h();
+                self.menu = Some(ListMenu { kind: Kind::Header, items, cursor: 0, flyout: false, sub_cursor: 0, x: x0 + crate::PAD_X, y, path: String::new(), names: vec![], place: None });
+                focused
             }
             Msg::Chose(i) => self.menu_choose(i),
             Msg::SubChose(i) => self.menu_choose_sub(i),
@@ -133,7 +144,7 @@ impl Flea {
             };
             (below, view.map_or(0.0, |v| (v % g.columns) as f32 * g.cell_w), ROW_H)
         } else {
-            let below = view.map_or(self.pane.view_total(), |v| v + 1) as f32 * ROW_H;
+            let below = view.map_or(self.pane.view_total(), |v| v + 1) as f32 * self.file_h();
             // The columns view's listing is its middle third, with no header band above it.
             if self.columns_mode() { (below, (self.pane_width() / 3.0).floor(), ROW_H) } else { (below, 0.0, 2.0 * ROW_H) }
         };
@@ -272,6 +283,9 @@ impl Flea {
         if let (Kind::Place(_), Some((path, favourite))) = (m.kind, m.place.clone()) {
             return self.place_act(action, path, favourite);
         }
+        if let Some(key) = action.strip_prefix("col:") {
+            return self.toggle_column(key);
+        }
         if matches!(m.kind, Kind::Trash | Kind::TrashSelection) {
             return if action == "open" { self.open_trash("") } else { self.trash_action(action) };
         }
@@ -345,7 +359,7 @@ impl Flea {
         let path = match (kind, self.pane.row_at(self.pane.cursor)) {
             (Kind::File, Some(r)) => join(&self.pane.path, &r.n),
             (Kind::File, None) => return Task::none(),
-            (Kind::Background | Kind::Trash | Kind::TrashSelection | Kind::Place(_), _) => self.pane.path.clone(),
+            (Kind::Background | Kind::Trash | Kind::TrashSelection | Kind::Place(_) | Kind::Header, _) => self.pane.path.clone(),
         };
         self.favourite_add(path)
     }

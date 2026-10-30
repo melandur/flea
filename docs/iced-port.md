@@ -549,5 +549,16 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      Settings > Menus > Extras > Places row menu on. Driven headless: a favourite's menu opens its
      folder in a new tab, a press on the first tab lists it again, closing the other tab lists
      nothing, and Remove drops the favourite, 64 checks.
-   - **8d-iv-b**, the stored display settings: density and the list's columns.
+   - **8d-iv-b-1, density and the list's columns (done; Items is 8d-iv-b-2).** `listcols.rs` is
+     ui/js/Columns.js and Theme.fileRowHeight: Mode, Size, Modified and Kind each drop at the width
+     where keeping it would push the name under its twenty-character floor, Kind first and Mode
+     last, the header and every row resolving one set from one width; the split's panes carry Size
+     and Modified only, a search keeps Size alone, and the stored `columns` is what shows. A density
+     stop scales the row padding, 31, 37 or 45 px, for the list, all three columns of the columns
+     view and the Trash, and every viewport sum, scroll and menu placement built on them. The header
+     reads Name, Mode, Size, Modified and Kind as Header.qml does (Mode sorts nothing), and its right
+     click is Menu.headerEntries, Hide or Show per column then the dotfile toggle, saving the whole
+     shown set. `examples/test-pointer.rs` takes a fifth argument for the right button. Driven
+     headless at compact density: the header's Show Mode stores `["name","size","date","mode"]`.
+   - **8d-iv-b-2**, folder sizes and the Items column, both answered by the backend's `dirsize` walk.
    - **8d-iv-c**, text size, which makes the crate's fixed metrics follow a stored stop.

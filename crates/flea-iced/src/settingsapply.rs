@@ -43,6 +43,8 @@ impl Flea {
         } else {
             Task::none()
         };
+        // A new density moves every row, so the rows on screen are counted again from the scroll.
+        let redrawn = if was.density != next.density { self.report_viewport() } else { Task::none() };
         if was.theme_id != next.theme_id {
             self.palette = crate::theme::Palette::load(&next.theme_id);
         }
@@ -60,6 +62,6 @@ impl Flea {
         self.devices.show_unmounted = next.show_unmounted;
         self.network.remember_passwords = next.remember_passwords;
         self.rebuild_rail();
-        Task::batch([mine, theirs, resized])
+        Task::batch([mine, theirs, resized, redrawn])
     }
 }
