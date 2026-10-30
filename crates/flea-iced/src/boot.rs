@@ -35,6 +35,7 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
         last_tap: None,
         drag: None,
         pending_collapse: None,
+        dnd: None,
         opening: false,
         quitting: false,
         viewport_h: 36.0 * ROW_H,
@@ -131,5 +132,6 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
     // The 30 day sweep runs off the startup path, two seconds in, as shell.qml's trashSweep does.
     let sweep = Task::perform(crate::sleep(std::time::Duration::from_secs(2)), |_| Message::Trash(crate::trashview::Msg::SweepDue));
     let count = flea.refresh_trash_count(false);
-    (flea, Task::batch([task, polling, sweep, count]))
+    // The platform drag needs the window's own Wayland handles, which exist once it is open.
+    (flea, Task::batch([task, polling, sweep, count, crate::dndshell::handles()]))
 }

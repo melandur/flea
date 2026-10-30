@@ -267,6 +267,8 @@ pub enum Request {
     Transfer { moving: bool, paths: Vec<String>, dest: String },
     // Drag.drop: a selection too wide to carry paths, dropped on a folder of its own listing.
     TransferRows { moving: bool, rows: Vec<usize>, dest: String },
+    // DragOut rule 4: a shelf drag is redeemed by its token, never re-read as the URIs it carries.
+    TransferShelf { token: String, dest: String },
     TransferCancel { id: u64 },
     Trash { rows: Vec<usize> },
     Rename { path: String, to: String },
@@ -320,6 +322,9 @@ impl Request {
             }),
             Request::TransferRows { moving, rows, dest } => json!({
                 "c": "transfer", "op": if *moving { "move" } else { "copy" }, "rows": rows, "dest": dest,
+            }),
+            Request::TransferShelf { token, dest } => json!({
+                "c": "transfer", "op": "", "paths": [], "dest": dest, "shelf": token,
             }),
             Request::TransferCancel { id } => json!({"c": "transfercancel", "id": id}),
             Request::Trash { rows } => json!({"c": "trash", "rows": rows}),

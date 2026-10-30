@@ -3,7 +3,7 @@
 use super::*;
 
 fn lift(rows: &[usize], paths: Option<&[&str]>, copy: bool) -> Lift {
-    Lift { side: 0, source: "/d".into(), src_dev: 42, rows: rows.to_vec(), paths: paths.map(|p| p.iter().map(|s| s.to_string()).collect()), copy }
+    Lift { side: 0, source: "/d".into(), src_dev: 42, rows: rows.to_vec(), paths: paths.map(|p| p.iter().map(|s| s.to_string()).collect()), copy, own: true, shelf: None }
 }
 
 #[test]
@@ -72,4 +72,39 @@ fn a_lift_resolves_paths_for_held_rows_and_none_for_a_selection_reaching_past_th
     p.open("/e".into(), None);
     assert!(p.lift(0, 3, false).is_none(), "nor does anything while a listing is out");
     assert_eq!((p.drop_path(), p.drop_dev()), ("/e".to_string(), 0));
+}
+
+#[test]
+fn a_path_becomes_a_file_uri_and_comes_back() {
+    assert_eq!(uri_for("/d/a.txt"), "file:///d/a.txt");
+    assert_eq!(uri_for("/d/a b.txt"), "file:///d/a%20b.txt", "a space is percent encoded");
+    assert_eq!(uri_for("/d/a#b.txt"), "file:///d/a%23b.txt", "and so is a hash, which encodeURI would leave alone");
+    assert_eq!(uri_for("/d/x/y.txt"), "file:///d/x/y.txt", "the separators survive the encoding");
+    let odd = "/d/ä %25#?.txt";
+    assert_eq!(paths_from_uris(&[uri_for(odd)]), [odd], "a URI this side writes round trips back to its path");
+    let uris: Vec<String> = ["file:///d/a.txt", "https://example.com/x", "file:///d/b%20c.txt"].map(String::from).to_vec();
+    assert_eq!(paths_from_uris(&uris), ["/d/a.txt", "/d/b c.txt"], "a non-file URI is left behind rather than guessed at");
+}
+
+#[test]
+fn the_payload_offers_a_marker_and_for_everyone_else_paths_only_when_every_row_resolved() {
+    let held = lift(&[1, 3], Some(&["/d/a.txt", "/d/b.txt"]), false);
+    let p = payload(&held);
+    let get = |m: &str| p.iter().find(|(k, _)| k == m).map(|(_, v)| String::from_utf8(v.clone()).unwrap());
+    assert_eq!(get(crate::dnd::ROWS_MIME), Some(format!("{}\n1,3\nmove\n/d\n42", instance())));
+    assert_eq!(get(crate::dnd::URI_MIME).as_deref(), Some("file:///d/a.txt\r\nfile:///d/b.txt\r\n"));
+    assert_eq!(get("text/plain").as_deref(), Some("/d/a.txt\n/d/b.txt"));
+    let wide = payload(&lift(&[1, 900], None, true));
+    assert_eq!(wide.len(), 1, "a wide selection offers the marker alone, so it cannot leave the window");
+}
+
+#[test]
+fn a_foreign_drag_always_copies_and_a_shelf_drag_keeps_its_token_and_word() {
+    let f = foreign(&["file:///x/a.txt".to_string()], None);
+    assert!(!f.own && f.copy && f.rows.is_empty());
+    assert!(can_drop_into(&f, "/d"), "an external drop lands in a folder that is not its own");
+    assert!(!can_drop_into(&f, "/x"), "but not in the folder the file already lives in");
+    let s = foreign(&[], Some("tok\nmove".into()));
+    assert_eq!((s.shelf.as_deref().map(shelf_token), s.shelf.as_deref().map(shelf_copying)), (Some("tok"), Some(false)));
+    assert!(foreign(&[], Some("\ncopy".into())).shelf.is_none(), "a shelf payload with no token is no shelf drag");
 }

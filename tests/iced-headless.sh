@@ -419,9 +419,10 @@ comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 # Dragging rows (ui/RowDrag.qml, ui/DropInto.qml): a folder named into sorts first, so the rows are
 # into, then band-0 to band-5, each 37 px from 74. A row dragged onto into moves there, the folder
 # being on the same filesystem; a two-row selection dragged by its second row moves both, which is
-# the press leaving the selection whole until it is a drag or a release; a drag held over into and
-# ended with Escape moves nothing; and in the split, a row dragged from the left pane onto the right
-# pane's floor, which lists into, lands there.
+# the press leaving the selection whole until it is a drag or a release; both drags went to the
+# platform, whose drag owns the keyboard as it did in QML (sway cancels on no key at all), so a third
+# held over into only leaves its frame for a screenshot and is put back; and in the split, a row
+# dragged from the left pane onto the right pane's floor, which lists into, lands there.
 mkdir "$T/band/into"
 drag() { WAYLAND_DISPLAY=$SOCK "$POINTER" 1600 1000 "$@"; }
 row_y() { echo $((74 + 37 * $1 + 18)); }
@@ -431,12 +432,30 @@ check "a row dragged onto a folder moves into it" "yes no" "$(exists "$T/band/in
 k -k Down; k -k space; k -k Down; k -k space
 drag 500 "$(row_y 2)" 1 520 "$(row_y 0)"; sleep 1
 check "a selection dragged by one of its rows moves whole" "yes yes" "$(exists "$T/band/into/band-0.txt") $(exists "$T/band/into/band-1.txt")"
-drag 500 "$(row_y 1)" 1 520 "$(row_y 0)" 2500 & held=$!; sleep 1.6; shot drag-held; k -k Escape; wait "$held"; sleep 1
-check "Escape ends a drag with nothing dropped" "yes no" "$(exists "$T/band/band-2.txt") $(exists "$T/band/into/band-2.txt")"
+check "every one of those drags was the platform's" "2 0" "$(grep -c 'drag of .* platform=true' "$D/trace.log") $(grep -c 'platform=false' "$D/trace.log")"
+drag 500 "$(row_y 1)" 1 520 "$(row_y 0)" 2500 & held=$!; sleep 1.6; shot drag-held; wait "$held"; sleep 1
+mv "$T/band/into/band-2.txt" "$T/band/band-2.txt"
 ctrl t; sleep 1.5; k -k Right; sleep 1
 drag 400 "$(row_y 1)" 1 1300 700; sleep 1
 check "a row dragged onto the other pane's floor lands in its folder" "yes no" "$(exists "$T/band/into/band-2.txt") $(exists "$T/band/band-2.txt")"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+# Out of one application and into another: a second window is another process with an instance of
+# its own, so to it the first window's drag is foreign, and sway tiles the two side by side. A row of
+# the left window dropped on the right one's floor is copied into its folder and stays where it was,
+# because a drop from anywhere but the window it left only ever copies (Drag.verbFor).
+launch "$T/band"
+env -u DISPLAY -u HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY="$SOCK" \
+    XDG_STATE_HOME="$D/state" XDG_CACHE_HOME="$D/cache" XDG_DATA_HOME="$D/data" XDG_CONFIG_HOME="$D/config" \
+    FLEA_BIN="$BIN" FLEA_ICED_TRACE=1 "$ICED" "$T/band/into" > "$D/out2.log" 2> "$D/trace2.log" &
+APP2=$!; sleep 3
+drag 500 "$(row_y 1)" 1 1300 700; sleep 1.5
+check "a row dropped on another Flea window is copied there and stays here" "yes yes" "$(exists "$T/band/into/band-4.txt") $(exists "$T/band/band-4.txt")"
+check "and the window it landed in sent a copy" 1 "$(grep -c '"c":"transfer".*"op":"copy"' "$D/trace2.log")"
+# Both close; the second must exit on its own and cleanly: the data device rides the window's own
+# connection, and dropping it after the window's display went is a crash on close.
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+if kill -0 "$APP2" 2> /dev/null; then kill "$APP2"; rc=stuck; else wait "$APP2"; rc=$?; fi
+check "a window that took a drag closes cleanly" 0 "$rc"
 rm -rf "$T/band/into"
 # The grid's edge scroll. The tiles stretch to fill the width, so the grid's only ground is the
 # empty trailing cell of its last tile row: 206 files in nine columns leave one. Sixty wheel notches

@@ -25,6 +25,8 @@ mod delimited;
 mod dialog;
 mod dialogview;
 mod dirsizes;
+mod dnd;
+mod dndshell;
 mod dragdrop;
 mod dragshell;
 mod facts;
@@ -148,6 +150,8 @@ struct Flea {
     // dragshell.rs: a drag in flight, and a plain press inside a selection waiting for its release.
     drag: Option<dragshell::Drag>,
     pending_collapse: Option<(u8, usize)>,
+    // dnd.rs: the platform drag, on Wayland once the window's handles have been read.
+    dnd: Option<dnd::Dnd>,
     message_gen: u64,
     opening: bool,
     quitting: bool,
@@ -225,6 +229,8 @@ impl Flea {
             Message::RowReleased(side, i) => self.row_released(side, i),
             Message::DragHover(target, inside) => self.drag_hover(target, inside),
             Message::DragTab(stamp) => self.drag_tab_switch(stamp),
+            Message::DndHandles(handles) => self.dnd_start(handles),
+            Message::Dnd(event) => self.dnd_event(event),
             Message::RowPressed(side, i) => {
                 let focused = self.focus_side(side);
                 Task::batch([focused, self.tap(i)])

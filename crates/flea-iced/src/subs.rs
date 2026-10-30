@@ -17,6 +17,7 @@ impl Flea {
             iced::event::listen_with(chrome::mouse_back).map(Message::Chrome),
             window::close_requests().map(|_| Message::CloseRequested),
             window::resize_events().map(|(_, size)| Message::Resized(size)),
+            if self.dnd.is_some() { Subscription::run(crate::dnd::events).map(Message::Dnd) } else { Subscription::none() },
             // TrashMonitor runs while the Trash row is shown or the view is up.
             if self.prefs.show_trash || self.trash.opened {
                 Subscription::run(crate::trashwatch::monitor)

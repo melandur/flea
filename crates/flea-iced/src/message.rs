@@ -17,6 +17,9 @@ pub enum Message {
     RowReleased(u8, usize),
     DragHover(crate::dragdrop::Target, bool),
     DragTab(u64),
+    // The window's raw Wayland handles for dnd.rs, and that thread's events.
+    DndHandles(Option<(usize, usize)>),
+    Dnd(crate::dnd::Event),
     RenameInput(String),
     RenameSubmit,
     Opened(u8, Option<i32>, String),

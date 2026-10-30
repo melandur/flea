@@ -88,7 +88,7 @@ impl Flea {
 
     // TabBar's tabWidth: the strip shared out, never narrower than three targets nor wider than a
     // twelve-character label with its close target and padding.
-    fn tab_width(&self) -> f32 {
+    pub(crate) fn tab_width(&self) -> f32 {
         let n = self.pane.tab_count().max(1) as f32;
         let avail = (self.window_w - HIT).max(0.0);
         let max_w = (CAPTION * 12.0).round() + HIT + 2.0 * PAD_X;

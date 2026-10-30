@@ -147,7 +147,7 @@ impl Flea {
                 if self.prefs.key_hints {
                     tile = tile.push(text("Press Ctrl+N for a new folder.").size(11.0).color(p.muted));
                 }
-                self.background(v, container(tile).center(Length::Fill).into())
+                self.background(v, self.floor_only(v, container(tile).center(Length::Fill).into()))
             }
             // StateMessage's nothingMatched: the query named back, and how many rows it tested.
             _ if v.pane.filtering() && v.pane.view_total() == 0 => {
@@ -157,7 +157,7 @@ impl Flea {
                 ]
                 .spacing(6)
                 .align_x(iced::Center);
-                self.background(v, container(tile).center(Length::Fill).into())
+                self.background(v, self.floor_only(v, container(tile).center(Length::Fill).into()))
             }
             _ if self.grid_mode() => self.background(v, self.grid_listing(v)),
             _ if self.columns_mode() => mouse_area(self.columns_view(v)).on_right_press(Message::Menu(crate::menushell::Msg::Background(v.side))).into(),
@@ -199,6 +199,12 @@ impl Flea {
 
     // List.qml's and GridArea.qml's SelectionBand, enabled as it is: no listing in flight, no rename
     // open, a listing that is ready.
+    // A listing with no rows drawn is still a floor a drop lands on: the layer records where it is and
+    // takes no press.
+    fn floor_only<'a>(&self, v: PaneView<'a>, body: Element<'a, Message>) -> Element<'a, Message> {
+        stack![body, crate::band::band(v.side, 1, None, self.file_h(), 0, 0.0, v.pane.band.epoch, false, false, self.palette.accent)].into()
+    }
+
     // `ground` is false for the columns view's middle column, which lifts rows and draws no band.
     pub(crate) fn band_over<'a>(&self, v: PaneView<'a>, columns: usize, cell_w: Option<f32>, cell_h: f32, ground: bool) -> Element<'a, Message> {
         let pane = v.pane;

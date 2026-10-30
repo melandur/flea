@@ -27,13 +27,17 @@ serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 # Stage 7: the picker's Recent reads the desktop's XBEL history, which QML left to Qt's own reader.
 roxmltree = "0.20"
+# Stage 9d-ii: the platform drag. winit does no drag and drop on Wayland, so dnd.rs binds a data
+# device on the window's own connection; both crates are already in the tree through winit, at
+# these versions, client_system included.
+wayland-client = "0.31"
+wayland-backend = { version = "0.3", features = ["client_system"] }
 
 # The PDF test writes its own two-page fixture through cairo, which only a test needs.
 [dev-dependencies]
 cairo-rs = { version = "0.22", features = ["pdf"] }
 # examples/test-pointer.rs: a wlroots virtual pointer for tests/iced-headless.sh, whose private sway
-# has no pointer device of its own. Both are already in the tree through winit, at these versions.
-wayland-client = "0.31"
+# has no pointer device of its own. Already in the tree through winit, at this version.
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
 
 [profile.release]

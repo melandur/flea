@@ -677,3 +677,34 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      row moves both (reverting the deferred narrowing moves one), a drag held over a folder and ended
      with Escape moves nothing, and in the split a row dragged onto the other pane's floor lands in
      that pane's folder, 79 checks.
+   - **9d-ii, the platform drag: out to other applications and in from them (done).** winit does
+     no drag and drop on Wayland at all, so `dnd.rs` binds its own `wl_data_device` and `wl_pointer`
+     on the window's own connection (`wayland-backend`'s guest mode over the `wl_display` and
+     `wl_surface` iced hands out), dispatched on a second event queue on a thread of its own; the
+     pointer is there only for the press serial `start_drag` must name. Both crates were already in
+     the tree through winit, `client_system` included, so `Cargo.lock` gained no crate. A lift now
+     goes to the platform, as `Drag.active` did, offering Drag.mimeFor's marker, uri-list and plain
+     paths (the last two only when every carried row resolved) and Copy alone, because Chromium read
+     an offered Move as a move; the source writes each type off-thread when asked. Anything entering
+     the window comes in as enter, motion, leave and drop: a foreign drag's uri-list and any shelf
+     token are read through a pipe at the enter, within 2 s, and never this process's own, whose
+     source answers on that same thread. Since the compositor owns the pointer for a drag's length,
+     `dndshell.rs` places it by position: `band.rs` records where each pane's cells were last drawn
+     (a listing with no rows records a floor alone, and a pane the split drops forgets its own), the
+     tab strip is measured from `tab_width`, and the coordinates are divided by the text size's
+     window scale. The same landing then decides, the offer is accepted as the type it would be taken
+     as where a drop would land and refused elsewhere (DropArea's accepted), and the drop sends the
+     one transfer and finishes the offer. A drag from another application or another Flea always
+     copies (Drag.verbFor); a shelf drag is redeemed by its token (`transfer` with `shelf`, rule 4)
+     and says the word the shelf fixed. With no Wayland data device, on X11, a lift stays the
+     in-window drag of 9d-i. **During a platform drag the keyboard is the compositor's**, as it was
+     for QML: sway cancels on no key, so Escape is not driven any more. **The guest backend is never
+     dropped**: winit's display goes away with the window, and dropping this connection after that
+     destroyed its proxies on a freed display, a crash on every close of a window that had taken a
+     drag (taking the fix out turns the clean-close check red with 139); one handle is leaked for
+     the process's life and the thread forgets its queue. **Not driven:** a shelf drop, a tab's hover
+     switch by position, and a drag out to a non-Flea application, whose mechanism the second window
+     below already is. Driven headless: the in-window drags all now go to the platform (the trace
+     says so for each), and with a second iced window tiled beside the first, a row dropped on the
+     second one's floor is copied there and stays where it was, the second window's own `transfer`
+     a copy, and that window then closes cleanly, 82 checks.

@@ -21,6 +21,41 @@ const SCROLL_PX_PER_S: f32 = 3.0 * 24.0 * 4.0;
 // Style.selectionFillAlpha's default.
 const FILL_ALPHA: f32 = 0.35;
 
+// Where each pane's cells were last drawn, by side: during a platform drag the compositor owns the
+// pointer, so a drop is placed by its coordinates against this, the DropArea geometry QML had for free.
+#[derive(Debug, Clone, Copy)]
+struct Region {
+    bounds: Rectangle,
+    scroll_y: f32,
+    cell_w: f32,
+    cell_h: f32,
+    columns: usize,
+    count: usize,
+}
+
+fn regions() -> &'static std::sync::Mutex<std::collections::HashMap<u8, Region>> {
+    static R: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<u8, Region>>> = std::sync::OnceLock::new();
+    R.get_or_init(Default::default)
+}
+
+// The pane under a point in window coordinates, and the view position of the cell under it when
+// there is one; a point on a pane's ground answers the pane alone.
+pub(crate) fn hit(at: Point) -> Option<(u8, Option<usize>)> {
+    let map = regions().lock().ok()?;
+    let (side, r) = map.iter().find(|(_, r)| r.bounds.contains(at))?;
+    let (x, y) = (at.x - r.bounds.x, at.y - r.bounds.y + r.scroll_y);
+    let column = (x / r.cell_w).floor() as usize;
+    let cell = (y / r.cell_h).floor() as usize * r.columns + column;
+    Some((*side, (column < r.columns && cell < r.count).then_some(cell)))
+}
+
+// A pane that is gone, or one drawing no listing, takes no drop by position.
+pub(crate) fn forget(side: u8) {
+    if let Ok(mut map) = regions().lock() {
+        map.remove(&side);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Ev {
     Press,
@@ -150,6 +185,9 @@ impl<Theme, R: renderer::Renderer> Widget<Message, Theme, R> for Band {
         }
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                // A drag the platform took never hands back its release, so any press starts afresh.
+                state.row_press = None;
+                state.lifting = false;
                 let Some(p) = cursor.position_in(bounds) else { return };
                 if !self.enabled {
                     return;
@@ -228,6 +266,10 @@ impl<Theme, R: renderer::Renderer> Widget<Message, Theme, R> for Band {
 
     fn draw(&self, tree: &Tree, renderer: &mut R, _: &Theme, _: &renderer::Style, layout: Layout<'_>, _: mouse::Cursor, _: &Rectangle) {
         let state = tree.state.downcast_ref::<State>();
+        let region = Region { bounds: layout.bounds(), scroll_y: self.scroll_y, cell_w: self.cell_w(layout.bounds()), cell_h: self.cell_h, columns: self.columns, count: self.count };
+        if let Ok(mut map) = regions().lock() {
+            map.insert(self.side, region);
+        }
         let (Some((_, anchor)), true) = (state.press, state.begun && state.epoch == self.epoch) else { return };
         let bounds = layout.bounds();
         let end = self.end(bounds, state.at);

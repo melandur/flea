@@ -33,7 +33,11 @@ impl Flea {
         // with nothing dropped, and every other key waits for the release.
         if self.drag.is_some() {
             if key == Key::Named(Named::Escape) {
-                self.drag = None;
+                if self.drag.take().is_some_and(|d| d.lift.own && d.platform) {
+                    if let Some(dnd) = self.dnd.as_ref() {
+                        dnd.cancel();
+                    }
+                }
             }
             return Task::none();
         }

@@ -1,8 +1,9 @@
-// The drag inside the window, ui/FileDrag.qml, ui/RowDrag.qml and ui/DropInto.qml: band.rs lifts it
-// off a row and drops it on the release; while it is up, the folder rows, each pane's floor and the
-// tabs report the pointer entering and leaving them, and this decides what the drop would do, says
-// it in the status bar, frames the folder that would take it, and sends the one transfer.
-// dragdrop.rs holds the rules.
+// The drag, ui/FileDrag.qml, ui/RowDrag.qml and ui/DropInto.qml: band.rs lifts it off a row and
+// hands it to the platform (dnd.rs), whose drop lands wherever its coordinates place it (dndshell.rs);
+// with no platform drag to be had, it stays in the window, the folder rows, each pane's floor and the
+// tabs reporting the pointer entering and leaving them, and band.rs drops it on the release. Either
+// way this decides what the drop would do, says it in the status bar, frames the folder that would
+// take it, and sends the one transfer. dragdrop.rs holds the rules.
 use crate::dragdrop::{self, Lift, Target};
 use crate::pane::{join, Effect, Pane};
 use crate::tabbar::Msg as TabMsg;
@@ -18,23 +19,31 @@ const HOVER_SWITCH_MS: u64 = 400;
 #[derive(Debug)]
 pub(crate) struct Drag {
     pub lift: Lift,
-    row: Option<(u8, usize)>,
-    floor: Option<u8>,
-    tab: Option<usize>,
+    pub(crate) row: Option<(u8, usize)>,
+    pub(crate) floor: Option<u8>,
+    pub(crate) tab: Option<usize>,
     tab_gen: u64,
+    // The platform carries it, so its targets are found by position and its drop is the platform's.
+    pub(crate) platform: bool,
+}
+
+impl Drag {
+    pub(crate) fn new(lift: Lift, platform: bool) -> Drag {
+        Drag { lift, row: None, floor: None, tab: None, tab_gen: 0, platform }
+    }
 }
 
 // What a drop would do here: where the transfer goes, what the bar names, and move or copy.
 pub(crate) struct Landing {
-    side: u8,
-    request: Request,
+    pub side: u8,
+    pub request: Request,
     pub row: Option<(u8, usize)>,
     pub name: String,
     pub copy: bool,
 }
 
 impl Flea {
-    fn pane_on(&self, side: u8) -> Option<&Pane> {
+    pub(crate) fn pane_on(&self, side: u8) -> Option<&Pane> {
         if side == self.side {
             return Some(&self.pane);
         }
@@ -47,8 +56,14 @@ impl Flea {
         let Some(pane) = self.pane_on(side) else { return Task::none() };
         let Some(index) = pane.at_view(view) else { return Task::none() };
         let Some(lift) = pane.lift(side, index, copy) else { return Task::none() };
+        // Drag.active: the platform takes the drag from here when it can, every payload already fixed.
+        let platform = self.dnd.as_ref().is_some_and(|d| d.drag(dragdrop::payload(&lift)));
+        // FLEA_ICED_TRACE: which of the two drags this lift became.
+        if std::env::var_os("FLEA_ICED_TRACE").is_some_and(|v| !v.is_empty()) {
+            eprintln!("flea-iced: drag of {} rows, platform={platform}", lift.rows.len());
+        }
         // The pointer starts over the row it lifted and over that pane's floor; leaving either says so.
-        self.drag = Some(Drag { lift, row: Some((side, index)), floor: Some(side), tab: None, tab_gen: 0 });
+        self.drag = Some(Drag { row: Some((side, index)), floor: Some(side), ..Drag::new(lift, platform) });
         Task::none()
     }
 
@@ -92,10 +107,17 @@ impl Flea {
         let drag = self.drag.as_ref()?;
         let lift = &drag.lift;
         let by_path = |side: u8, row: Option<(u8, usize)>, dest: String, dev: u64, name: String| {
-            dragdrop::can_drop_into(lift, &dest).then(|| {
-                let copy = dragdrop::copies(lift.copy, lift.src_dev, dev);
-                let request = Request::Transfer { moving: !copy, paths: lift.paths.clone().unwrap_or_default(), dest };
-                Landing { side, request, row, name, copy }
+            dragdrop::can_drop_into(lift, &dest).then(|| match lift.shelf.as_deref() {
+                // Rule 4: the shelf fixed its verb at the lift, and its token is the authority.
+                Some(shelf) => {
+                    let request = Request::TransferShelf { token: dragdrop::shelf_token(shelf).to_string(), dest };
+                    Landing { side, request, row, name, copy: dragdrop::shelf_copying(shelf) }
+                }
+                None => {
+                    let copy = dragdrop::copies(lift.copy, lift.src_dev, dev);
+                    let request = Request::Transfer { moving: !copy, paths: lift.paths.clone().unwrap_or_default(), dest };
+                    Landing { side, request, row, name, copy }
+                }
             })
         };
         if let Some(i) = drag.tab {
@@ -136,9 +158,14 @@ impl Flea {
         let lift = &drag.lift;
         let (name, copy) = match self.landing() {
             Some(l) => (l.name, l.copy),
-            None => (String::new(), dragdrop::copies(lift.copy, lift.src_dev, lift.src_dev)),
+            None => (String::new(), match lift.shelf.as_deref() {
+                Some(shelf) => dragdrop::shelf_copying(shelf),
+                None => dragdrop::copies(lift.copy, lift.src_dev, lift.src_dev),
+            }),
         };
-        Some(dragdrop::line(lift.rows.len(), &name, copy, lift.paths.is_some()))
+        // feedbackFor's count: this window's rows, or the paths a foreign drag carried.
+        let count = if lift.own { lift.rows.len() } else { lift.paths.as_ref().map_or(0, Vec::len) };
+        Some(dragdrop::line(count, &name, copy, lift.paths.as_ref().is_some_and(|p| !p.is_empty())))
     }
 
     // The row a drop would land on, and its word, for the frame the view draws over it.

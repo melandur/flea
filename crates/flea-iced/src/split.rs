@@ -107,6 +107,8 @@ impl Flea {
                 self.swap_other();
             }
             if let Some(o) = self.other.take() {
+                // Its last drawn cells no longer take a drop by position.
+                crate::band::forget(o.side);
                 if let Some(b) = o.backend {
                     let _ = b.send(&crate::wire::Request::Quit);
                 }
