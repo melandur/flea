@@ -96,6 +96,22 @@ impl Pane {
         self.painting = 0;
     }
 
+    // Shift with an arrow extends, the keyboard's Shift+click: the anchor stays where the run began
+    // and the selection is every row between it and wherever the move leaves the cursor, so a run is
+    // marked on the fly instead of a move and a Space for every row. A selection that does not hold
+    // its own anchor, Ctrl+A's or a run the cursor left, starts a new run at the cursor.
+    pub fn extend_with(&mut self, step: impl FnOnce(&mut Self) -> Vec<Effect>) -> Vec<Effect> {
+        if self.total == 0 {
+            return vec![];
+        }
+        if !self.selection.contains(&self.select_anchor) {
+            self.select_anchor = self.cursor;
+        }
+        let out = step(self);
+        self.selection = self.between(self.cursor, self.select_anchor);
+        out
+    }
+
     // Marks.selectAll: under a filter, everything it shows and nothing it hides.
     pub fn select_all(&mut self) -> Vec<Effect> {
         self.selection = match &self.filter_shown {

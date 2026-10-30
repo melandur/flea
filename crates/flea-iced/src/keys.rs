@@ -168,11 +168,18 @@ impl Flea {
                 _ => None,
             };
             if let Some(arrow) = arrow {
-                let effects = self.pane.grid_arrow(arrow, self.grid_geometry().columns);
+                let columns = self.grid_geometry().columns;
+                let effects = if modifiers.shift() {
+                    self.pane.extend_with(|p| p.grid_arrow(arrow, columns))
+                } else {
+                    self.pane.grid_arrow(arrow, columns)
+                };
                 return self.run(effects);
             }
         }
         let effects = match (key.as_ref(), modifiers.control()) {
+            (Key::Named(Named::ArrowDown), false) if modifiers.shift() => self.pane.extend_with(|p| p.step(1)),
+            (Key::Named(Named::ArrowUp), false) if modifiers.shift() => self.pane.extend_with(|p| p.step(-1)),
             (Key::Named(Named::ArrowDown), false) => self.pane.step(1),
             (Key::Named(Named::ArrowUp), false) => self.pane.step(-1),
             (Key::Named(Named::ArrowLeft), false) => self.pane.up(),

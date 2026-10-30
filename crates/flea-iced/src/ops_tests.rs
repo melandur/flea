@@ -196,3 +196,29 @@ fn a_held_space_paints_the_rows_the_cursor_reaches_in_the_state_it_started() {
     p.paint_cursor();
     assert_eq!(marked(&p), vec![0]);
 }
+
+#[test]
+fn shift_and_an_arrow_mark_the_run_from_where_it_began() {
+    let mut p = pane(10);
+    p.step(1);
+    p.step(1);
+    let marked = |p: &Pane| p.selection.iter().copied().collect::<Vec<_>>();
+    p.extend_with(|p| p.step(1));
+    p.extend_with(|p| p.step(1));
+    assert_eq!((p.cursor, marked(&p)), (4, vec![2, 3, 4]), "the run starts at the row the cursor left");
+    p.extend_with(|p| p.step(-1));
+    assert_eq!(marked(&p), vec![2, 3], "going back takes the far end off");
+    p.extend_with(|p| p.step(-1));
+    p.extend_with(|p| p.step(-1));
+    assert_eq!((p.cursor, marked(&p)), (1, vec![1, 2]), "and past the anchor the run turns round");
+    // A plain move leaves the run; the next Shift starts a fresh one only once the run is gone.
+    p.step(1);
+    p.step(1);
+    p.step(1);
+    p.extend_with(|p| p.step(1));
+    assert_eq!(marked(&p), vec![2, 3, 4, 5], "a standing run is extended from its own anchor, as Shift+click does");
+    p.select_all();
+    p.selection = [7].into();
+    p.extend_with(|p| p.step(1));
+    assert_eq!(marked(&p), vec![5, 6], "a selection without its anchor starts a run at the cursor");
+}
