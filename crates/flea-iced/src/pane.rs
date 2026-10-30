@@ -58,6 +58,8 @@ pub(crate) struct Anchor {
     pub(crate) fallback: usize,
     // A folder just made opens its rename field once the cursor has landed on it.
     pub(crate) rename: bool,
+    // --select: the entry the window was opened to reveal is marked as well as under the cursor.
+    pub(crate) mark: bool,
 }
 
 // The inline editor: which row, what it renames, the draft and the one sentence a refusal leaves.
@@ -161,7 +163,7 @@ impl Pane {
 
     // A navigation: the cursor starts at row 0 unless an anchor says otherwise.
     pub fn open(&mut self, path: String, anchor: Option<(String, usize)>) -> Vec<Effect> {
-        self.open_anchored(path, anchor.map(|(name, fallback)| Anchor { name, fallback, rename: false }))
+        self.open_anchored(path, anchor.map(|(name, fallback)| Anchor { name, fallback, rename: false, mark: false }))
     }
 
     pub(crate) fn open_anchored(&mut self, path: String, anchor: Option<Anchor>) -> Vec<Effect> {
@@ -284,7 +286,7 @@ impl Pane {
             return self.place_cursor(anchor.fallback.min(self.total - 1));
         }
         if let Some(offset) = self.rows.iter().position(|r| r.n == anchor.name) {
-            return self.land(self.held + offset, anchor.rename);
+            return self.land(self.held + offset, &anchor);
         }
         // Not in the first screenful: ask the name arena rather than walking windows for it.
         let path = join(&self.path, &anchor.name);
@@ -299,18 +301,10 @@ impl Pane {
         }
         self.locating = None;
         if index >= 0 {
-            return self.land(index as usize, anchor.rename);
+            return self.land(index as usize, &anchor);
         }
         // A name gone from the listing keeps the view where the user left it, clamped.
         self.place_cursor(anchor.fallback.min(self.total.saturating_sub(1)))
-    }
-
-    fn land(&mut self, index: usize, rename: bool) -> Vec<Effect> {
-        let mut out = self.place_cursor(index);
-        if rename {
-            out.extend(self.start_rename_at(index));
-        }
-        out
     }
 
     fn on_error(&mut self, r#where: &str, path: &str, msg: &str) -> Vec<Effect> {

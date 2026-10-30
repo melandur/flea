@@ -1,6 +1,13 @@
 // Moving through the listing and out of it: a step, Enter, Right, the parent, and the hidden-files
 // switch, as ui/js/Focus.js step and ui/js/Nav.js openCursor do them.
-use crate::pane::{join, parent, Effect, Pane};
+use crate::pane::{join, parent, Anchor, Effect, Pane};
+
+// flea --select, ui/shell.qml's FLEA_SELECT: the entry the launch opens on, put under the cursor and
+// marked, and only when it is a child of the folder the window actually opens.
+pub(crate) fn reveal(start: &str, target: &str) -> Option<Anchor> {
+    let (dir, name) = parent(target)?;
+    (dir.trim_end_matches('/') == start.trim_end_matches('/')).then_some(Anchor { name, fallback: 0, rename: false, mark: true })
+}
 
 impl Pane {
     // Filter.moveCursor: the cursor is a listing row but it moves through what is drawn.

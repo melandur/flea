@@ -83,6 +83,28 @@ fn parent_lands_on_the_directory_it_left_even_past_the_first_screen() {
 }
 
 #[test]
+fn a_reveal_marks_its_entry_in_the_first_screen_and_past_it() {
+    use crate::nav::reveal;
+    assert!(reveal("/a", "/b/c").is_none(), "a target outside the folder opened reveals nothing");
+    assert_eq!(reveal("/", "/etc").map(|a| a.name), Some("etc".into()));
+    let mut p = Pane::new(false, 10);
+    p.open_anchored("/a".into(), reveal("/a/", "/a/f000004"));
+    listed(&mut p, "/a", 1000);
+    assert_eq!((p.cursor, p.selection.iter().copied().collect::<Vec<_>>()), (4, vec![4]));
+    p.open_anchored("/a".into(), reveal("/a", "/a/far"));
+    let out = listed(&mut p, "/a", 1000);
+    assert_eq!(sends(&out), vec![Request::Locate { path: "/a/far".into() }]);
+    p.receive(Reply::Located { directory: "/a".into(), path: "/a/far".into(), index: 700 });
+    assert_eq!((p.cursor, p.selection.iter().copied().collect::<Vec<_>>(), p.select_anchor), (700, vec![700], 700));
+    // A target the folder no longer holds opens it with nothing marked.
+    p.open_anchored("/a".into(), reveal("/a", "/a/gone"));
+    listed(&mut p, "/a", 1000);
+    p.receive(Reply::Located { directory: "/a".into(), path: "/a/gone".into(), index: -1 });
+    assert!(p.selection.is_empty());
+    assert_eq!(p.cursor, 0);
+}
+
+#[test]
 fn a_watch_burst_is_one_timer_and_one_reread_on_the_name() {
     let mut p = Pane::new(false, 10);
     p.open("/a".into(), None);

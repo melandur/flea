@@ -260,7 +260,21 @@ impl Pane {
         if self.list_in_flight() {
             return vec![];
         }
-        self.open_anchored(self.path.clone(), Some(Anchor { name, fallback, rename }))
+        self.open_anchored(self.path.clone(), Some(Anchor { name, fallback, rename, mark: false }))
+    }
+
+    // Where an anchor lands: the cursor, then the rename field a made folder opens, or the mark a
+    // reveal leaves, which is Nav.applyPendingSelect's selection.only.
+    pub(crate) fn land(&mut self, index: usize, anchor: &Anchor) -> Vec<Effect> {
+        let mut out = self.place_cursor(index);
+        if anchor.mark {
+            self.selection = std::iter::once(self.cursor).collect();
+            self.select_anchor = self.cursor;
+        }
+        if anchor.rename {
+            out.extend(self.start_rename_at(index));
+        }
+        out
     }
 
     pub(crate) fn refresh_here(&mut self) -> Vec<Effect> {

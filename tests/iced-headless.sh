@@ -382,6 +382,15 @@ launch "$T"; shot text-size-20
 check "a window at text size 20 opens and lists" 1 "$(grep -c "\"c\":\"list\".*\"path\":\"$T\"" "$D/trace.log")"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 jq '.display.textSize = {"mode": "system"}' "$D/state/flea/ui.json" > "$D/ui.json.next" && mv "$D/ui.json.next" "$D/state/flea/ui.json"
+
+# flea --select, FLEA_SELECT across exec: the folder opens with the target under the cursor AND
+# marked. Ctrl+B reads the cursor; Ctrl+C after a step off it takes the selection, so the paste's
+# transfer naming the target is what only the mark explains.
+FLEA_SELECT="$T/note-02.txt" launch "$T"; ctrl b; sleep 1
+check "a reveal puts the cursor on its target" "$T/note-02.txt" "$(WAYLAND_DISPLAY=$SOCK timeout 3 wl-paste -n 2> /dev/null)"
+n=$(mark); k -k Down; ctrl c; ctrl v; sleep 1
+check "and marks it, so a step off it still copies the target alone" "1 1" "$(since "$n" | grep -c '"c":"transfer"') $(since "$n" | grep '"c":"transfer"' | grep -c "\"paths\":\[\"$T/note-02.txt\"\]")"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 APP=""
 
 # The chooser, the window tools/flea-portal opens through flea --pick.

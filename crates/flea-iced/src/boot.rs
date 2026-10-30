@@ -104,7 +104,9 @@ pub(crate) fn boot() -> (Flea, Task<Message>) {
     let task = match Backend::spawn(flea.backend_key) {
         Ok(b) => {
             flea.backend = Some(b);
-            let effects = flea.pane.open(start.clone(), None);
+            // Read once, as ui/shell.qml does: the first listing reveals it and it is forgotten.
+            let reveal = std::env::var("FLEA_SELECT").ok().and_then(|t| crate::nav::reveal(&start, &t));
+            let effects = flea.pane.open_anchored(start.clone(), reveal);
             // The menu's archive and convert rows read this probe, so it goes out with the first list.
             let first = Task::batch([flea.run(effects), flea.ask_formats()]);
             // A window left split opens both panes on the start path (the 2026-10-08 ruling), the

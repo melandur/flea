@@ -11,8 +11,8 @@ pub fn exec_qs(ui: &Path, start: Option<&str>, select: Option<&str>) -> i32 {
         let Some(bin) = chosen else { return iced_missing() };
         let mut cmd = iced_command(bin);
         cmd.args(start);
-        if select.is_some() {
-            eprintln!("flea: the iced window does not select an entry yet, so it opens the folder alone");
+        if let Some(target) = select {
+            cmd.env("FLEA_SELECT", target);
         }
         return exec(cmd);
     }

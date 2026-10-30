@@ -251,8 +251,7 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      (`FLEA_ICED_BIN`, else beside the binary, else this tree's own `crates/flea-iced/target`), with
      `FLEA_BIN` handed over the way `qs` gets it and huge pages off across the exec exactly as for
      `qs`, which for iced is unmeasured. Asked for and not found, it refuses with exit 2 rather than
-     falling back; empty or any other value is the `qs` window. `--select` is not honoured yet and
-     says so. `tests/modes.sh` pins all of it against stubs and goes red with the seam disabled.
+     falling back; empty or any other value is the `qs` window. `--select` is honoured since 9a. `tests/modes.sh` pins all of it against stubs and goes red with the seam disabled.
    - **The live keyboard run (2026-10-29), on the operator's desktop.** A sandboxed tree, state and
      cache, keys sent with `wtype` only while the iced window held focus AND its last `list` named
      the fixture, every step checked against `FLEA_ICED_TRACE` (requests, and now every key the
@@ -599,3 +598,18 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      real updaters. `display.hyprlandIcons` gives every mark round caps and joins, Glyph.qml's
      rule, while Hyprland rounds its windows (`decoration:rounding` read once at launch through
      `hyprctl`, where Style.qml follows it live); the mark cache keys on the choice.
+9. **What stage 8's four parts left, before the default can switch.** `--select`, the held-Space
+   paint, the selection band and drag and drop, each a commit of its own.
+   - **9a, `--select` (done).** "Show in folder" reaches the window through `flea --select`
+     (`tools/flea-filemanager1`'s ShowItems), so the default cannot move to iced without it.
+     `src/gui.rs` hands the target to `flea-iced` as `FLEA_SELECT`, exactly as it does to `qs`, and
+     the launch opens the target's folder on argv as before. `nav::reveal` is ui/shell.qml's read
+     plus Nav.applyPendingSelect: an anchor on the target's name, honoured only when the target is a
+     child of the folder actually opened, which lands the cursor and marks the row alone
+     (`selection.only`, the shift anchor with it); it is read once, at the first listing. **Deviation,
+     on purpose:** QML looks for the target only in the first screenful and forgets it otherwise;
+     this rides the anchor's `locate`, so a target past row 350 of a large folder is revealed too, and
+     a target the folder no longer holds opens it with nothing marked. `tests/modes.sh` pins the
+     variable across the exec, a unit test drives both screens and the vanished name (turning the
+     mark off turns it red), and the headless run launches on a fixture file: Ctrl+B names it, and a
+     step off it then Ctrl+C and Ctrl+V transfer it alone, which only the mark explains, 70 checks.

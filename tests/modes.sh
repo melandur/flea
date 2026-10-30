@@ -619,6 +619,7 @@ grep -i "^THP_enabled" /proc/self/status
 printf 'ICED %s\n' "$*"
 printf 'FLEA_BIN %s\n' "$FLEA_BIN"
 printf 'REPLY %s\n' "${FLEA_PICKER_REPLY-unset}"
+printf 'SELECT %s\n' "${FLEA_SELECT-unset}"
 STUB
 printf '#!/bin/sh\nprintf "QS %%s\\n" "$*"\n' > "$D/qs"
 chmod +x "$D/iced" "$D/qs"
@@ -628,6 +629,10 @@ check "iced: the window execs flea-iced on the start path" "1" "$(echo "$out" | 
 check "iced: the backend it calls back into is this binary" "1" "$(echo "$out" | grep -c "^FLEA_BIN $(readlink -f "$BIN")\$")"
 check "iced: huge pages are off across that exec too" "1" "$(echo "$out" | grep -c '^THP_enabled:[[:space:]]*0$')"
 check "iced: the qs window is not started" "0" "$(echo "$out" | grep -c '^QS ')"
+check "iced: a plain launch selects nothing" "1" "$(echo "$out" | grep -c '^SELECT unset$')"
+out=$(seam FLEA_FRONTEND=iced FLEA_ICED_BIN="$D/iced" $BIN --gui --select /etc/hostname)
+check "iced: a reveal opens the target's folder" "1" "$(echo "$out" | grep -c '^ICED /etc$')"
+check "iced: and hands the target across exec" "1" "$(echo "$out" | grep -c '^SELECT /etc/hostname$')"
 out=$(seam FLEA_FRONTEND=iced FLEA_ICED_BIN="$D/iced" FLEA_PICKER='{}' $BIN --pick "$D/reply.json")
 check "iced: the chooser execs flea-iced --pick" "1" "$(echo "$out" | grep -c '^ICED --pick$')"
 check "iced: the chooser is handed the reply file" "1" "$(echo "$out" | grep -c "^REPLY $D/reply.json\$")"

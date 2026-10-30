@@ -205,7 +205,7 @@ impl Pane {
             self.order = item.order.clone();
             self.without_history = true;
             // An anchor no row is named by lands on the clamped index, which is pendingCursor exactly.
-            effects.extend(self.open_anchored(item.path.clone(), Some(Anchor { name: String::new(), fallback: item.cursor, rename: false })));
+            effects.extend(self.open_anchored(item.path.clone(), Some(Anchor { name: String::new(), fallback: item.cursor, rename: false, mark: false })));
         }
         TabMove { effects, say: None, view: Some(item.view), moved: true }
     }
