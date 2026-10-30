@@ -165,3 +165,34 @@ fn an_open_menu_owes_the_watched_reread_and_closing_it_pays() {
     p.menu_open = false;
     assert!(matches!(sends(&p.pay_debt())[..], [Request::List { .. }]));
 }
+
+#[test]
+fn a_held_space_paints_the_rows_the_cursor_reaches_in_the_state_it_started() {
+    let marked = |p: &Pane| p.selection.iter().copied().collect::<Vec<_>>();
+    let mut p = pane(8);
+    p.paint_press();
+    for _ in 0..3 {
+        p.step(1);
+        p.paint_cursor();
+    }
+    assert_eq!(marked(&p), vec![0, 1, 2, 3]);
+    // Only Space's own release ends it: after it, a move marks nothing.
+    p.paint_release();
+    p.step(1);
+    p.paint_cursor();
+    assert_eq!(marked(&p), vec![0, 1, 2, 3]);
+    // Pressed on a marked row it unmarks, and the sweep clears a run, leaving an unmarked row alone.
+    p.step(-3);
+    p.paint_press();
+    p.step(1);
+    p.paint_cursor();
+    p.step(1);
+    p.paint_cursor();
+    p.step(1);
+    p.paint_cursor();
+    assert_eq!(marked(&p), vec![0]);
+    // A cursor that has not moved is painted once, not toggled back each time a message lands.
+    p.paint_cursor();
+    p.paint_cursor();
+    assert_eq!(marked(&p), vec![0]);
+}

@@ -127,6 +127,8 @@ pub struct Pane {
     pub tabs: crate::tabs::Tabs,
     pub dirs: crate::dirsizes::DirSizes,
     pub(crate) list_requests: u64,
+    // Marks.painting: 1 while a held Space marks, -1 while it unmarks, 0 with no sweep.
+    pub(crate) painting: i8,
 }
 
 impl Pane {

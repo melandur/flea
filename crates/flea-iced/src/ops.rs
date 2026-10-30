@@ -75,6 +75,27 @@ impl Pane {
         vec![]
     }
 
+    // Marks.paintPress: Space marks or unmarks the cursor row, and every row the cursor reaches before
+    // the release takes that same state, so a held sweep clears a run as readily as it makes one.
+    pub fn paint_press(&mut self) -> Vec<Effect> {
+        let out = self.toggle_select();
+        self.painting = if self.selection.contains(&self.cursor) { 1 } else { -1 };
+        out
+    }
+
+    // Marks.paintCursor, run after every message as Pane.qml runs it on every cursor change, so the
+    // grid's arrows and a pointer move paint too; a row already in the sweep's state is left alone.
+    pub fn paint_cursor(&mut self) {
+        if self.painting != 0 && self.total > 0 && self.selection.contains(&self.cursor) != (self.painting == 1) {
+            self.toggle_select();
+        }
+    }
+
+    // Marks.released: only the painting key's own release ends the sweep, never an arrow's.
+    pub fn paint_release(&mut self) {
+        self.painting = 0;
+    }
+
     // Marks.selectAll: under a filter, everything it shows and nothing it hides.
     pub fn select_all(&mut self) -> Vec<Effect> {
         self.selection = match &self.filter_shown {

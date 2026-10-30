@@ -613,3 +613,14 @@ iced, staged so the QML tree stays shippable until the iced one reaches parity.
      variable across the exec, a unit test drives both screens and the vanished name (turning the
      mark off turns it red), and the headless run launches on a fixture file: Ctrl+B names it, and a
      step off it then Ctrl+C and Ctrl+V transfer it alone, which only the mark explains, 70 checks.
+   - **9b, the held-Space paint (done).** ui/js/Marks.js's gesture, the operator's 2026-09-18
+     "allow me to keep space pressed": the press marks or unmarks the cursor row and records which
+     (`Pane::painting`, 1 or -1), every row the cursor reaches before the release takes that same
+     state, and only Space's own release ends the sweep, in whichever pane of the split it began.
+     The auto-repeat is swallowed at the press, as Focus.handleKey does, or a resting cursor's row
+     would flip while nothing moved. Pane.qml paints on its cursor change, the one place every move
+     lands; here the paint runs after every message the window handles, which is the same place
+     for the grid's arrows and a pointer move alike. A unit test drives the mark, the release and
+     the unmarking sweep; the headless run holds Space in one `wtype` across two Downs with 1.5 s
+     either side, past the repeat delay, and reads the marked rows off Ctrl+C's `paths` request, and
+     with the repeat guard removed both of its checks go red, 72 checks.

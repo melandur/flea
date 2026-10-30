@@ -189,6 +189,7 @@ impl Flea {
     // in the columns view, whether a neighbour column has yet to be asked for.
     fn update(&mut self, message: Message) -> Task<Message> {
         let task = self.handle(message);
+        self.pane.paint_cursor();
         let owed = self.pane.pay_debt();
         let paid = self.run(owed);
         self.dirs_follow();

@@ -391,6 +391,16 @@ check "a reveal puts the cursor on its target" "$T/note-02.txt" "$(WAYLAND_DISPL
 n=$(mark); k -k Down; ctrl c; ctrl v; sleep 1
 check "and marks it, so a step off it still copies the target alone" "1 1" "$(since "$n" | grep -c '"c":"transfer"') $(since "$n" | grep '"c":"transfer"' | grep -c "\"paths\":\[\"$T/note-02.txt\"\]")"
 comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
+
+# Held, Space paints (ui/js/Marks.js): one wtype holds it across two Downs with a pause either side
+# longer than the compositor's repeat delay, so a repeat that toggled the resting row would show.
+# Ctrl+C names the marked rows in its paths request; a Down after the release must add nothing.
+launch "$T"; n=$(mark)
+k -P space -s 1500 -k Down -k Down -s 1500 -p space; k -k Down; ctrl c; sleep 1
+check "a held Space marks each row it reaches once, and its release ends the sweep" "[0,1,2]" "$(since "$n" | grep '"c":"paths"' | tail -1 | sed 's/^flea-iced: sent //' | jq -c .rows)"
+n=$(mark); k -k Up -k Up; k -P space -k Down -p space; ctrl c; sleep 1
+check "pressed on a marked row, the sweep unmarks" "[0]" "$(since "$n" | grep '"c":"paths"' | tail -1 | sed 's/^flea-iced: sent //' | jq -c .rows)"
+comp "[app_id=\"$WANT\"] kill" > /dev/null; sleep 3
 APP=""
 
 # The chooser, the window tools/flea-portal opens through flea --pick.

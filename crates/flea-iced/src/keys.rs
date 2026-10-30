@@ -20,6 +20,14 @@ impl Flea {
             self.modifiers = m;
             return Task::none();
         }
+        // Marks.released: Space's own release ends the paint, in whichever pane it started.
+        if let keyboard::Event::KeyReleased { key: Key::Named(Named::Space), .. } = event {
+            self.pane.paint_release();
+            if let Some(o) = self.other.as_mut() {
+                o.pane.paint_release();
+            }
+            return Task::none();
+        }
         let keyboard::Event::KeyPressed { key, modifiers, repeat, text, .. } = event else { return Task::none() };
         // FLEA_ICED_TRACE: every key the window was handed, beside the requests it caused.
         if std::env::var_os("FLEA_ICED_TRACE").is_some_and(|v| !v.is_empty()) {
@@ -159,8 +167,9 @@ impl Flea {
             (Key::Character("n"), true) => self.pane.new_folder(),
             (Key::Named(Named::Delete), false) => self.pane.trash(),
             (Key::Named(Named::F2), false) => self.pane.start_rename(),
-            // A held Space toggles once; the paint gesture of ui/js/Marks.js is not ported yet.
-            (Key::Named(Named::Space), false) if !repeat => self.pane.toggle_select(),
+            // Held, Space paints (ui/js/Marks.js); its auto-repeat is swallowed, or a resting cursor's
+            // row would flip on and off while nothing moved.
+            (Key::Named(Named::Space), false) if !repeat => self.pane.paint_press(),
             // m, the Menu key and Shift+F10 raise the cursor row's menu (keys.toml "menu").
             (Key::Character("m") | Key::Named(Named::ContextMenu), false) => return self.open_cursor_menu(),
             (Key::Named(Named::F10), false) if modifiers.shift() => return self.open_cursor_menu(),
