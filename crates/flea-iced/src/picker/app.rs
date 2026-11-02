@@ -225,7 +225,11 @@ impl Picking {
         } else {
             return Task::none();
         };
-        operation::scroll_to(LIST_ID, scrollable::AbsoluteOffset { x: 0.0, y: y.max(0.0) })
+        // Recorded here too: iced answers no scroll for a listing that fits, so a short folder
+        // entered from one scrolled far down would keep the old offset and draw none of its rows.
+        let y = y.min((self.c.total as f32 * ROW_H - self.viewport_h).max(0.0)).max(0.0);
+        self.scroll_y = y;
+        operation::scroll_to(LIST_ID, scrollable::AbsoluteOffset { x: 0.0, y })
     }
 
     pub(super) fn choose_place(&mut self, index: usize) -> Task<PMsg> {

@@ -19,7 +19,7 @@ impl Flea {
                 }
                 Effect::ScrollTo(index) => {
                     let y = if self.grid_mode() { self.grid_geometry().scroll_y(index) } else { index as f32 * self.file_h() };
-                    tasks.push(operation::scroll_to(list_id(self.side), scrollable::AbsoluteOffset { x: 0.0, y }));
+                    tasks.push(self.scroll_list(y));
                 }
                 // The row's bottom on the viewport's bottom edge: in the grid that is the tile row's,
                 // which an item count rounded down used to leave partly below the edge.
@@ -29,7 +29,7 @@ impl Flea {
                     } else {
                         ((index + 1) as f32 * self.file_h() - self.viewport_h).max(0.0)
                     };
-                    tasks.push(operation::scroll_to(list_id(self.side), scrollable::AbsoluteOffset { x: 0.0, y }));
+                    tasks.push(self.scroll_list(y));
                 }
                 // Nav.openCursor: an archive nobody claimed opens Flea's own view and launches nothing.
                 Effect::OpenFile(path) if self.archive_routes_here(&path) => tasks.push(self.open_preview()),
@@ -80,6 +80,21 @@ impl Flea {
     // ViewState's view: the grid in a window that is not split, as Pane.qml's listOnly makes it.
     pub(crate) fn grid_mode(&self) -> bool {
         self.other.is_none() && self.dual_from == "grid"
+    }
+
+    // The offset is recorded here as well as handed to the scrollable, because iced reports a scroll
+    // only for content taller than its viewport: a listing that fits never answers `Scrolled`, so a
+    // short folder entered from one scrolled far down kept the old offset and drew none of its rows.
+    fn scroll_list(&mut self, y: f32) -> Task<Message> {
+        let content = if self.grid_mode() {
+            let g = self.grid_geometry();
+            self.pane.view_total().div_ceil(g.columns) as f32 * g.cell_h
+        } else {
+            self.pane.view_total() as f32 * self.file_h()
+        };
+        let y = y.min((content - self.viewport_h).max(0.0)).max(0.0);
+        self.scroll_y = y;
+        operation::scroll_to(list_id(self.side), scrollable::AbsoluteOffset { x: 0.0, y })
     }
 
     pub(crate) fn report_viewport(&mut self) -> Task<Message> {
