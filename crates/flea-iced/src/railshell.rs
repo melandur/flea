@@ -252,6 +252,12 @@ impl Flea {
             }
             Key::Character("m") | Key::Named(Named::ContextMenu) => self.rail_open_menu(self.rail.cursor),
             Key::Named(Named::F10) if self.modifiers.shift() => self.rail_open_menu(self.rail.cursor),
+            // F5 re-reads the listing beside the rail and leaves the keyboard here; the rail's own
+            // groups follow their five-second polls.
+            Key::Named(Named::F5) if !self.modifiers.control() => {
+                let effects = self.pane.reread();
+                self.run(effects)
+            }
             // addNetwork: the dialog is reached from the rail, by its "+" or by this key.
             Key::Character("a") if self.rail.show_network => self.dialog_open(),
             _ => Task::none(),
