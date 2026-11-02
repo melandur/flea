@@ -52,10 +52,14 @@ impl Flea {
         self.other.is_some()
     }
 
-    // Swap the waiting pane in for the focused one, everything a pane owns travelling with it.
+    // Swap the waiting pane in for the focused one, everything a pane owns travelling with it except
+    // the clipboard, which is the window's: shell.qml keeps both panes' clipboards equal, so Ctrl+C in
+    // one pane and Ctrl+V in the other copies across. Swapping it back keeps the one clipboard on the
+    // shell's own pane, whichever pane that is, and a Paths reply run through with_side lands there too.
     pub(crate) fn swap_other(&mut self) {
         let Some(o) = self.other.as_mut() else { return };
         std::mem::swap(&mut self.pane, &mut o.pane);
+        std::mem::swap(&mut self.pane.ops.clipboard, &mut o.pane.ops.clipboard);
         std::mem::swap(&mut self.backend, &mut o.backend);
         std::mem::swap(&mut self.backend_key, &mut o.key);
         std::mem::swap(&mut self.scroll_y, &mut o.scroll_y);
