@@ -100,6 +100,14 @@ fn a_camera_mount_offers_no_trash_and_the_two_destroyers_are_marked() {
 }
 
 #[test]
+fn an_sftp_mount_offers_no_trash_but_keeps_delete_permanently() {
+    let mut f = file(1, 0o100644);
+    f.path = "/run/user/1000/gvfs/sftp:host=submit02.unibe.ch,user=u/storage/homefs".into();
+    let items = ids(&entries(Kind::File, &f, &[]));
+    assert!(!items.contains(&"trash") && items.contains(&"delete"));
+}
+
+#[test]
 fn the_probed_rows_follow_their_probe_and_the_unprobed_ones_stay_absent() {
     let items = ids(&entries(Kind::File, &file(1, 0o100644), &[]));
     for id in ["compress", "extract", "convert", "runScript", "taildrop", "localsend", "dropbox", "sharelink"] {

@@ -131,10 +131,12 @@ pub fn is_hidden(hidden: &[String], id: &str) -> bool {
     id != "open" && id != "toggleHidden" && hidden.iter().any(|h| h == id)
 }
 
-// Mounts.trashable: an MTP or gphoto2 mount has no trash directory, so it never offers the row.
+// Mounts.trashable: an MTP or gphoto2 mount has no trash directory, so it never offers the row, and
+// neither does gvfs's sftp backend: `gio trash` there answers "Operation not supported", measured
+// against submit02.unibe.ch on 2026-11-03, and the file stays where it was.
 pub fn trashable(path: &str) -> bool {
     let lower = path.to_lowercase();
-    !(lower.contains("/gvfs/mtp:") || lower.contains("/gvfs/gphoto2:"))
+    !["/gvfs/mtp:", "/gvfs/gphoto2:", "/gvfs/sftp:"].iter().any(|s| lower.contains(s))
 }
 
 pub fn entries(kind: Kind, f: &Facts, hidden: &[String]) -> Vec<Item> {

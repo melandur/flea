@@ -46,8 +46,9 @@ function localPath(body) {
 // Issue 133 (mfilm77): gio trash refuses a location with no trash directory of its own, so Move to
 // Trash on a phone fails every time it is offered. The FUSE folder names the scheme that reached it,
 // which is what says so without a round trip; every other location keeps the row it always had.
+// gvfs's sftp backend has no trash either: gio trash answers "Operation not supported" there.
 function trashable(path) {
-    return !/\/gvfs\/(mtp|gphoto2):/i.test(String(path || ""))
+    return !/\/gvfs\/(mtp|gphoto2|sftp):/i.test(String(path || ""))
 }
 
 // Sample input: the operator's real bookmarks file, ui/js/Places.js "bookmarks" reads the same lines.

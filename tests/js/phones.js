@@ -144,6 +144,7 @@ function run(check) {
     // row nor the key is offered there. The FUSE folder is what names the scheme that reached it.
     check("an MTP folder cannot trash", Mounts.trashable("/run/user/1000/gvfs/mtp:host=SAMSUNG_RQGL705T0NR/DCIM"), false)
     check("a PTP folder cannot trash", Mounts.trashable("/run/user/1000/gvfs/gphoto2:host=usb%3A001%2C014/store"), false)
+    check("an SFTP folder cannot trash", Mounts.trashable("/run/user/1000/gvfs/sftp:host=submit02.unibe.ch,user=u/storage"), false)
     check("a share folder still can", Mounts.trashable("/run/user/1000/gvfs/smb-share:server=nas,share=media"), true)
     check("and so does every ordinary path", Mounts.trashable("/home/gm/Downloads"), true)
 

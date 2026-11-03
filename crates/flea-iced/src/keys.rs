@@ -186,6 +186,10 @@ impl Flea {
             (Key::Character("z"), true) => self.pane.undo(),
             (Key::Character("a"), true) => self.pane.select_all(),
             (Key::Character("n"), true) => self.pane.new_folder(),
+            // A location with no Trash would only refuse, so Delete asks to delete permanently there.
+            (Key::Named(Named::Delete), false) if !crate::menu::trashable(&self.pane.path) => {
+                return self.open_action(crate::actioncard::Kind::Delete)
+            }
             (Key::Named(Named::Delete), false) => self.pane.trash(),
             (Key::Named(Named::F2), false) => self.pane.start_rename(),
             // Held, Space paints (ui/js/Marks.js); its auto-repeat is swallowed, or a resting cursor's
