@@ -26,3 +26,6 @@ docs/pending/
 /src/target/
 *.pkg.tar.zst
 *.pkg.tar.zst.sig
+
+# Python bytecode from running the tools.
+__pycache__/
