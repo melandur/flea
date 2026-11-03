@@ -60,6 +60,9 @@ pub struct Card {
     pub folder: String,
     pub path: String,
     check_gen: u64,
+    // Delete on a location with no Trash, the operator's ruling of 2026-11-03: the backend still
+    // reviews and identity-checks the set, but the card is never drawn and confirms itself.
+    pub immediate: bool,
 }
 
 pub fn title(kind: Kind) -> &'static str {
@@ -102,6 +105,7 @@ impl Card {
             folder: folder.to_string(),
             path: path.to_string(),
             check_gen: 0,
+            immediate: false,
         };
         let out = match kind {
             Kind::NewFile => {
@@ -128,7 +132,7 @@ impl Card {
     }
 
     pub fn visible(&self) -> bool {
-        self.phase != Phase::Committing
+        self.phase != Phase::Committing && !self.immediate
     }
 
     pub fn can_submit(&self) -> bool {
@@ -278,8 +282,15 @@ impl Card {
                 out.extend(self.finish());
                 return out;
             }
+            let error = if error.is_empty() { "The requested action failed.".into() } else { error };
+            if self.immediate {
+                // No card is drawn to carry the error, so it is said and the slot is freed.
+                let mut out = vec![Out::Alert(error)];
+                out.extend(self.finish());
+                return out;
+            }
             self.phase = Phase::Ready;
-            self.error = if error.is_empty() { "The requested action failed.".into() } else { error };
+            self.error = error;
             return vec![];
         }
         let stale = v.get("stale") == Some(&json!(true));
@@ -299,6 +310,9 @@ impl Card {
                 self.facts = v.clone();
                 self.phase = Phase::Confirm;
                 self.focus = 0;
+                if self.immediate {
+                    return self.confirm();
+                }
                 vec![self.arm_check()]
             }
             "delete" => {

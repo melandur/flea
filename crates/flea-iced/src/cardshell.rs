@@ -84,6 +84,18 @@ impl Flea {
         if takes_text { Task::batch([sent, operation::focus(ACTION_FIELD), operation::select_all(ACTION_FIELD)]) } else { sent }
     }
 
+    // Delete where there is no Trash: the same reviewed deletion, confirmed without asking.
+    pub(crate) fn delete_now(&mut self) -> Task<Message> {
+        let busy = self.card.is_some();
+        let task = self.open_action(Kind::Delete);
+        if !busy {
+            if let Some(card) = self.card.as_mut() {
+                card.immediate = true;
+            }
+        }
+        task
+    }
+
     // The card owns the keyboard while it is drawn: Escape closes, Tab moves the confirmation's
     // focus off Cancel, Enter acts on what is focused; a field's own Enter arrives through on_submit.
     pub(crate) fn action_key(&mut self, key: &Key) -> Option<Task<Message>> {

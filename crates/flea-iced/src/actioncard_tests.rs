@@ -86,6 +86,27 @@ fn delete_reviews_confirms_with_its_token_and_reports_partial_completion() {
 }
 
 #[test]
+fn an_immediate_delete_is_never_drawn_and_sends_the_delete_when_the_review_answers() {
+    let (mut c, _) = Card::open(Kind::Delete, 7, "/d", &[0], 0, "/d/a");
+    c.immediate = true;
+    assert!(!c.visible());
+    assert_eq!(ops(&c.receive_menu(&reply(7, "snapshot", json!({"count": 1})))), ["menuaction/prepareDelete"]);
+    let out = c.receive_menu(&reply(7, "prepareDelete", json!({"token": 12, "count": 1, "bytes": 4})));
+    assert_eq!(sent(&out), vec![json!({"c": "menuaction", "op": "delete", "id": 7, "token": 12})]);
+    assert_eq!(c.phase, Phase::Committing);
+}
+
+#[test]
+fn an_immediate_delete_whose_review_fails_says_so_and_frees_the_slot() {
+    let (mut c, _) = Card::open(Kind::Delete, 7, "/d", &[0], 0, "/d/a");
+    c.immediate = true;
+    c.receive_menu(&reply(7, "snapshot", json!({})));
+    let out = c.receive_menu(&json!({"t": "menuaction", "id": 7, "op": "prepareDelete", "ok": false, "error": "no review"}));
+    assert_eq!(out[0], Out::Alert("no review".into()));
+    assert!(out.contains(&Out::Close));
+}
+
+#[test]
 fn a_changed_set_is_reviewed_again_and_an_old_check_is_ignored() {
     let (mut c, _) = Card::open(Kind::Delete, 7, "/d", &[0], 0, "/d/a");
     c.receive_menu(&reply(7, "snapshot", json!({})));

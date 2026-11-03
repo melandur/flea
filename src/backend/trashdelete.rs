@@ -157,14 +157,23 @@ fn parent_at(base: &File, root: &OsStr, relative: &Path) -> Result<(File, OsStri
     }
     Ok((directory, relative.file_name().ok_or("Missing Trash review name.")?.to_os_string()))
 }
-fn matches(tree: &Records, base: &File, root: &OsStr, cancel: &Cancellation) -> Result<bool, String> {
+// `moved` is true once the root has been renamed into the quarantine. A server may stamp a directory's
+// mtime when it moves to a new parent: submit02.unibe.ch's sftp mount did, measured 2026-11-03, and
+// every folder deletion there was refused as changed. So a moved root directory is held to its device,
+// inode and mode, while its children, their count and every node below it are still compared exactly.
+fn matches(tree: &Records, base: &File, root: &OsStr, cancel: &Cancellation, moved: bool) -> Result<bool, String> {
     let mut offset = tree.start();
     while let Some(bytes) = tree.next(&mut offset)? {
         cancel.check()?;
         let node = Node::decode(&bytes)?;
         let Ok((parent, name)) = parent_at(base, root, &node.relative) else { return Ok(false); };
         let path = fd_path(&parent, &name);
-        if identity(&path).ok().as_ref() != Some(&node.identity) { return Ok(false); }
+        let same = |now: Option<Identity>| match now {
+            Some(now) if moved && node.relative.as_os_str().is_empty() => node.identity.matches_survivor(&now),
+            Some(now) => now == node.identity,
+            None => false,
+        };
+        if !same(identity(&path).ok()) { return Ok(false); }
         if node.directory() {
             let directory = open_dir(&path)?;
             let mut children = 0;
@@ -173,7 +182,7 @@ fn matches(tree: &Records, base: &File, root: &OsStr, cancel: &Cancellation) -> 
                 entry.map_err(|e| e.to_string())?;
                 children += 1;
             }
-            if children != node.children || identity(&path).ok().as_ref() != Some(&node.identity) { return Ok(false); }
+            if children != node.children || !same(identity(&path).ok()) { return Ok(false); }
         }
     }
     Ok(true)
@@ -249,12 +258,14 @@ fn snapshot_tree(path: &Path, payload: &Identity, manifest: &mut Manifest, scrat
             manifest.append(&node.encode())?;
         }
         let tree = manifest.range(start, manifest.len())?;
-        if identity(path).ok().as_ref() != Some(payload) || !matches(&tree, &files, name, cancel)? {
+        if identity(path).ok().as_ref() != Some(payload) || !matches(&tree, &files, name, cancel, false)? {
             return Err("Trash changed while reviewing its contents.".into());
         }
         Ok((tree, bytes))
 }
 fn remove_tree(tree: &Records, quarantine: &File, payload: &Identity) -> Result<(), String> {
+    // `payload` is the identity read just after the move into the quarantine, which may carry an mtime
+    // the move itself stamped (see matches), so an arrival after that read still refuses everything.
     if identity(&fd_path(quarantine, OsStr::new("payload")))? != *payload {
         return Err("Trash item changed after it was claimed; remaining data was preserved.".into());
     }
@@ -403,7 +414,7 @@ impl Reviewed {
         if !self.unchanged() { return Ok(false); }
         let Some(tree) = &self.tree else { return Ok(true); };
         let files = open_dir(self.path.parent().ok_or("Missing Trash parent.")?)?;
-        matches(tree, &files, self.path.file_name().ok_or("Missing Trash filename.")?, cancel)
+        matches(tree, &files, self.path.file_name().ok_or("Missing Trash filename.")?, cancel, false)
     }
     pub fn selection_identity(&self) -> String {
         // This ephemeral value is compared within one backend session, never parsed or persisted.
@@ -424,11 +435,12 @@ impl Reviewed {
     fn delete_with(&self, recovery_root: &Path, before_claim: impl FnOnce(), before_remove: impl FnOnce(&Path)) -> Result<(), String> {
         let tree = self.tree.as_ref().ok_or("Trash contents have not been reviewed.")?;
         self.with_claimed("Deletion", recovery_root, None, before_claim, |quarantine| {
-            if !matches(tree, quarantine, OsStr::new("payload"), &Cancellation::default())? {
+            let claimed = identity(&fd_path(quarantine, OsStr::new("payload")))?;
+            if !matches(tree, quarantine, OsStr::new("payload"), &Cancellation::default(), true)? {
                 return Err("Trash contents changed; no deletion attempted.".into());
             }
             before_remove(&fd_path(quarantine, OsStr::new("payload")));
-            remove_tree(tree, quarantine, &self.payload)
+            remove_tree(tree, quarantine, &claimed)
         })
     }
     pub fn restore(&self, original: &Path, recovery_root: &Path) -> Result<(), String> {
@@ -564,7 +576,7 @@ impl PathReview {
     pub fn unchanged(&self, cancel: &Cancellation) -> Result<bool, String> {
         if identity(&self.path).ok().as_ref() != Some(&self.payload) { return Ok(false); }
         let parent = open_dir(self.path.parent().ok_or("Missing deletion parent.")?)?;
-        matches(&self.tree, &parent, self.path.file_name().ok_or("Missing deletion filename.")?, cancel)
+        matches(&self.tree, &parent, self.path.file_name().ok_or("Missing deletion filename.")?, cancel, false)
     }
     pub fn delete(&self, recovery_root: &Path) -> Result<(), String> {
         self.delete_after(recovery_root, || {})
@@ -592,9 +604,11 @@ impl PathReview {
             if journal.remove_empty(&quarantine_path, &quarantine, &parent).is_ok() { journal.complete()?; }
             return Err(format!("Could not claim item for deletion: {}", error));
         }
-        let removal = match matches(&self.tree, &quarantine, OsStr::new("payload"), &Cancellation::default()) {
-            Ok(true) => remove_tree(&self.tree, &quarantine, &self.payload),
-            Ok(false) => Err("Item changed after confirmation; no deletion attempted.".into()),
+        let removal = match identity(&fd_path(&quarantine, OsStr::new("payload"))).and_then(|claimed| {
+            matches(&self.tree, &quarantine, OsStr::new("payload"), &Cancellation::default(), true).map(|ok| ok.then_some(claimed))
+        }) {
+            Ok(Some(claimed)) => remove_tree(&self.tree, &quarantine, &claimed),
+            Ok(None) => Err("Item changed after confirmation; no deletion attempted.".into()),
             Err(error) => Err(error),
         };
         if let Err(error) = removal {
@@ -876,6 +890,34 @@ mod tests {
         }).is_err());
         assert_eq!(std::fs::read_to_string(path).unwrap(), "replacement");
         assert_eq!(std::fs::read_to_string(d.join("old-selected")).unwrap(), "reviewed");
+    }
+    #[test]
+    fn a_folder_whose_mtime_the_move_into_quarantine_stamps_is_still_deleted() {
+        // submit02.unibe.ch's sftp mount stamps a directory's mtime when it moves to a new parent.
+        let d = TestDir::new("path-delete-stamped");
+        let root = d.dir("selected");
+        std::fs::write(root.join("a"), "reviewed").unwrap();
+        let mut manifest = Manifest::new(d.path()).unwrap();
+        let (reviewed, _) = PathReview::prepare(root.clone(), &mut manifest, d.path(), &Cancellation::default()).unwrap();
+        guard(&d, &root);
+        let stamp = || std::fs::File::open(&root).unwrap().set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(7)).unwrap();
+        reviewed.delete_after(d.path(), stamp).unwrap();
+        assert!(!root.exists());
+    }
+    #[test]
+    fn a_stamped_folder_that_also_gained_a_child_is_refused_and_kept() {
+        let d = TestDir::new("path-delete-stamped-arrival");
+        let root = d.dir("selected");
+        std::fs::write(root.join("a"), "reviewed").unwrap();
+        let mut manifest = Manifest::new(d.path()).unwrap();
+        let (reviewed, _) = PathReview::prepare(root.clone(), &mut manifest, d.path(), &Cancellation::default()).unwrap();
+        guard(&d, &root);
+        assert!(reviewed.delete_after(d.path(), || {
+            std::fs::write(root.join("arrived"), "new").unwrap();
+            std::fs::File::open(&root).unwrap().set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(7)).unwrap();
+        }).is_err());
+        assert_eq!(std::fs::read_to_string(root.join("arrived")).unwrap(), "new");
+        assert_eq!(std::fs::read_to_string(root.join("a")).unwrap(), "reviewed");
     }
     #[test]
     fn iterative_review_deletes_deep_trees_without_following_symlinks() {
