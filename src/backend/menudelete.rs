@@ -22,6 +22,8 @@ pub(crate) struct Review {
     pub token: usize,
     pub count: usize,
     pub bytes: u64,
+    // Every node under every root, which a deletion's progress counts against.
+    pub nodes: u64,
     roots: Vec<Root>,
     selection: Vec<Selected>,
 }
@@ -51,7 +53,8 @@ impl Review {
         }
         for item in &selected { check_cancel(cancel)?; item.current()?; }
         let selection = selected.into_iter().cloned().collect::<Vec<_>>();
-        let review = Self { token: NEXT_TOKEN.fetch_add(1, Ordering::Relaxed), count: selection.len(), bytes, roots, selection };
+        let nodes = roots.iter().map(|root| root.review.nodes).sum();
+        let review = Self { token: NEXT_TOKEN.fetch_add(1, Ordering::Relaxed), count: selection.len(), bytes, nodes, roots, selection };
         review.validate(cancel)?;
         Ok(review)
     }
@@ -66,8 +69,15 @@ impl Review {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn delete(&self, recovery: &Path, cancel: &Cancellation) -> Result<String, String> {
+        self.delete_reporting(recovery, cancel, &mut |_, _| {})
+    }
+
+    // `progress` hears (removed, total) nodes after every node, and decides itself how often to speak.
+    pub fn delete_reporting(&self, recovery: &Path, cancel: &Cancellation, progress: &mut dyn FnMut(u64, u64)) -> Result<String, String> {
         self.validate(cancel)?;
+        let mut removed = 0u64;
         let mut deleted = 0;
         let mut failed = 0;
         let mut first_error = String::new();
@@ -75,7 +85,7 @@ impl Review {
         for root in &self.roots {
             if cancel.check().is_err() { cancelled = true; break; }
             // A claimed root completes or restores its survivors before cancellation stops the next root.
-            match root.review.delete(recovery) {
+            match root.review.delete_counting(recovery, &mut || { removed += 1; progress(removed, self.nodes) }) {
                 Ok(()) => deleted += root.selected,
                 Err(error) => {
                     failed += root.selected;
@@ -129,6 +139,24 @@ mod tests {
         assert!(link.symlink_metadata().is_err());
         assert_eq!(std::fs::read_to_string(&target).unwrap(), "untouched");
         assert!(result.contains(r#""remaining":[]"#));
+    }
+
+    #[test]
+    fn a_deletion_reports_every_node_it_removes_and_ends_on_the_total() {
+        let d = TestDir::new("menu-delete-progress");
+        let folder = d.dir("folder");
+        d.dir("folder/sub");
+        d.file("folder/a", "1");
+        d.file("folder/sub/b", "2");
+        let review = Review::prepare(&[selected(&folder)], d.path(), &Cancellation::default()).unwrap();
+        assert_eq!(review.nodes, 4);
+        let recovery = d.join("recovery");
+        deletion_sandbox(&d, &[&folder, &recovery]);
+        let mut heard = Vec::new();
+        let result = review.delete_reporting(&recovery, &Cancellation::default(), &mut |done, total| heard.push((done, total))).unwrap();
+        assert!(result.contains(r#""deleted":1,"failed":0"#), "{result}");
+        assert_eq!(heard, [(1, 4), (2, 4), (3, 4), (4, 4)]);
+        assert!(!folder.exists());
     }
 
     #[test]

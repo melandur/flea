@@ -20,6 +20,16 @@ fn elide(label: &str, width: f32) -> String {
     format!("{}…", kept.trim_end())
 }
 
+// A device's menu opens under its row, and above it when the rail's bottom edge would cut it off:
+// near DEVICES it drew one row of Mount, Eject and the rest under the status bar (2026-11-03).
+// `below` is the row's bottom and `rail_h` the rail's height between the chrome and the status bar.
+pub(crate) fn rail_menu_y(below: f32, rows: usize, rail_h: f32) -> f32 {
+    // The card's 4 px padding top and bottom, its 1 px border, and ROW_H - 6 a row.
+    let height = 8.0 + 2.0 + rows as f32 * (ROW_H - 6.0);
+    let y = if below + height <= rail_h { below } else { below - ROW_H - height };
+    y.min((rail_h - height).max(0.0)).max(0.0)
+}
+
 impl Flea {
     // Where row `index` ends, in window coordinates: the chrome, the tab strip, the rail's own 8 px
     // top padding, then a heading before each group's first row, walked the way rail_view lays out.
@@ -106,6 +116,7 @@ impl Flea {
             .style(move |_| container::Style::default().background(p.background).border(iced::Border { color: p.muted, width: 1.0, radius: 6.0.into() }));
         // The backdrop takes the press that closes the menu, as ui/ContextMenu.qml's does.
         let backdrop = mouse_area(space().width(Length::Fill).height(Length::Fill)).on_press(Message::RailMenuClosed);
+        let y = rail_menu_y(y, menu.actions.len(), self.window_h - 2.0 * ROW_H - self.tab_strip_h());
         stack![base, opaque(backdrop), pin(card).x(PAD_X).y(y)].into()
     }
 
@@ -159,7 +170,19 @@ impl Flea {
 
 #[cfg(test)]
 mod tests {
-    use super::elide;
+    use super::{elide, rail_menu_y};
+    use crate::ROW_H;
+
+    #[test]
+    fn a_device_menu_near_the_bottom_opens_above_its_row_and_never_past_the_rail() {
+        let rail_h = 20.0 * ROW_H;
+        let height = 10.0 + 3.0 * (ROW_H - 6.0);
+        assert_eq!(rail_menu_y(4.0 * ROW_H, 3, rail_h), 4.0 * ROW_H);
+        let bottom = 19.0 * ROW_H;
+        assert_eq!(rail_menu_y(bottom, 3, rail_h), bottom - ROW_H - height);
+        assert!(rail_menu_y(bottom, 3, rail_h) + height <= rail_h);
+        assert_eq!(rail_menu_y(bottom, 40, rail_h), 0.0);
+    }
 
     #[test]
     fn a_label_that_fits_is_untouched_and_a_long_one_ends_in_an_ellipsis() {

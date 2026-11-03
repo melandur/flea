@@ -106,7 +106,8 @@ fn every_dialog_row_round_trips_through_the_real_backend() {
     let out = card.submit();
     pump(&mut live, &mut card, out, "the validation", |_, k| closed(k));
     let deadline = Instant::now() + Duration::from_secs(10);
-    while !dest.join("b.txt").exists() && Instant::now() < deadline {
+    // The copy creates its file before it writes it, so existence alone can read it empty.
+    while std::fs::read(dest.join("b.txt")).ok().as_deref() != Some(b"beta".as_slice()) && Instant::now() < deadline {
         let _ = live.lines.recv_timeout(Duration::from_millis(100));
     }
     assert_eq!(std::fs::read(dest.join("b.txt")).unwrap(), b"beta");
@@ -119,8 +120,16 @@ fn every_dialog_row_round_trips_through_the_real_backend() {
     assert_eq!(card.facts["count"].as_u64(), Some(1));
     let out = card.confirm();
     let kept = pump(&mut live, &mut card, out, "the deletion", |_, k| closed(k));
-    assert!(kept.contains(&Out::Say("Deleted 1 of 1".into())), "{kept:?}");
+    assert!(kept.contains(&Out::Say("Deleted c.txt.".into())), "{kept:?}");
     assert!(!dir.join("c.txt").exists() && dir.join("a.txt").exists() && dir.join("b.txt").exists());
+
+    // A queued deletion names its paths, so it reaches a folder that is not the one listed, unasked.
+    let queued = format!("{}/b.txt", dest.to_str().unwrap());
+    let (mut card, out) = Card::open_paths(6, dest.to_str().unwrap(), &[queued.clone()]);
+    assert!(!card.visible());
+    let kept = pump(&mut live, &mut card, out, "the queued deletion", |_, k| closed(k));
+    assert!(kept.contains(&Out::Say("Deleted b.txt.".into())), "{kept:?}");
+    assert!(!dest.join("b.txt").exists() && dir.join("b.txt").exists() && dir.join("a.txt").exists());
     drop(live);
     let _ = std::fs::remove_dir_all(&root);
 }

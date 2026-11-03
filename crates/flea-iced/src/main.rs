@@ -172,6 +172,9 @@ struct Flea {
     surfaces: previewshell::Surfaces,
     table_scroll: f32,
     window_w: f32,
+    // The window's own height, for a menu's far-edge clamp: viewport_h is the listing's, which a
+    // scroll report replaces with the scrollable's bounds, so it cannot stand in for the window.
+    window_h: f32,
     prefs: prefs::Prefs,
     pdf: Option<mediashell::PdfView>,
     playback: mediashell::Playback,
@@ -181,6 +184,8 @@ struct Flea {
     opening_terminal: bool,
     // The menu's dialog row on screen, or the deletion it started while that runs; one at a time.
     card: Option<actioncard::Card>,
+    // Deletions pressed while another ran, each as its pane's backend and the paths it was pressed on.
+    delete_queue: std::collections::VecDeque<(u64, Vec<String>)>,
     card_ids: u64,
     jobs: jobshell::Jobs,
     sends: sendshell::Sends,
@@ -215,6 +220,7 @@ impl Flea {
                 // The chrome, the header and the status bar are a row each.
                 self.viewport_h = (size.height - 3.0 * ROW_H - self.tab_strip_h()).max(ROW_H);
                 self.window_w = size.width;
+                self.window_h = size.height;
                 let other = self.other.as_ref().map(|o| o.side);
                 let mine = self.report_viewport();
                 let theirs = other.map(|s| self.with_side(s, Flea::report_viewport)).unwrap_or_else(Task::none);

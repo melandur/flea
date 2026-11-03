@@ -263,7 +263,7 @@ fn snapshot_tree(path: &Path, payload: &Identity, manifest: &mut Manifest, scrat
         }
         Ok((tree, bytes))
 }
-fn remove_tree(tree: &Records, quarantine: &File, payload: &Identity) -> Result<(), String> {
+fn remove_tree(tree: &Records, quarantine: &File, payload: &Identity, tick: &mut dyn FnMut()) -> Result<(), String> {
     // `payload` is the identity read just after the move into the quarantine, which may carry an mtime
     // the move itself stamped (see matches), so an arrival after that read still refuses everything.
     if identity(&fd_path(quarantine, OsStr::new("payload")))? != *payload {
@@ -274,6 +274,7 @@ fn remove_tree(tree: &Records, quarantine: &File, payload: &Identity) -> Result<
         let node = Node::decode(&bytes)?;
         let (parent, child_name) = parent_at(quarantine, OsStr::new("payload"), &node.relative)?;
         node.claim_remove(&parent, &child_name, quarantine, offset - tree.start())?;
+        tick();
     }
     Ok(())
 }
@@ -440,7 +441,7 @@ impl Reviewed {
                 return Err("Trash contents changed; no deletion attempted.".into());
             }
             before_remove(&fd_path(quarantine, OsStr::new("payload")));
-            remove_tree(tree, quarantine, &claimed)
+            remove_tree(tree, quarantine, &claimed, &mut || {})
         })
     }
     pub fn restore(&self, original: &Path, recovery_root: &Path) -> Result<(), String> {
@@ -562,6 +563,8 @@ pub struct PathReview {
     path: PathBuf,
     payload: Identity,
     tree: Records,
+    // Every node the review recorded, the root included: what a deletion's progress counts against.
+    pub nodes: u64,
 }
 impl PathReview {
     pub fn prepare(path: PathBuf, manifest: &mut Manifest, scratch: &Path,
@@ -571,17 +574,28 @@ impl PathReview {
         }
         let payload = identity(&path)?;
         let (tree, bytes) = snapshot_tree(&path, &payload, manifest, scratch, cancel)?;
-        Ok((Self { path, payload, tree }, bytes))
+        let (mut offset, mut nodes) = (tree.start(), 0u64);
+        while tree.next(&mut offset)?.is_some() { nodes += 1; }
+        Ok((Self { path, payload, tree, nodes }, bytes))
     }
     pub fn unchanged(&self, cancel: &Cancellation) -> Result<bool, String> {
         if identity(&self.path).ok().as_ref() != Some(&self.payload) { return Ok(false); }
         let parent = open_dir(self.path.parent().ok_or("Missing deletion parent.")?)?;
         matches(&self.tree, &parent, self.path.file_name().ok_or("Missing deletion filename.")?, cancel, false)
     }
+    #[cfg(test)]
     pub fn delete(&self, recovery_root: &Path) -> Result<(), String> {
-        self.delete_after(recovery_root, || {})
+        self.delete_counting(recovery_root, &mut || {})
     }
+    // `tick` runs once for each node removed, which is what the menu's deletion reports progress by.
+    pub fn delete_counting(&self, recovery_root: &Path, tick: &mut dyn FnMut()) -> Result<(), String> {
+        self.delete_inner(recovery_root, || {}, tick)
+    }
+    #[cfg(test)]
     fn delete_after(&self, recovery_root: &Path, before_claim: impl FnOnce()) -> Result<(), String> {
+        self.delete_inner(recovery_root, before_claim, &mut || {})
+    }
+    fn delete_inner(&self, recovery_root: &Path, before_claim: impl FnOnce(), tick: &mut dyn FnMut()) -> Result<(), String> {
         let parent_path = self.path.parent().ok_or("Missing deletion parent.")?;
         let parent = open_dir(parent_path)?;
         let name = self.path.file_name().ok_or("Missing deletion filename.")?;
@@ -607,7 +621,7 @@ impl PathReview {
         let removal = match identity(&fd_path(&quarantine, OsStr::new("payload"))).and_then(|claimed| {
             matches(&self.tree, &quarantine, OsStr::new("payload"), &Cancellation::default(), true).map(|ok| ok.then_some(claimed))
         }) {
-            Ok(Some(claimed)) => remove_tree(&self.tree, &quarantine, &claimed),
+            Ok(Some(claimed)) => remove_tree(&self.tree, &quarantine, &claimed, tick),
             Ok(None) => Err("Item changed after confirmation; no deletion attempted.".into()),
             Err(error) => Err(error),
         };

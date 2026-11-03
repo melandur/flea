@@ -149,7 +149,7 @@ impl Flea {
             if self.columns_mode() { (below, (self.pane_width() / 3.0).floor(), ROW_H) } else { (below, 0.0, 2.0 * ROW_H) }
         };
         let y_in = (below - self.scroll_y).clamp(0.0, self.viewport_h);
-        let window_h = self.viewport_h + 3.0 * ROW_H;
+        let window_h = self.window_h;
         let x = x0 + menu::clamp(left + crate::PAD_X, MENU_W, width);
         let y = menu::clamp(listing_top + self.tab_strip_h() + y_in, frame_height(&items), window_h);
         self.menu = Some(ListMenu { kind, items, cursor, flyout: false, sub_cursor: 0, x, y, path: self.pane.path.clone(), names: self.targets(), place: None });
@@ -254,7 +254,7 @@ impl Flea {
         let items = menu::trash_entries(kind, total, self.trash.busy(), &self.effective_hidden());
         let Some(cursor) = menu::first(&items) else { return Task::none() };
         let (x0, width) = self.pane_box();
-        let window_h = self.viewport_h + 3.0 * ROW_H;
+        let window_h = self.window_h;
         let x = x.unwrap_or_else(|| x0 + menu::clamp(width / 2.0, MENU_W, width));
         let y = menu::clamp(y, frame_height(&items), window_h);
         self.menu = Some(ListMenu { kind, items, cursor, flyout: false, sub_cursor: 0, x, y, path: String::new(), names: vec![], place: None });
@@ -271,7 +271,7 @@ impl Flea {
         let items = menu::place_entries(favourite.is_some(), &self.effective_hidden());
         let Some(cursor) = menu::first(&items) else { return self.say(format!("{} has nothing to eject or unmount.", entry.label)) };
         let place = Some((entry.path.clone(), favourite));
-        let y = menu::clamp(self.rail_row_bottom(index), frame_height(&items), self.viewport_h + 3.0 * ROW_H);
+        let y = menu::clamp(self.rail_row_bottom(index), frame_height(&items), self.window_h);
         self.close_menu();
         self.menu = Some(ListMenu { kind: Kind::Place(favourite.is_some()), items, cursor, flyout: false, sub_cursor: 0, x: crate::PAD_X, y, path: String::new(), names: vec![], place });
         Task::none()

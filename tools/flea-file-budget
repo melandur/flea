@@ -22,7 +22,7 @@ src/backend/proto.rs 466
 src/backend/run.rs 425
 src/backend/thumbs.rs 426
 src/backend/trashbrowse.rs 698
-src/backend/trashdelete.rs 942
+src/backend/trashdelete.rs 956
 src/tui/actions.rs 999
 src/tui/input.rs 449
 src/tui/model.rs 1174

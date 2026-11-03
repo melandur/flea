@@ -12,6 +12,9 @@ use std::sync::mpsc::{sync_channel, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+// How often a running deletion says how far it got: the status bar redraws on each line.
+const PROGRESS_MS: u64 = 200;
+
 pub struct MenuActions {
     requests: SyncSender<(String, Vec<String>, Option<String>, Cancellation)>,
     replies: Sender<OpMsg>,
@@ -36,7 +39,17 @@ impl MenuActions {
             while let Ok((line, paths, cursor, cancel)) = receiver.recv() {
                 let mut state = published.lock().unwrap().clone();
                 let mut reply = if cancel.check().is_ok() {
-                    state.handle_request(&line, paths, cursor.as_deref(), &queries, &cancel)
+                    // A deletion's progress line, at most every PROGRESS_MS, straight to the wire.
+                    let id = field_usize(&line, "id").unwrap_or(0);
+                    let mut last = std::time::Instant::now();
+                    let mut progress = |done: u64, total: u64| {
+                        if last.elapsed() >= std::time::Duration::from_millis(PROGRESS_MS) || done == total {
+                            last = std::time::Instant::now();
+                            let line = format!(r#"{{"t":"menuaction","id":{id},"op":"deleteProgress","ok":true,"done":{done},"total":{total}}}"#);
+                            let _ = output.send(OpMsg::Meta { line });
+                        }
+                    };
+                    state.handle_request(&line, paths, cursor.as_deref(), &queries, &cancel, &mut progress)
                 } else { response(&line, Err("Menu request cancelled.".into())) };
                 if cancel.check().is_err() && field_str(&line, "op").as_deref() != Some("delete") {
                     reply.insert_str(reply.len() - 1, r#", "cancelled":true"#);
@@ -175,7 +188,8 @@ pub(crate) fn validate_sources(items: Option<&[Selected]>, paths: &[PathBuf]) ->
 }
 impl Snapshot {
     // Sample input: {"c":"menuaction","op":"snapshot","id":3}; paths are resolved from the active listing by run.rs.
-    fn handle_request(&mut self, line: &str, paths: Vec<String>, cursor: Option<&str>, registry: &Registry, cancel: &Cancellation) -> String {
+    fn handle_request(&mut self, line: &str, paths: Vec<String>, cursor: Option<&str>, registry: &Registry, cancel: &Cancellation,
+        progress: &mut dyn FnMut(u64, u64)) -> String {
         let id = field_usize(line, "id").unwrap_or(0);
         let op = field_str(line, "op").unwrap_or_default();
         let result = if op == "snapshot" {
@@ -205,18 +219,19 @@ impl Snapshot {
             menu_registry::installed(registry, cancel)
                 .map(|apps| format!(r#""installed":[{}]"#, application_entries(&apps)))
         } else {
-            self.perform(id, &op, line, registry, cancel)
+            self.perform(id, &op, line, registry, cancel, progress)
         };
         response(line, result)
     }
-    fn perform(&mut self, id: usize, op: &str, line: &str, registry: &Registry, cancel: &Cancellation) -> Result<String, String> {
+    fn perform(&mut self, id: usize, op: &str, line: &str, registry: &Registry, cancel: &Cancellation,
+        progress: &mut dyn FnMut(u64, u64)) -> Result<String, String> {
         if id == 0 || id != self.id || self.items.is_empty() {
             return Err("Menu selection expired; reopen the menu.".into());
         }
         if op == "delete" {
             let review = self.take_deletion(field_usize(line, "token").unwrap_or(0))?;
             let recovery = super::trashdelete::recovery_root()?;
-            return match review.delete(&recovery, cancel) {
+            return match review.delete_reporting(&recovery, cancel, progress) {
                 Ok(result) => Ok(result),
                 Err(error) => Ok(format!(r#""stale":true,"error":"{}""#, escape(&error))),
             }
@@ -251,7 +266,7 @@ impl Snapshot {
         }
         if op == "prepareDelete" || op == "refreshDelete" {
             let review = super::menudelete::Review::prepare(&self.items, &std::env::temp_dir(), cancel)?;
-            let reply = format!(r#""token":{},"count":{},"bytes":{}"#, review.token, review.count, review.bytes);
+            let reply = format!(r#""token":{},"count":{},"bytes":{},"nodes":{}"#, review.token, review.count, review.bytes, review.nodes);
             self.deletion = Some(Arc::new(review));
             return Ok(reply);
         }
@@ -330,7 +345,7 @@ impl Snapshot {
     }
     #[cfg(test)]
     fn handle(&mut self, line: &str, paths: Vec<String>) -> String {
-        self.handle_request(line, paths, None, &Registry::default(), &Cancellation::default())
+        self.handle_request(line, paths, None, &Registry::default(), &Cancellation::default(), &mut |_, _| {})
     }
 }
 
@@ -491,7 +506,7 @@ mod tests {
         let cursor = sandbox.file("Dropbox/cursor", "original");
         let mut snapshot = Snapshot::default();
         let reply = snapshot.handle_request(r#"{"op":"snapshot","id":11}"#, vec![marked.to_string_lossy().into()],
-            cursor.to_str(), &Registry::default(), &Cancellation::default());
+            cursor.to_str(), &Registry::default(), &Cancellation::default(), &mut |_, _| {});
         assert!(crate::json::field_bool(&reply, "ok"));
         assert_eq!(snapshot.items.len(), 1);
         assert_eq!(snapshot.items[0].path, marked);

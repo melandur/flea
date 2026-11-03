@@ -23,6 +23,7 @@ pub enum Msg {
 impl Flea {
     pub(crate) fn action_message(&mut self, msg: Msg) -> Task<Message> {
         let Some(card) = self.card.as_mut() else { return Task::none() };
+        let key = card.key;
         let out = match msg {
             Msg::Input(text) => {
                 card.input(text);
@@ -37,6 +38,16 @@ impl Flea {
             }
             Msg::Check(generation) => card.check_due(generation),
         };
+        self.carry_for(key, out)
+    }
+
+    // The card is the window's while its lines are its pane's: with the split's focus moved since it
+    // opened, a line sent through the focused pane reached a backend holding no such selection, and
+    // the deletion stalled with the slot held (2026-11-03). A pane that is gone answers here instead.
+    fn carry_for(&mut self, key: u64, out: Vec<Out>) -> Task<Message> {
+        if key != self.backend_key && self.other.as_ref().is_some_and(|o| o.key == key) {
+            return self.with_key(key, move |f| f.carry(out));
+        }
         self.carry(out)
     }
 
@@ -51,7 +62,10 @@ impl Flea {
         for o in out {
             match o {
                 Out::Send(v) => tasks.push(self.run(vec![crate::pane::Effect::Send(Request::Json(v))])),
-                Out::Close => self.card = None,
+                Out::Close => {
+                    self.card = None;
+                    tasks.push(self.next_queued_delete());
+                }
                 Out::Say(line) => tasks.push(self.say(line)),
                 Out::Alert(line) => tasks.push(self.show(line, true)),
                 Out::Refresh(name) => {
@@ -59,6 +73,7 @@ impl Flea {
                     tasks.push(self.run(effects));
                 }
                 Out::Check(generation) => tasks.push(Task::perform(sleep(Duration::from_millis(CHECK_MS)), move |_| Message::Action(Msg::Check(generation)))),
+                Out::Sticky(line) => self.pane.sticky = line,
             }
         }
         Task::batch(tasks)
@@ -77,23 +92,54 @@ impl Flea {
             return Task::none();
         }
         self.card_ids += 1;
-        let (card, out) = Card::open(kind, self.card_ids, &self.pane.path, &rows, self.pane.cursor, &path);
+        let (mut card, out) = Card::open(kind, self.card_ids, &self.pane.path, &rows, self.pane.cursor, &path);
+        card.key = self.backend_key;
         let takes_text = card.takes_text();
         self.card = Some(card);
         let sent = self.carry(out);
         if takes_text { Task::batch([sent, operation::focus(ACTION_FIELD), operation::select_all(ACTION_FIELD)]) } else { sent }
     }
 
-    // Delete where there is no Trash: the same reviewed deletion, confirmed without asking.
+    // Delete where there is no Trash: the same reviewed deletion, confirmed without asking. One runs at
+    // a time, because the backend holds one selection and one mutation slot; a press while one runs
+    // waits its turn by path, the operator's ruling of 2026-11-03 ("allow multiple to delete").
     pub(crate) fn delete_now(&mut self) -> Task<Message> {
+        if self.card.is_some() {
+            let rows: Vec<usize> = if self.pane.selection.is_empty() { vec![self.pane.cursor] } else { self.pane.selection.iter().copied().collect() };
+            // A second press on a row already waiting, or already going, queues nothing a second time.
+            let running = self.card.as_ref().map(|c| c.path.clone()).unwrap_or_default();
+            let waiting = |p: &String| *p == running || self.delete_queue.iter().any(|(_, q)| q.contains(p));
+            let paths: Vec<String> = rows.iter().filter_map(|&r| self.pane.row_at(r)).map(|r| crate::pane::join(&self.pane.path, &r.n)).filter(|p| !waiting(p)).collect();
+            let Some(first) = paths.first() else { return self.say("That is already being deleted.".into()) };
+            let what = if paths.len() == 1 { first.rsplit('/').next().unwrap_or("").to_string() } else { format!("{} items", paths.len()) };
+            self.delete_queue.push_back((self.backend_key, paths));
+            // The marks are spent on the queue, so the next Delete acts on the cursor rather than again on them.
+            self.pane.selection.clear();
+            let n = self.delete_queue.len();
+            return self.say(format!("{what} will be deleted after the current one · {n} waiting"));
+        }
         let busy = self.card.is_some();
         let task = self.open_action(Kind::Delete);
-        if !busy {
-            if let Some(card) = self.card.as_mut() {
-                card.immediate = true;
-            }
+        let out = match self.card.as_mut().filter(|_| !busy) {
+            Some(card) => card.start_immediate(),
+            None => return task,
+        };
+        Task::batch([task, self.carry(out)])
+    }
+
+    // A finished card hands the slot to the oldest queued deletion, on the pane it was pressed in.
+    fn next_queued_delete(&mut self) -> Task<Message> {
+        let Some((key, paths)) = self.delete_queue.pop_front() else { return Task::none() };
+        if key != self.backend_key && !self.other.as_ref().is_some_and(|o| o.key == key) {
+            // Its pane closed with the split, and its backend with it: the next one goes instead.
+            return self.next_queued_delete();
         }
-        task
+        self.card_ids += 1;
+        let folder = paths[0].rsplit_once('/').map(|(f, _)| f.to_string()).unwrap_or_default();
+        let (mut card, out) = Card::open_paths(self.card_ids, &folder, &paths);
+        card.key = key;
+        self.card = Some(card);
+        self.carry_for(key, out)
     }
 
     // The card owns the keyboard while it is drawn: Escape closes, Tab moves the confirmation's

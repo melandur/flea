@@ -107,6 +107,34 @@ fn an_immediate_delete_whose_review_fails_says_so_and_frees_the_slot() {
 }
 
 #[test]
+fn a_deletion_shows_its_progress_and_names_what_went() {
+    let (mut c, _) = Card::open(Kind::Delete, 7, "/d", &[0], 0, "/d/Downloads");
+    assert_eq!(c.start_immediate(), vec![Out::Sticky("Preparing to delete Downloads…".into())]);
+    c.receive_menu(&reply(7, "snapshot", json!({})));
+    let out = c.receive_menu(&reply(7, "prepareDelete", json!({"token": 12, "count": 1, "bytes": 4, "nodes": 40})));
+    assert_eq!(out[0], Out::Sticky("Deleting Downloads…".into()));
+    let out = c.receive_menu(&reply(7, "deleteProgress", json!({"done": 12, "total": 40})));
+    assert_eq!(out, vec![Out::Sticky("Deleting Downloads · 12 of 40 items".into())]);
+    let out = c.receive_menu(&reply(7, "delete", json!({"deleted": 1, "failed": 0, "cancelled": false, "error": "", "remaining": []})));
+    assert_eq!(out[0], Out::Say("Deleted Downloads.".into()));
+    assert!(out.contains(&Out::Sticky(String::new())) && out.contains(&Out::Close));
+}
+
+#[test]
+fn several_items_are_counted_and_a_card_that_never_ran_leaves_the_sticky_line_alone() {
+    let (mut c, _) = Card::open(Kind::Delete, 7, "/d", &[0, 1, 2], 0, "/d/a");
+    c.receive_menu(&reply(7, "snapshot", json!({})));
+    c.receive_menu(&reply(7, "prepareDelete", json!({"token": 12, "count": 3, "bytes": 4})));
+    assert!(!c.close().contains(&Out::Sticky(String::new())));
+    let (mut c, _) = Card::open(Kind::Delete, 8, "/d", &[0, 1, 2], 0, "/d/a");
+    c.receive_menu(&reply(8, "snapshot", json!({})));
+    c.receive_menu(&reply(8, "prepareDelete", json!({"token": 12, "count": 3, "bytes": 4})));
+    c.confirm();
+    let out = c.receive_menu(&reply(8, "delete", json!({"deleted": 3, "failed": 0, "cancelled": false, "error": "", "remaining": []})));
+    assert_eq!(out[0], Out::Say("Deleted 3 items.".into()));
+}
+
+#[test]
 fn a_changed_set_is_reviewed_again_and_an_old_check_is_ignored() {
     let (mut c, _) = Card::open(Kind::Delete, 7, "/d", &[0], 0, "/d/a");
     c.receive_menu(&reply(7, "snapshot", json!({})));

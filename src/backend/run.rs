@@ -190,7 +190,10 @@ fn handle_line(
             ops.picker.get_or_insert_with(|| super::picker::Picker::new(replies)).request(line);
         }
         Request::MenuAction { line, rows } => {
-            let paths = resolve_rows(Vec::new(), &rows, &st.base, &st.listing);
+            // A snapshot naming its own paths is a queued deletion's: the window kept the paths it was
+            // pressed on, because by its turn the listing on screen may be another folder entirely.
+            let named = crate::json::field_str_array(&line, "paths");
+            let paths = if named.is_empty() { resolve_rows(Vec::new(), &rows, &st.base, &st.listing) } else { named };
             let cursor = crate::json::field_usize(&line, "cursor").map(|index|
                 resolve_rows(Vec::new(), &[index], &st.base, &st.listing).into_iter().next().unwrap_or_default());
             super::opsdispatch::request_menu_action(out, ops, line, paths, cursor);

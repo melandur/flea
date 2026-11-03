@@ -203,9 +203,10 @@ impl Flea {
                 self.catalogue_answered(id, apps);
                 Task::none()
             }
-            Event::Reply(Reply::MenuAction(v)) if key == self.backend_key => self.menuaction_reply(&v),
+            // Answered by the pane whose backend sent it, which is not the focused one once Tab moved.
+            Event::Reply(Reply::MenuAction(v)) => self.with_key(key, |f| f.menuaction_reply(&v)),
             Event::Reply(Reply::Job(v)) => self.with_key(key, |f| f.job_reply(&v)),
-            Event::Reply(Reply::Permissions(v)) if key == self.backend_key => self.action_reply(&v, true),
+            Event::Reply(Reply::Permissions(v)) => self.with_key(key, |f| f.action_reply(&v, true)),
             Event::Reply(Reply::Trash(v)) if key == self.backend_key => self.trash_reply(&v),
             Event::Reply(Reply::Meta(meta)) if key == self.backend_key => {
                 self.meta_answered(meta);

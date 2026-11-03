@@ -87,8 +87,11 @@ batch handoff. These checks do not make subsequent external-helper filesystem op
 atomic. Omitting `menuId` preserves the existing keyboard and protocol entry paths.
 
 `{"c":"menuaction","op":"snapshot","id":4,"rows":[0,2]}` captures the selected identities
-from the active listing. `prepareDelete` with that `id` reviews the captured trees and returns a
-fresh `token`, selected `count`, and total `bytes`. `checkDelete` with the `id` and `token` returns
+from the active listing. A snapshot carrying a non-empty `paths` array of absolute paths captures
+those instead of resolving `rows`: it is how a deletion queued in the window reaches a folder that
+is no longer the one listed. `prepareDelete` with that `id` reviews the captured trees and returns a
+fresh `token`, selected `count`, total `bytes`, and `nodes`, every entry under every root counted
+once, the roots included. `checkDelete` with the `id` and `token` returns
 `valid` without mutating files. A changed set requires `refreshDelete`: it reviews only the same
 captured paths, drops missing paths, captures replacement identities, and issues a fresh token.
 Unrelated paths cannot widen that confirmation. The client shows this new confirmation with
@@ -102,7 +105,10 @@ cursor to name handlers for. It reads no selection and expires none.
 `{"c":"menuaction","op":"delete","id":4,"token":12}` consumes that exact token and reserves
 the ordinary mutation slot. A failed preflight returns `stale:true` and requires a fresh review;
 it does not delete any item. A completed attempt returns `deleted`, `failed`, `cancelled`,
-`error`, and `remaining` absolute paths whose original identities survive. Results report partial
+`error`, and `remaining` absolute paths whose original identities survive. While it runs, the
+backend answers `{"t":"menuaction","id":4,"op":"deleteProgress","ok":true,"done":59,"total":202}`
+at most every 200 ms and once more on the last node, `done` counting nodes removed against the
+review's `nodes`; the terminal `delete` line still follows it. Results report partial
 completion rather than implying rollback. The caller can use the identity-checked batched
 `locate` form to select survivors after refreshing the listing.
 `close` expires the token and cancels pending work. An already claimed deletion root completes

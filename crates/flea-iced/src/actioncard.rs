@@ -42,6 +42,8 @@ pub enum Out {
     Refresh(String),
     // Ask again whether the confirmed set is still the set on disk, after CHECK_MS.
     Check(u64),
+    // The status bar's sticky line on the pane the deletion runs in: how far it got, or empty.
+    Sticky(String),
 }
 
 // TrashConfirm's identity-check cadence while the destructive strip is visible.
@@ -63,6 +65,12 @@ pub struct Card {
     // Delete on a location with no Trash, the operator's ruling of 2026-11-03: the backend still
     // reviews and identity-checks the set, but the card is never drawn and confirms itself.
     pub immediate: bool,
+    // The backend of the pane the card was opened over, which every line it sends and hears belongs to.
+    pub key: u64,
+    // The one target's own name, for the sentences a deletion speaks; empty for several.
+    pub name: String,
+    // Whether this card put a line in the sticky slot, so only it clears that line again.
+    stuck: bool,
 }
 
 pub fn title(kind: Kind) -> &'static str {
@@ -106,6 +114,9 @@ impl Card {
             path: path.to_string(),
             check_gen: 0,
             immediate: false,
+            key: 0,
+            name: if rows.len() == 1 { leaf(path) } else { String::new() },
+            stuck: false,
         };
         let out = match kind {
             Kind::NewFile => {
@@ -124,6 +135,16 @@ impl Card {
                 vec![Out::Send(json!({"c": "menuaction", "op": "snapshot", "id": id, "rows": rows, "cursor": cursor}))]
             }
         };
+        (card, out)
+    }
+
+    // A queued deletion's card: its snapshot names the paths it was pressed on, since by its turn the
+    // listing on screen may be another folder, and it runs without asking, as the press it came from.
+    pub fn open_paths(id: u64, folder: &str, paths: &[String]) -> (Card, Vec<Out>) {
+        let first = paths.first().cloned().unwrap_or_default();
+        let (mut card, _) = Card::open(Kind::Delete, id, folder, &vec![0; paths.len()], 0, &first);
+        let mut out = card.start_immediate();
+        out.push(Out::Send(json!({"c": "menuaction", "op": "snapshot", "id": id, "rows": [], "paths": paths})));
         (card, out)
     }
 
@@ -167,12 +188,43 @@ impl Card {
     }
 
     fn finish(&mut self) -> Vec<Out> {
+        let mut out = vec![];
+        if self.stuck {
+            self.stuck = false;
+            out.push(Out::Sticky(String::new()));
+        }
         let close = if self.kind == Kind::Permissions {
             json!({"c": "permissions", "op": "close", "id": self.id})
         } else {
             json!({"c": "menuaction", "op": "close", "id": self.id})
         };
-        vec![Out::Send(close), Out::Close]
+        out.extend([Out::Send(close), Out::Close]);
+        out
+    }
+
+    // What the deletion is acting on: the one name, or how many items.
+    fn subject(&self) -> String {
+        if !self.name.is_empty() {
+            return self.name.clone();
+        }
+        let n = self.facts.get("count").and_then(Value::as_u64).unwrap_or(0);
+        format!("{n} {}", if n == 1 { "item" } else { "items" })
+    }
+
+    // The sticky line a running deletion shows: the review first, then how many nodes are gone.
+    pub fn progress_line(&self, done: Option<(u64, u64)>) -> String {
+        match done {
+            Some((done, total)) if total > 1 => format!("Deleting {} · {done} of {total} items", self.subject()),
+            Some(_) => format!("Deleting {}…", self.subject()),
+            None => format!("Preparing to delete {}…", self.subject()),
+        }
+    }
+
+    // Delete without asking starts here: the review runs under a sticky line, since no card is drawn.
+    pub fn start_immediate(&mut self) -> Vec<Out> {
+        self.immediate = true;
+        self.stuck = true;
+        vec![Out::Sticky(self.progress_line(None))]
     }
 
     // Escape, Cancel, Close and the backdrop. A file being created and a mode being applied are
@@ -222,7 +274,8 @@ impl Card {
             return vec![];
         }
         self.phase = Phase::Committing;
-        vec![Out::Send(json!({"c": "menuaction", "op": "delete", "id": self.id, "token": token}))]
+        self.stuck = true;
+        vec![Out::Sticky(self.progress_line(Some((0, 0)))), Out::Send(json!({"c": "menuaction", "op": "delete", "id": self.id, "token": token}))]
     }
 
     pub fn check_due(&mut self, generation: u64) -> Vec<Out> {
@@ -249,6 +302,10 @@ impl Card {
         let op = v.get("op").and_then(Value::as_str).unwrap_or("");
         if v.get("id").and_then(Value::as_u64) != Some(self.id) || op == "close" || self.kind == Kind::Permissions {
             return vec![];
+        }
+        if op == "deleteProgress" {
+            let n = |k: &str| v.get(k).and_then(Value::as_u64).unwrap_or(0);
+            return if self.phase == Phase::Committing { vec![Out::Sticky(self.progress_line(Some((n("done"), n("total")))))] } else { vec![] };
         }
         let ok = v.get("ok") == Some(&json!(true));
         let error = v.get("error").and_then(Value::as_str).unwrap_or("").to_string();
@@ -318,7 +375,9 @@ impl Card {
             "delete" => {
                 let n = |k: &str| v.get(k).and_then(Value::as_u64).unwrap_or(0);
                 let count = self.facts.get("count").and_then(Value::as_u64).unwrap_or(0);
-                let mut line = format!("Deleted {} of {count}", n("deleted"));
+                let whole = n("failed") == 0 && v.get("cancelled") != Some(&json!(true)) && n("deleted") == count;
+                // A deletion that took everything says what went, the operator's ruling of 2026-11-03.
+                let mut line = if whole { format!("Deleted {}.", self.subject()) } else { format!("Deleted {} of {count}", n("deleted")) };
                 if n("failed") > 0 {
                     line += &format!(" · {} failed", n("failed"));
                 }
