@@ -46,11 +46,15 @@ fn inset_keys_move_the_listing_and_expanded_keys_scroll_the_surface() {
     assert!(p.key(Action::Forward).is_empty());
     assert!(p.expanded);
     assert_eq!(p.key(Action::Down), vec![Effect::Scroll(1)]);
+    assert_eq!(p.key(Action::PageDown), vec![Effect::Page(1)]);
+    assert_eq!(p.key(Action::PageUp), vec![Effect::Page(-1)]);
     // Expanded, Left is the content's own axis, which a text file does not have: it stays open.
     assert!(p.key(Action::Back).is_empty() && p.active);
     assert_eq!(p.key(Action::Escape), vec![Effect::Closed]);
     assert!(!p.active && !p.expanded);
     open(&mut p, "/d/a.txt", "text-x-generic", 1);
+    // Inset, a page key does nothing: the surface is not the one being read yet.
+    assert!(p.key(Action::PageDown).is_empty() && !p.expanded);
     assert_eq!(p.key(Action::Back), vec![Effect::Closed]);
 }
 

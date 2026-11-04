@@ -29,6 +29,8 @@ sandbox_make "$D"
 T=$D/tree
 mkdir -p "$T/alpha" "$T/beta" "$D/state" "$D/cache" "$D/data" "$D/shots" "$D/bin"
 for i in $(seq -w 1 40); do echo "file $i" > "$T/note-$i.txt"; done
+# The previewed row is long enough that a page key has a page to move.
+seq -f "line %g" 1 400 > "$T/note-03.txt"
 echo hidden > "$T/.secret"
 echo inner > "$T/alpha/inside.txt"
 # Run script's one script, in a config home of the suite's own: it writes the paths it was given.
@@ -164,7 +166,14 @@ check "leaving the split quits its child" 1 "$(since "$n" | grep -c '"c":"quit"'
 check "one backend left" 1 "$(children)"
 top; k -k Down -k Down -k Down; n=$(mark); k -k Right; sleep 1; shot preview
 check "Right on a file previews without listing" 0 "$(since "$n" | grep -c '"c":"list"')"
-k -k Left
+# Expanded, PageDown moves the text a screenful and PageUp brings the top back exactly.
+k -k Right; sleep 0.5; shot preview-top
+k -k Next; sleep 0.5; shot preview-paged
+k -k Prior; sleep 0.5; shot preview-back
+differs() { magick compare -metric AE "$D/shots/$1.png" "$D/shots/$2.png" null: 2>&1 | cut -d' ' -f1; }
+check "PageDown in the expanded preview scrolls the text" yes "$([ "$(differs preview-top preview-paged)" != 0 ] && echo yes || echo no)"
+check "and PageUp scrolls it back" 0 "$(differs preview-top preview-back)"
+k -k Escape
 k -k comma; sleep 1; shot settings
 k -k Down -k Down -k Down -k Down -k Down -k Down -k Down -k Down; k -k Return; sleep 1
 check "the panel's hidden switch is stored" true "$(jq -r .hidden "$D/state/flea/ui.json")"

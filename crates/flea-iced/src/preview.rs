@@ -40,6 +40,8 @@ pub enum Effect {
     // Move the listing cursor by one, which is the pane's job; the preview then follows.
     MoveCursor(isize),
     Scroll(isize),
+    // PageDown and PageUp while expanded: a screenful of the surface, less one line kept for context.
+    Page(isize),
     Closed,
 }
 
@@ -156,6 +158,8 @@ impl Preview {
         match action {
             Action::Down if self.expanded => vec![Effect::Scroll(1)],
             Action::Up if self.expanded => vec![Effect::Scroll(-1)],
+            Action::PageDown if self.expanded => vec![Effect::Page(1)],
+            Action::PageUp if self.expanded => vec![Effect::Page(-1)],
             Action::Down => vec![Effect::MoveCursor(1)],
             Action::Up => vec![Effect::MoveCursor(-1)],
             Action::Expand if !self.expanded => {
@@ -188,6 +192,8 @@ impl Preview {
 pub enum Action {
     Up,
     Down,
+    PageUp,
+    PageDown,
     Back,
     Forward,
     Expand,

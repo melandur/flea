@@ -123,6 +123,7 @@ impl Flea {
                     Task::batch([moved, follow])
                 }
                 preview::Effect::Scroll(steps) => self.scroll_preview(steps),
+                preview::Effect::Page(dir) => self.page_preview(dir),
                 preview::Effect::LoadPdf(path) => {
                     self.surfaces = Surfaces::default();
                     self.load_pdf(path)
@@ -197,6 +198,29 @@ impl Flea {
         Task::none()
     }
 
+    // One screenful of whichever surface is open, keeping one line of the last screen on the next.
+    // The expanded card fills the listing area, so its height is the viewport less the header row.
+    fn page_preview(&mut self, dir: isize) -> Task<Message> {
+        let body_h = (self.viewport_h - crate::ROW_H).max(crate::ROW_H);
+        if let Some((_, content)) = self.surfaces.text.as_mut() {
+            // iced's text_editor draws at its default 1.3 line height.
+            let lines = ((body_h / (crate::metrics::TEXT_PX * 1.3)).floor() as i32 - 1).max(1);
+            content.perform(text_editor::Action::Scroll { lines: dir as i32 * lines });
+        }
+        if self.preview.kind == Some(Kind::Archive) {
+            let shown = ((body_h / (11.0 * 1.8)).floor() as usize).saturating_sub(1).max(1);
+            self.preview.scroll_archive(dir * shown as isize, shown);
+        }
+        let y = dir as f32 * (body_h - crate::ROW_H).max(crate::ROW_H);
+        if self.pdf.is_some() {
+            return iced::widget::operation::scroll_by(crate::mediashell::PDF_ID, iced::widget::scrollable::AbsoluteOffset { x: 0.0, y });
+        }
+        if self.surfaces.table.is_some() {
+            return iced::widget::operation::scroll_by(crate::previewview::TABLE_ID, iced::widget::scrollable::AbsoluteOffset { x: 0.0, y });
+        }
+        Task::none()
+    }
+
     pub(crate) fn preview_loaded(&mut self, path: String, result: Result<Result<Table, String>, ()>) -> Task<Message> {
         if !self.preview.active || path != self.preview.path {
             return Task::none();
@@ -233,6 +257,8 @@ impl Flea {
         let action = match key.as_ref() {
             Key::Named(Named::ArrowUp) => Action::Up,
             Key::Named(Named::ArrowDown) => Action::Down,
+            Key::Named(Named::PageUp) => Action::PageUp,
+            Key::Named(Named::PageDown) => Action::PageDown,
             Key::Named(Named::ArrowLeft) => Action::Back,
             Key::Named(Named::ArrowRight) => Action::Forward,
             Key::Named(Named::Space) => Action::Expand,
